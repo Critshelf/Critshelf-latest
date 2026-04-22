@@ -1,0 +1,651 @@
+{
+  "entities": {
+    "Game": {
+      "title": "Game",
+      "description": "A tabletop game document",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "The name of the game"
+        },
+        "coverImage": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL to the game's cover image"
+        },
+        "playTime": {
+          "type": "string",
+          "description": "Average play time (e.g., '60-120 min')"
+        },
+        "minPlayers": {
+          "type": "number",
+          "description": "Minimum number of players"
+        },
+        "maxPlayers": {
+          "type": "number",
+          "description": "Maximum number of players"
+        },
+        "trending": {
+          "type": "boolean",
+          "description": "Whether the game is currently trending"
+        },
+        "hasHighResArt": {
+          "type": "boolean",
+          "description": "Whether the game features user-submitted, admin-approved high-res box art"
+        },
+        "bggId": {
+          "type": "string",
+          "description": "BoardGameGeek ID"
+        },
+        "wikidataId": {
+          "type": "string",
+          "description": "Wikidata Q-number for the game"
+        },
+        "publishingYear": {
+          "type": "number",
+          "description": "Year the game was published"
+        },
+        "publishers": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of publishers"
+        },
+        "designers": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of game designers"
+        },
+        "artists": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of game artists"
+        },
+        "description": {
+          "type": "string",
+          "description": "Full description from Wikipedia"
+        },
+        "expansions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "boxArtUrl": { "type": "string", "format": "uri" },
+              "bggId": { "type": "string" }
+            }
+          },
+          "description": "List of game expansions"
+        },
+        "editions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "publisher": { "type": "string" },
+              "yearPublished": { "type": "number" },
+              "boxArtUrl": { "type": "string", "format": "uri" }
+            }
+          },
+          "description": "List of game editions/versions"
+        }
+      },
+      "required": ["title", "coverImage", "playTime"]
+    },
+    "User": {
+      "title": "User",
+      "description": "A user profile document",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User's display name"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "User's email address"
+        },
+        "username": {
+          "type": "string",
+          "description": "Unique permanent username chosen by the user"
+        },
+        "photoURL": {
+          "type": "string",
+          "format": "uri",
+          "description": "User's profile photo URL"
+        },
+        "avatarPreference": {
+          "type": "string",
+          "enum": ["google", "dicebear"],
+          "description": "User's choice of avatar source"
+        },
+        "avatarSeed": {
+          "type": "string",
+          "description": "Random seed for the Dicebear dynamic profile avatar"
+        },
+        "bio": {
+          "type": "string",
+          "description": "User's gamer tagline or bio"
+        },
+        "location": {
+          "type": "string",
+          "description": "User's home city"
+        },
+        "privacy": {
+          "type": "object",
+          "properties": {
+            "privateProfile": { "type": "boolean" },
+            "locationMasking": { "type": "boolean" }
+          }
+        },
+        "preferences": {
+          "type": "object",
+          "properties": {
+            "groupInvites": { "type": "boolean" },
+            "groupActivities": { "type": "boolean" },
+            "gameRequests": { "type": "boolean" },
+            "playMentions": { "type": "boolean" },
+            "proUpdates": { "type": "boolean" }
+          }
+        },
+        "favorites": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "gameId": { "type": "string" },
+              "gameTitle": { "type": "string" },
+              "gameCover": { "type": "string" },
+              "rating": { "type": "number" }
+            }
+          },
+          "maxItems": 3
+        }
+      },
+      "required": ["uid", "email", "username"]
+    },
+    "Username": {
+      "title": "Username Mapping",
+      "description": "Mapping from username to userId to ensure uniqueness",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The user ID associated with this username" }
+      },
+      "required": ["uid"]
+    },
+    "UserCollectionItem": {
+      "title": "User Collection Item",
+      "description": "A game entry in a user's collection.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "gameId": { "type": "string" },
+        "shelf": { "type": "string", "enum": ["owned", "wishlist"] },
+        "addedAt": { "type": "string", "format": "date-time" },
+        "gameTitle": { "type": "string" },
+        "gameCover": { "type": "string" }
+      },
+      "required": ["userId", "gameId", "shelf"]
+    },
+    "GameSession": {
+      "title": "Game Session",
+      "description": "A record of a game match played by users.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "gameId": { "type": "string" },
+        "gameTitle": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "location": { "type": "string" },
+        "players": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "score": { "type": "number" },
+              "isWinner": { "type": "boolean" },
+              "userId": { "type": "string" }
+            }
+          }
+        },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "gameId", "gameTitle", "date", "players"]
+    },
+    "Friendship": {
+      "title": "Friendship",
+      "description": "A relationship between two users.",
+      "type": "object",
+      "properties": {
+        "userIds": { "type": "array", "items": { "type": "string" } },
+        "status": { "type": "string", "enum": ["pending", "accepted"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userIds", "status"]
+    },
+    "Activity": {
+      "title": "Activity",
+      "description": "A centralized social activity record for the global feed.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "avatarSeed": { "type": "string" },
+        "type": { 
+          "type": "string", 
+          "enum": ["play_logged", "game_added", "new_member", "event_created", "poll_started", "group_created"] 
+        },
+        "groupId": { "type": "string" },
+        "groupName": { "type": "string" },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "gameId": { "type": "string" },
+            "gameTitle": { "type": "string" },
+            "gameCover": { "type": "string" },
+            "eventId": { "type": "string" },
+            "eventTitle": { "type": "string" },
+            "pollId": { "type": "string" },
+            "pollTitle": { "type": "string" },
+            "shelf": { "type": "string" }
+          }
+        },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "userName", "type", "timestamp"]
+    },
+    "Group": {
+      "title": "Group",
+      "description": "A private gaming group.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "bannerImage": { "type": "string", "format": "uri" },
+        "avatar": { "type": "string", "format": "uri" },
+        "avatarSeed": { "type": "string", "description": "Random seed for the Dicebear dynamic avatar" },
+        "members": { 
+          "type": "array", 
+          "items": { 
+            "type": "object",
+            "properties": {
+              "userId": { "type": "string" },
+              "role": { "type": "string", "enum": ["leader", "member"] }
+            },
+            "required": ["userId", "role"]
+          } 
+        },
+        "memberIds": { "type": "array", "items": { "type": "string" }, "description": "Shadow array of UIDs for querying" },
+        "isPrivate": { "type": "boolean", "description": "Whether the group is hidden from public search" },
+        "joinCode": { "type": "string", "description": "Unique 6-character invite code" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "members", "memberIds", "createdBy", "createdAt"]
+    },
+    "GameNightEvent": {
+      "title": "Game Night Event",
+      "description": "A scheduled game night within a group.",
+      "type": "object",
+      "properties": {
+        "groupId": { "type": "string" },
+        "hostId": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "location": { "type": "string" },
+        "proposedGames": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "gameId": { "type": "string" },
+              "title": { "type": "string" },
+              "cover": { "type": "string" }
+            }
+          }
+        },
+        "rsvps": {
+          "type": "object",
+          "description": "Map of userId to RSVP status (going, maybe, out)"
+        },
+        "votes": {
+          "type": "object",
+          "description": "Map of userId to gameId voted for"
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["groupId", "hostId", "date", "time", "location", "createdAt"]
+    },
+    "ChatMessage": {
+      "title": "Chat Message",
+      "description": "A message in a group chat.",
+      "type": "object",
+      "properties": {
+        "groupId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userAvatar": { "type": "string" },
+        "text": { "type": "string" },
+        "reactions": {
+          "type": "object",
+          "description": "Map of reaction type to list of userIds"
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["groupId", "userId", "text", "createdAt"]
+    },
+    "GroupRequest": {
+      "title": "Group Request",
+      "description": "A request to play a game within a group.",
+      "type": "object",
+      "properties": {
+        "groupId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userAvatar": { "type": "string" },
+        "gameId": { "type": "string" },
+        "gameTitle": { "type": "string" },
+        "gameCover": { "type": "string" },
+        "owners": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "uid": { "type": "string" },
+              "displayName": { "type": "string" }
+            }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["pending", "scheduled"] }
+      },
+      "required": ["groupId", "userId", "gameId", "gameTitle", "createdAt", "status"]
+    },
+    "GroupInvite": {
+      "title": "Group Invite",
+      "description": "An invitation to join a group.",
+      "type": "object",
+      "properties": {
+        "groupId": { "type": "string" },
+        "groupName": { "type": "string" },
+        "fromUserId": { "type": "string" },
+        "fromUserName": { "type": "string" },
+        "toUserId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "declined"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["groupId", "groupName", "fromUserId", "toUserId", "status", "createdAt"]
+    },
+    "Play": {
+      "title": "Play",
+      "description": "A record of a game play session.",
+      "type": "object",
+      "properties": {
+        "gameId": { "type": "string" },
+        "gameTitle": { "type": "string" },
+        "gameCover": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userAvatar": { "type": "string" },
+        "groupId": { "type": "string" },
+        "players": { "type": "array", "items": { "type": "string" } },
+        "date": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["gameId", "userId", "players", "createdAt"]
+    },
+    "GroupGame": {
+      "title": "Group Game Stats",
+      "description": "Aggregated statistics for a game within a specific group.",
+      "type": "object",
+      "properties": {
+        "total_d20_score": { "type": "number" },
+        "rating_count": { "type": "number" },
+        "average_d20": { "type": "number" },
+        "vibe_counts": {
+          "type": "object",
+          "description": "Map of vibe tag to count"
+        }
+      },
+      "required": ["total_d20_score", "rating_count", "average_d20", "vibe_counts"]
+    },
+    "GroupPoll": {
+      "title": "Group Poll",
+      "description": "A scheduling poll for a group.",
+      "type": "object",
+      "properties": {
+        "groupId": { "type": "string" },
+        "title": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "creatorName": { "type": "string" },
+        "creatorAvatar": { "type": "string" },
+        "options": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "votes": {
+          "type": "object",
+          "description": "Map of option index to list of user vote objects"
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["groupId", "title", "creatorId", "options", "votes", "createdAt"]
+    },
+    "GroupEvent": {
+      "title": "Group Event",
+      "description": "A scheduled event for a group.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "location": { "type": "string" },
+        "dateTime": { "type": "string", "format": "date-time" },
+        "groupId": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "attendees": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "userId": { "type": "string" },
+              "displayName": { "type": "string" },
+              "status": { "type": "string", "enum": ["going", "maybe", "not_going"] }
+            }
+          }
+        },
+        "gamesBrought": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "gameId": { "type": "string" },
+              "title": { "type": "string" },
+              "boxArt": { "type": "string" },
+              "broughtById": { "type": "string" },
+              "broughtByName": { "type": "string" }
+            }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "location", "dateTime", "groupId", "creatorId", "attendees", "createdAt"]
+    },
+    "GroupJoinRequest": {
+      "title": "Group Join Request",
+      "description": "A request from a user to join a group.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userDisplayName": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "declined"] },
+        "requestedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "userDisplayName", "status", "requestedAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "An in-app alert for a user.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["moderation", "social", "library", "groups"] },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "actionUrl": { "type": "string", "format": "uri" }
+      },
+      "required": ["type", "title", "message", "isRead", "createdAt"]
+    },
+    "ErrorReport": {
+      "title": "Error Report",
+      "description": "User reported data corrections or issues for a game.",
+      "type": "object",
+      "properties": {
+        "gameId": { "type": "string" },
+        "gameTitle": { "type": "string" },
+        "category": { "type": "string", "enum": ["Missing Data", "Incorrect Data", "Broken Art", "Other"] },
+        "description": { "type": "string" },
+        "reportedBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["gameId", "gameTitle", "category", "description", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/games/{gameId}": {
+      "schema": "Game",
+      "description": "Collection of tabletop games"
+    },
+    "/reviews/{reviewId}": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "gameId": { "type": "string" },
+          "userId": { "type": "string" },
+          "userName": { "type": "string" },
+          "userAvatar": { "type": "string" },
+          "score": { "type": "number" },
+          "text": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        },
+        "required": ["gameId", "userId", "score", "text", "createdAt"]
+      },
+      "description": "User reviews for games"
+    },
+    "/mail/{mailId}": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "to": { "type": "string" },
+          "message": {
+            "type": "object",
+            "properties": {
+              "subject": { "type": "string" },
+              "text": { "type": "string" },
+              "html": { "type": "string" }
+            }
+          }
+        }
+      },
+      "description": "Trigger collection for Firebase Mail Extension"
+    },
+    "/PendingArt/{artId}": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "gameId": { "type": "string" },
+          "gameTitle": { "type": "string" },
+          "proposedImageUrl": { "type": "string", "format": "uri" },
+          "submittedBy": { "type": "string" },
+          "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+          "createdAt": { "type": "string", "format": "date-time" }
+        },
+        "required": ["gameId", "gameTitle", "proposedImageUrl", "submittedBy", "status", "createdAt"]
+      },
+      "description": "Proposed box art updates for moderation."
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Private user profile data"
+    },
+    "/users/{userId}/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "User in-app alerts and notifications."
+    },
+    "/errorReports/{reportId}": {
+      "schema": "ErrorReport",
+      "description": "User reported errors and feedback"
+    },
+    "/usernames/{username}": {
+      "schema": "Username",
+      "description": "Username identity map"
+    },
+    "/userCollections/{collectionId}": {
+      "schema": "UserCollectionItem",
+      "description": "Stores games added to a user's personal collection/shelves."
+    },
+    "/gameSessions/{sessionId}": {
+      "schema": "GameSession",
+      "description": "Records of played game matches."
+    },
+    "/friendships/{friendshipId}": {
+      "schema": "Friendship",
+      "description": "Connections between users."
+    },
+    "/activities/{activityId}": {
+      "schema": "Activity",
+      "description": "Social feed events."
+    },
+    "/groups/{groupId}": {
+      "schema": "Group",
+      "description": "Gaming groups."
+    },
+    "/groups/{groupId}/GroupGames/{gameId}": {
+      "schema": "GroupGame",
+      "description": "Running totals and averages for a game within a group."
+    },
+    "/events/{eventId}": {
+      "schema": "GameNightEvent",
+      "description": "Scheduled game nights."
+    },
+    "/messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Group chat messages."
+    },
+    "/groupRequests/{requestId}": {
+      "schema": "GroupRequest",
+      "description": "Requests to play specific games in a group."
+    },
+    "/GroupInvites/{inviteId}": {
+      "schema": "GroupInvite",
+      "description": "Invitations to join a group."
+    },
+    "/plays/{playId}": {
+      "schema": "Play",
+      "description": "Records of game play sessions."
+    },
+    "/groupPolls/{pollId}": {
+      "schema": "GroupPoll",
+      "description": "Scheduling polls for groups."
+    },
+    "/groupEvents/{eventId}": {
+      "schema": "GroupEvent",
+      "description": "Scheduled group events."
+    },
+    "/groups/{groupId}/JoinRequests/{requestId}": {
+      "schema": "GroupJoinRequest",
+      "description": "User requests to join this group."
+    }
+  }
+}

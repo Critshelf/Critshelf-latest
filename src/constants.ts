@@ -1,0 +1,108 @@
+import { Game } from './components/GameCard';
+
+export const MOCK_GAMES: Game[] = [
+  { 
+    id: 'loveletter', 
+    title: 'Love Letter', 
+    coverImage: 'https://picsum.photos/seed/loveletter/800/1200', 
+    playTime: '20 min', 
+    playerCount: '2-4 Players', 
+    publisher: 'Z-Man Games',
+    publishers: ['Z-Man Games'],
+    designers: ['Seiji Kanai'],
+    artists: ['Andrew Hepworth', 'Jeffrey Himmelman'],
+    publishingYear: 2012,
+    ageRange: '10+',
+    description: 'A game of risk, deduction, and luck. You must get your love letter into the hands of the Princess while keeping other players away.',
+    trending: true 
+  },
+  { 
+    id: 'nekosyndicate', 
+    title: 'Neko Syndicate', 
+    coverImage: 'https://picsum.photos/seed/nekosyndicate/800/1200', 
+    playTime: '30-45 min', 
+    playerCount: '2-4 Players', 
+    publisher: 'Board Game Hub',
+    publishers: ['Board Game Hub'],
+    designers: ['Yohann Levet'],
+    artists: ['Stéphane Gantiez'],
+    publishingYear: 2023,
+    ageRange: '8+',
+    description: 'Build your cat empire in this strategic card-drafting game. Manage your resources and outsmart the other syndicates.',
+    trending: true 
+  },
+  { 
+    id: 'catan', 
+    title: 'Catan', 
+    coverImage: 'https://picsum.photos/seed/catan/800/1200', 
+    playTime: '60-120 min', 
+    playerCount: '3-4 Players', 
+    publisher: 'KOSMOS',
+    publishers: ['KOSMOS', 'Mayfair Games'],
+    designers: ['Klaus Teuber'],
+    artists: ['Volkan Baga', 'Tanja Donner'],
+    publishingYear: 1995,
+    ageRange: '10+',
+    description: 'The classic game of trading, building, and settling. Collect resources and build the longest road to victory.',
+    trending: true 
+  },
+  { 
+    id: 'ttr', 
+    title: 'Ticket to Ride', 
+    coverImage: 'https://picsum.photos/seed/ttr/800/1200', 
+    playTime: '30-60 min', 
+    playerCount: '2-5 Players', 
+    publisher: 'Days of Wonder',
+    publishers: ['Days of Wonder'],
+    designers: ['Alan R. Moon'],
+    artists: ['Julien Delval'],
+    publishingYear: 2004,
+    ageRange: '8+',
+    description: 'A cross-country train adventure where players collect cards of various types of train cars to claim railway routes.',
+    trending: true 
+  },
+  { 
+    id: 'wingspan', 
+    title: 'Wingspan', 
+    coverImage: 'https://picsum.photos/seed/wingspan/800/1200', 
+    playTime: '40-70 min', 
+    playerCount: '1-5 Players', 
+    publisher: 'Stonemaier Games',
+    publishers: ['Stonemaier Games'],
+    designers: ['Elizabeth Hargrave'],
+    artists: ['Ana Maria Martinez Jaramillo', 'Natalia Rojas'],
+    publishingYear: 2019,
+    ageRange: '10+',
+    description: 'A competitive, medium-weight, card-driven, engine-building board game from designer Elizabeth Hargrave.',
+    trending: true 
+  },
+  {
+    id: 'worker-removal',
+    title: 'Worker Removal',
+    coverImage: 'https://picsum.photos/seed/workerremoval/800/1200',
+    playTime: '90-120 min',
+    playerCount: '2-5 Players',
+    publisher: 'Prototype Games',
+    publishers: ['Prototype Games'],
+    designers: ['The Architect'],
+    artists: ['The Illustrator'],
+    publishingYear: 2024,
+    ageRange: '14+',
+    description: 'A brutal game of resource management and strategic elimination. In this worker removal masterpiece, you don\'t just place workers—you remove your opponents\' livelihood. High stakes, high tension, and a brain-burning experience.',
+    trending: true
+  }
+];
+
+export const VIBE_OPTIONS = [
+  "🧠 Brain Burner",
+  "🗣️ Table Riot",
+  "☕ Cozy & Chill",
+  "🗡️ Cutthroat",
+  "🗺️ Immersive Journey",
+  "🤝 High Interaction",
+  "🧱 Soul-Crushing",
+  "✨ Magic Moment",
+  "🕰️ Casual Filler",
+  "🤬 Friendship Ender",
+  "🎉 Party Starter"
+];

@@ -1,0 +1,25 @@
+import { initializeApp } from 'firebase/app';
+import { getFirestore, collection, getDocs, query, where, limit } from 'firebase/firestore';
+import fs from 'fs';
+import path from 'path';
+
+const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+
+const firebaseConfig = {
+  apiKey: config.apiKey,
+  authDomain: config.authDomain,
+  projectId: config.projectId,
+  appId: config.appId
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app, config.firestoreDatabaseId);
+
+async function checkEnrichment() {
+  const q = query(collection(db, 'games'), where('publishingYear', '!=', null));
+  const snapshot = await getDocs(q);
+  console.log(`Total games with publishingYear: ${snapshot.size}`);
+}
+
+checkEnrichment().catch(console.error);

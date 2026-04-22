@@ -1,0 +1,408 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: games
+    // Document ID: auto-generated
+    // Fields:
+    //   - title: string (required) - Name of the game
+    //   - coverImage: string (required, URL) - Game cover image
+    //   - playTime: string (required) - Average play time
+    //   - trending: bool (optional) - Whether the game is trending
+    //
+    // Collection: users
+    // Document ID: userId (Firebase Auth UID)
+    // Fields:
+    //   - uid: string (required, immutable) - Firebase Auth UID
+    //   - displayName: string (optional) - User's display name
+    //   - email: string (required, immutable) - User's email address
+    //   - photoURL: string (optional) - User's profile photo URL
+    //
+    // Collection: reviews
+    // Document ID: auto-generated
+    // Fields:
+    //   - gameId: string (required) - ID of the game being reviewed
+    //   - userId: string (required) - UID of the reviewer
+    //   - userName: string (required) - Name of the reviewer
+    //   - userAvatar: string (optional) - Avatar URL of the reviewer
+    //   - score: number (required, 1-20) - D20 rating
+    //   - text: string (required) - Review text
+    //   - createdAt: timestamp (required) - Creation time
+    //
+    // Collection: mail
+    // Document ID: auto-generated
+    // Fields:
+    //   - to: string (required) - Recipient email
+    //   - message: map (required) - Email message details
+    //
+    // Collection: groupPolls
+    // Document ID: auto-generated
+    // Fields:
+    //   - groupId: string (required) - ID of the group the poll belongs to
+    //   - title: string (required) - Poll title/question
+    //   - creatorId: string (required) - UID of the poll creator
+    //   - options: list (required) - List of poll options
+    //   - votes: map (required) - Map of option index to list of user votes
+    //   - createdAt: timestamp (required) - Creation time
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (
+          request.auth.token.email == "coreykern2040@gmail.com" ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+        );
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidUrl(url) {
+      return url is string && (url.matches("^https://.*") || url.matches("^http://.*"));
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidReview(data) {
+      return data.keys().hasAll(['gameId', 'userId', 'score', 'text', 'createdAt']) &&
+             data.gameId is string &&
+             data.userId == request.auth.uid &&
+             data.score is number && data.score >= 1 && data.score <= 20 &&
+             data.text is string && data.text.size() > 0 && data.text.size() <= 2000;
+    }
+
+    function isValidGame(data) {
+      return data.keys().hasAll(['title', 'coverImage', 'playTime']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             isValidUrl(data.coverImage) &&
+             data.playTime is string && data.playTime.size() > 0 && data.playTime.size() < 50 &&
+             (!('minPlayers' in data) || data.minPlayers is number) &&
+             (!('maxPlayers' in data) || data.maxPlayers is number) &&
+             (!('trending' in data) || data.trending is bool) &&
+             (!('bggId' in data) || data.bggId is string) &&
+             (!('wikidataId' in data) || data.wikidataId is string) &&
+             (!('publishingYear' in data) || data.publishingYear is number) &&
+             (!('publishers' in data) || data.publishers is list) &&
+             (!('designers' in data) || data.designers is list) &&
+             (!('artists' in data) || data.artists is list) &&
+             (!('genres' in data) || data.genres is list) &&
+             (!('categories' in data) || data.categories is list) &&
+             (!('description' in data) || data.description is string);
+    }
+
+    function isValidUser(data) {
+      return (!('uid' in data) || data.uid == request.auth.uid) &&
+             (!('email' in data) || data.email == null || isValidEmail(data.email)) &&
+             (!('username' in data) || data.username is string) &&
+             (!('displayName' in data) || data.displayName == null || data.displayName is string) &&
+             (!('photoURL' in data) || data.photoURL == null || data.photoURL is string) &&
+             (!('avatarPreference' in data) || data.avatarPreference is string) &&
+             (!('avatarSeed' in data) || data.avatarSeed is string) &&
+             (!('profileTitle' in data) || data.profileTitle is string) &&
+             (!('bio' in data) || data.bio is string) &&
+             (!('location' in data) || data.location is string) &&
+             (!('createdAt' in data) || data.createdAt is string || data.createdAt is timestamp) &&
+             (!('attackClass' in data) || data.attackClass is number) &&
+             (!('following' in data) || data.following is list) &&
+             (!('role' in data) || data.role is string) &&
+             (!('ratings' in data) || data.ratings is map) &&
+             (!('privacy' in data) || data.privacy is map) &&
+             (!('preferences' in data) || data.preferences is map) &&
+             (!('notificationPreferences' in data) || data.notificationPreferences is map) &&
+             (!('favorites' in data) || data.favorites is list);
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll(['type', 'title', 'message', 'isRead', 'createdAt']) &&
+             data.type in ['moderation', 'social', 'library', 'groups'] &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+             data.message is string && data.message.size() > 0 && data.message.size() <= 1000 &&
+             data.isRead is bool &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    function isValidPoll(data) {
+      return data.keys().hasAll(['groupId', 'title', 'creatorId', 'options', 'votes', 'createdAt']) &&
+             data.groupId is string &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+             data.creatorId == request.auth.uid &&
+             data.options is list && data.options.size() >= 1 && data.options.size() <= 20 &&
+             data.votes is map &&
+             data.createdAt is timestamp &&
+             (!('closeDate' in data) || data.closeDate == null || data.closeDate is timestamp) &&
+             (!('creatorName' in data) || data.creatorName is string) &&
+             (!('creatorAvatar' in data) || data.creatorAvatar is string);
+    }
+
+    function isValidGroupEvent(data) {
+      return data.keys().hasAll(['title', 'location', 'dateTime', 'groupId', 'creatorId', 'attendees', 'createdAt']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+             data.location is string && data.location.size() > 0 &&
+             data.dateTime is timestamp &&
+             data.groupId is string &&
+             data.creatorId == request.auth.uid &&
+             data.attendees is list &&
+             data.createdAt is timestamp &&
+             (!('description' in data) || data.description is string) &&
+             (!('gamesBrought' in data) || data.gamesBrought is list) &&
+             (!('sourcePollId' in data) || data.sourcePollId is string);
+    }
+
+    match /games/{gameId} {
+      allow read: if true;
+      allow write: if true; // TEMPORARY for administrative bulk import
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isValidReview(request.resource.data);
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && isValidReview(request.resource.data);
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    match /mail/{mailId} {
+      allow create: if isAuthenticated();
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /PendingArt/{artId} {
+      allow create: if isAuthenticated();
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId) && 
+                      isValidId(userId) &&
+                      isValidUser(request.resource.data) &&
+                      request.resource.data.keys().hasAll(['uid', 'role', 'createdAt']);
+      allow update: if (isOwner(userId) && isValidId(userId) && isValidUser(request.resource.data)) || isAdmin();
+
+      match /notifications/{notificationId} {
+        allow list, read: if isOwner(userId);
+        allow create: if isAuthenticated() && isValidNotification(request.resource.data);
+        allow update: if isOwner(userId) && isValidNotification(request.resource.data) && 
+                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']);
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    match /errorReports/{reportId} {
+      allow create: if isAuthenticated();
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /usernames/{username} {
+      allow read: if true;
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // User Collections
+    match /userCollections/{collectionId} {
+      allow read: if isAuthenticated() && (resource.data.shelf == 'owned' || request.auth.uid == resource.data.userId || isAdmin());
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId;
+      allow update: if isAuthenticated() && request.auth.uid == resource.data.userId && request.auth.uid == request.resource.data.userId;
+      allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    // Game Sessions
+    match /gameSessions/{sessionId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.userId || isAdmin());
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId;
+      allow update: if isAuthenticated() && request.auth.uid == resource.data.userId && request.auth.uid == request.resource.data.userId;
+      allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    // Friendships
+    match /friendships/{friendshipId} {
+      allow read: if isAuthenticated() && (request.auth.uid in resource.data.userIds || isAdmin());
+      allow create: if isAuthenticated() && (request.auth.uid in request.resource.data.userIds || isAdmin());
+      allow update: if isAuthenticated() && (request.auth.uid in resource.data.userIds || isAdmin());
+      allow delete: if isAuthenticated() && (request.auth.uid in resource.data.userIds || isAdmin());
+    }
+
+    // Activities
+    match /activities/{activityId} {
+      allow read: if true; // Social feed is public
+      allow create: if isAuthenticated() && (request.auth.uid == request.resource.data.userId || isAdmin());
+      allow update, delete: if isAuthenticated() && (request.auth.uid == resource.data.userId || isAdmin());
+    }
+
+    // Groups
+    match /groups/{groupId} {
+      allow read: if isAuthenticated() && (isAdmin() || request.auth.uid in resource.data.memberIds);
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (isAdmin() || request.auth.uid in resource.data.memberIds);
+      allow delete: if isAuthenticated() && (isAdmin() || request.auth.uid == resource.data.createdBy);
+
+      // Group Games Subcollection (Aggregated Stats)
+      match /GroupGames/{gameId} {
+        allow read: if isAuthenticated() && (isAdmin() || request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds);
+        allow create, update: if isAuthenticated() && (isAdmin() || request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds);
+      }
+
+      // Join Requests Subcollection
+      match /JoinRequests/{requestId} {
+        allow read: if isAuthenticated() && (
+          request.auth.uid == resource.data.userId || 
+          request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds
+        );
+        allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+        allow update, delete: if isAuthenticated() && (
+          request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds ||
+          isAdmin()
+        );
+      }
+    }
+
+    // Events
+    match /events/{eventId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.memberIds.hasAny([request.auth.uid])
+      );
+      allow create: if isAuthenticated() && (
+        isAdmin() || 
+        get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.memberIds.hasAny([request.auth.uid])
+      );
+      allow update: if isAuthenticated() && (
+        isAdmin() || 
+        get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.memberIds.hasAny([request.auth.uid])
+      );
+      allow delete: if isAuthenticated() && (isAdmin() || request.auth.uid == resource.data.hostId);
+    }
+
+    // Messages
+    match /messages/{messageId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.memberIds.hasAny([request.auth.uid])
+      );
+      allow create: if isAuthenticated() && (
+        isAdmin() || 
+        get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.memberIds.hasAny([request.auth.uid])
+      );
+      allow update: if isAuthenticated() && (
+        isAdmin() || 
+        get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.memberIds.hasAny([request.auth.uid])
+      );
+      allow delete: if isAuthenticated() && (isAdmin() || request.auth.uid == resource.data.userId);
+    }
+
+    // Group Requests
+    match /groupRequests/{requestId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.memberIds.hasAny([request.auth.uid])
+      );
+      allow create: if isAuthenticated() && (
+        isAdmin() || 
+        get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.memberIds.hasAny([request.auth.uid])
+      );
+      allow update: if isAuthenticated() && (
+        isAdmin() || 
+        get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.memberIds.hasAny([request.auth.uid])
+      );
+      allow delete: if isAuthenticated() && (isAdmin() || request.auth.uid == resource.data.userId);
+    }
+
+    // Group Invites
+    match /GroupInvites/{inviteId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.toUserId || request.auth.uid == resource.data.fromUserId || isAdmin());
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.fromUserId;
+      allow update: if isAuthenticated() && (request.auth.uid == resource.data.toUserId || isAdmin());
+      allow delete: if isAuthenticated() && (request.auth.uid == resource.data.toUserId || request.auth.uid == resource.data.fromUserId || isAdmin());
+    }
+
+    // Plays
+    match /plays/{playId} {
+      allow read: if isAuthenticated() && (
+        !('groupId' in resource.data) || 
+        resource.data.groupId == null || 
+        request.auth.uid == resource.data.userId ||
+        get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.memberIds.hasAny([request.auth.uid]) ||
+        isAdmin()
+      );
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId;
+      allow update: if isAuthenticated() && request.auth.uid == resource.data.userId;
+      allow delete: if isAuthenticated() && (request.auth.uid == resource.data.userId || isAdmin());
+    }
+
+    // Group Polls
+    match /groupPolls/{pollId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.memberIds.hasAny([request.auth.uid])
+      );
+      allow create: if isAuthenticated() && 
+                    isValidPoll(request.resource.data) && (
+        isAdmin() || 
+        get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.memberIds.hasAny([request.auth.uid])
+      );
+      allow update: if isAuthenticated() && (
+        isAdmin() || 
+        get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.memberIds.hasAny([request.auth.uid])
+      );
+      allow delete: if isAuthenticated() && (
+        isAdmin() || 
+        request.auth.uid == resource.data.creatorId ||
+        request.auth.uid == get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.createdBy
+      );
+    }
+
+    // Group Events
+    match /groupEvents/{eventId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.memberIds.hasAny([request.auth.uid])
+      );
+      allow create: if isAuthenticated() && 
+                    isValidGroupEvent(request.resource.data) && (
+        isAdmin() || 
+        get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.memberIds.hasAny([request.auth.uid])
+      );
+      allow update: if isAuthenticated() && (
+        isAdmin() || 
+        (
+          get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.memberIds.hasAny([request.auth.uid]) &&
+          // More complex checks for removing games could go here, but for now we follow general member update permission
+          // The UI will handle the logic of only showing 'X' for owners
+          true 
+        )
+      );
+      allow delete: if isAuthenticated() && (
+        isAdmin() || 
+        request.auth.uid == resource.data.creatorId ||
+        request.auth.uid == get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.createdBy
+      );
+    }
+  }
+}
