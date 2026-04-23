@@ -8,7 +8,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, query, collection, where, getDocs, limit } from 'firebase/firestore';
+import { doc, getDoc, setDoc, query, collection, where, getDocs, limit, onSnapshot } from 'firebase/firestore';
 import { auth, db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { NotificationPreferences, DEFAULT_NOTIFICATION_PREFERENCES } from '../services/notificationService';
 
@@ -32,9 +32,16 @@ export interface UserProfile {
   ratings?: Record<string, number>;
 }
 
+export interface GroupRating {
+  gameId: string;
+  rating: number;
+  groupName: string;
+}
+
 interface UserContextType {
   user: FirebaseUser | null;
   profile: UserProfile | null;
+  groupRatings: Record<string, GroupRating>; // gameId -> { rating, groupName }
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
   signUpWithEmail: (email: string, password: string, username: string) => Promise<void>;
@@ -50,6 +57,7 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [groupRatings, setGroupRatings] = useState<Record<string, GroupRating>>({});
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = async (uid: string, currentUser: any) => {
@@ -109,17 +117,83 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    let unsubscribeProfile: (() => void) | null = null;
+    let unsubscribeGroups: (() => void) | null = null;
+    let groupListeners: (() => void)[] = [];
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
-        await fetchProfile(currentUser.uid, currentUser);
+        // Setup real-time profile listener
+        const userDocRef = doc(db, 'users', currentUser.uid);
+        unsubscribeProfile = onSnapshot(userDocRef, (snap) => {
+          if (snap.exists()) {
+            const data = snap.data() as UserProfile;
+            setProfile({
+              ...data,
+              notificationPreferences: data.notificationPreferences || DEFAULT_NOTIFICATION_PREFERENCES
+            });
+          } else {
+            // First time login - initialize profile if not existing
+            fetchProfile(currentUser.uid, currentUser);
+          }
+          setLoading(false);
+        }, (error) => {
+          console.error("Profile Snapshot Error:", error);
+          setLoading(false);
+        });
+
+        // Setup real-time groups and group ratings listener
+        const qGroups = query(collection(db, 'groups'), where('memberIds', 'array-contains', currentUser.uid));
+        unsubscribeGroups = onSnapshot(qGroups, (groupsSnap) => {
+          // Clean up existing group subcollection listeners
+          groupListeners.forEach(un => un());
+          groupListeners = [];
+
+          groupsSnap.docs.forEach(groupDoc => {
+            const groupData = groupDoc.data();
+            const groupName = groupData.name;
+            const groupId = groupDoc.id;
+
+            const subUn = onSnapshot(collection(db, 'groups', groupId, 'GroupGames'), (gamesSnap) => {
+              setGroupRatings(prev => {
+                const next = { ...prev };
+                gamesSnap.docs.forEach(gameDoc => {
+                  const gameData = gameDoc.data();
+                  // Store the rating, potentially overwriting if in multiple groups (simple fallback)
+                  next[gameDoc.id] = {
+                    gameId: gameDoc.id,
+                    rating: gameData.average_d20,
+                    groupName: groupName
+                  };
+                });
+                return next;
+              });
+            }, (error) => {
+              console.error(`GroupGames Snapshot Error for ${groupId}:`, error);
+            });
+            groupListeners.push(subUn);
+          });
+        }, (error) => {
+          console.error("Groups Snapshot Error:", error);
+        });
       } else {
         setProfile(null);
+        setGroupRatings({});
+        if (unsubscribeProfile) unsubscribeProfile();
+        if (unsubscribeGroups) unsubscribeGroups();
+        groupListeners.forEach(un => un());
+        groupListeners = [];
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeProfile) unsubscribeProfile();
+      if (unsubscribeGroups) unsubscribeGroups();
+      groupListeners.forEach(un => un());
+    };
   }, []);
 
   const signInWithGoogle = async () => {
@@ -214,6 +288,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     <UserContext.Provider value={{ 
       user, 
       profile, 
+      groupRatings,
       loading, 
       signInWithGoogle, 
       signUpWithEmail,

@@ -225,24 +225,7 @@ export default function Profile() {
           
           setFavorites(currentFavorites);
         } else {
-          // Mock data for initial view as requested
-          const mockFavorites = [
-            {
-              gameId: 'scythe',
-              gameTitle: 'Scythe',
-              gameCover: 'https://picsum.photos/seed/scythe/400/600',
-              rating: 18,
-              isPersonal: true
-            },
-            {
-              gameId: 'root',
-              gameTitle: 'Root',
-              gameCover: 'https://picsum.photos/seed/root/400/600',
-              rating: 20,
-              isPersonal: true
-            }
-          ];
-          setFavorites(mockFavorites as Favorite[]);
+          setFavorites([]);
         }
       }
     } catch (error) {

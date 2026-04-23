@@ -67,6 +67,7 @@ interface LibraryGame extends Partial<Game> {
 export default function GroupLibrary({ groupId, members }: GroupLibraryProps) {
   const { user } = useUser();
   const [libraryGames, setLibraryGames] = useState<LibraryGame[]>([]);
+  const [groupGameStats, setGroupGameStats] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOwner, setSelectedOwner] = useState<string>('all');
@@ -84,6 +85,15 @@ export default function GroupLibrary({ groupId, members }: GroupLibraryProps) {
 
   useEffect(() => {
     if (!members.length || !user) return;
+
+    // 1. Listen to Group Games Stats
+    const statsUnsubscribe = onSnapshot(collection(db, 'groups', groupId, 'GroupGames'), (snapshot) => {
+      const stats: Record<string, any> = {};
+      snapshot.docs.forEach(d => {
+        stats[d.id] = d.data();
+      });
+      setGroupGameStats(stats);
+    });
 
     const memberIds = members.map(m => m.uid);
     // Firestore 'in' query limit is 30. If group > 30, we'd need to chunk.
@@ -155,7 +165,10 @@ export default function GroupLibrary({ groupId, members }: GroupLibraryProps) {
       handleFirestoreError(error, OperationType.LIST, 'userCollections');
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      statsUnsubscribe();
+    };
   }, [members, groupId, user]);
 
   // Fetch Game Metadata for advanced filtering
@@ -320,9 +333,9 @@ export default function GroupLibrary({ groupId, members }: GroupLibraryProps) {
                 </div>
 
                 <div className="relative h-48 flex items-center justify-between px-8 gap-4">
-                  {/* Left Side - Group Rating (Placeholder) */}
+                  {/* Left Side - Group Rating */}
                   <div className="flex flex-col items-center gap-1 min-w-[70px] shrink-0">
-                    <D20Die value="-" theme="silver" size="md" />
+                    <D20Die value={groupGameStats[game.gameId]?.average_d20 || '-'} theme="silver" size="md" />
                     <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">Group</span>
                   </div>
 

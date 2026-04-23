@@ -70,7 +70,7 @@ interface Review {
 }
 
 export default function Home() {
-  const { profile, user } = useUser();
+  const { profile, user, groupRatings } = useUser();
   const [rotationGames, setRotationGames] = useState<RotationGame[]>([]);
   const [rotationIndex, setRotationIndex] = useState(0);
   const [recentGames, setRecentGames] = useState<Game[]>([]);
@@ -84,41 +84,42 @@ export default function Home() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    let unsubscribePlays: () => void;
-    
-    const initDashboard = async () => {
-      // 1. Kick off global data fetches (always run)
-      const fetchRecentGames = async () => {
-        try {
-          const recentGamesSnap = await getDocs(query(
-            collection(db, 'games'),
-            where('isApproved', '==', true),
-            orderBy('createdAt', 'desc'),
-            limit(5)
-          ));
-          setRecentGames(recentGamesSnap.docs.map(d => ({ id: d.id, ...d.data() } as Game)));
-        } catch (error) {
-          console.error("Firestore Index Error (Recent Games):", error);
-        } finally {
-          setLoadingRecent(false);
-        }
-      };
+    let unsubscribePlays: (() => void) | null = null;
+    let unsubscribeRecent: (() => void) | null = null;
+    let unsubscribeFriends: (() => void) | null = null;
+    let unsubscribeRotation: (() => void)[] = [];
 
-      // 2. Auth-dependent fetches
+    const initDashboard = async () => {
+      // 1. Real-time Recent Games
+      const qRecent = query(
+        collection(db, 'games'),
+        where('isApproved', '==', true),
+        orderBy('createdAt', 'desc'),
+        limit(5)
+      );
+      
+      unsubscribeRecent = onSnapshot(qRecent, (snap) => {
+        setRecentGames(snap.docs.map(d => ({ id: d.id, ...d.data() } as Game)));
+        setLoadingRecent(false);
+      }, (error) => {
+        console.error("Recent Games Snapshot Error:", error);
+        setLoadingRecent(false);
+      });
+
+      // 2. Auth-dependent features
       if (user && profile) {
-        const following = profile.following || [];
+        // A. Plays -> Rotation (Real-time)
         const oneYearAgo = new Date();
         oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-
-        // A. Setup real-time listener for Plays (triggers rotation refresh)
-        const playsQuery = query(
+        
+        const qPlays = query(
           collection(db, 'plays'),
           where('userId', '==', user.uid),
           where('playDate', '>=', oneYearAgo),
           limit(500)
         );
 
-        unsubscribePlays = onSnapshot(playsQuery, async (playsSnap) => {
+        unsubscribePlays = onSnapshot(qPlays, async (playsSnap) => {
           try {
             const playCounts: Record<string, number> = {};
             playsSnap.docs.forEach(d => {
@@ -138,60 +139,66 @@ export default function Home() {
 
             const topIds = sortedGameIds.map(([id]) => id);
             
-            // Concurrent fetch for game documents
-            const gameDocs = await Promise.all(
-              topIds.map(id => getDoc(doc(db, 'games', id)))
-            );
+            // Clean up previous individual rotation listeners
+            unsubscribeRotation.forEach(un => un());
+            unsubscribeRotation = [];
 
-            const finalRotation: RotationGame[] = sortedGameIds.map(([id, count], idx) => {
-              const d = gameDocs[idx];
-              if (!d.exists()) return null;
-              return { id: d.id, ...d.data(), playCount: count } as RotationGame;
-            }).filter((g): g is RotationGame => g !== null);
-
-            setRotationGames(finalRotation);
+            // Set up onSnapshot for each game in the top rotation to ensure ratings are fresh
+            topIds.forEach((id, idx) => {
+              const count = sortedGameIds[idx][1];
+              const u = onSnapshot(doc(db, 'games', id), (gSnap) => {
+                if (gSnap.exists()) {
+                  setRotationGames(prev => {
+                    const updated = [...prev];
+                    const gameWithCount = { id: gSnap.id, ...gSnap.data(), playCount: count } as RotationGame;
+                    
+                    const existingIdx = updated.findIndex(g => g.id === id);
+                    if (existingIdx > -1) {
+                      updated[existingIdx] = gameWithCount;
+                    } else {
+                      updated.push(gameWithCount);
+                      // Sort after adding new
+                      updated.sort((a, b) => b.playCount - a.playCount);
+                    }
+                    return updated;
+                  });
+                }
+              });
+              unsubscribeRotation.push(u);
+            });
           } catch (error) {
             console.error("Error in Rotation Aggregation:", error);
           } finally {
             setLoadingRotation(false);
           }
         }, (error) => {
-          console.error("Firestore Index Error (Plays):", error);
+          console.error("Plays Snapshot Error:", error);
           setLoadingRotation(false);
         });
 
-        const fetchFriendReviews = async () => {
-          try {
-            const following = (profile as any)?.following || [];
-            if (following.length === 0) {
-              setFriendReviews([]);
-              setLoadingReviews(false);
-              return;
-            }
-
-            // Query activities of type review_added from friends
-            // Limit to 10 friends for Firestore 'in' query limit
-            const activitiesSnap = await getDocs(query(
-              collection(db, 'activities'),
-              where('type', '==', 'review_added'),
-              where('userId', 'in', following.slice(0, 10)),
-              orderBy('timestamp', 'desc'),
-              limit(3)
-            ));
-            
-            setFriendReviews(activitiesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-          } catch (error) {
-            console.error("Error fetching friend reviews:", error);
-          } finally {
+        // B. Friends Reviews (Real-time)
+        const following = (profile as any)?.following || [];
+        if (following.length > 0) {
+          const qFriends = query(
+            collection(db, 'activities'),
+            where('type', '==', 'review_added'),
+            where('userId', 'in', following.slice(0, 10)),
+            orderBy('timestamp', 'desc'),
+            limit(3)
+          );
+          
+          unsubscribeFriends = onSnapshot(qFriends, (snap) => {
+            setFriendReviews(snap.docs.map(d => ({ id: d.id, ...d.data() })));
             setLoadingReviews(false);
-          }
-        };
-
-        // Execute these in parallel
-        Promise.all([fetchRecentGames(), fetchFriendReviews()]);
+          }, (error) => {
+            console.error("Friends Reviews Snapshot Error:", error);
+            setLoadingReviews(false);
+          });
+        } else {
+          setFriendReviews([]);
+          setLoadingReviews(false);
+        }
       } else {
-        // Guest mode: Only global fetches, stop others
-        fetchRecentGames();
         setLoadingRotation(false);
         setLoadingReviews(false);
       }
@@ -200,7 +207,10 @@ export default function Home() {
     initDashboard();
 
     return () => {
+      if (unsubscribeRecent) unsubscribeRecent();
       if (unsubscribePlays) unsubscribePlays();
+      if (unsubscribeFriends) unsubscribeFriends();
+      unsubscribeRotation.forEach(u => u());
     };
   }, [user, profile]);
 
@@ -285,7 +295,12 @@ export default function Home() {
                     transition={{ duration: 0.3 }}
                     className="relative"
                   >
-                    <GameCard game={rotationGames[rotationIndex]} />
+                    <GameCard 
+                      game={rotationGames[rotationIndex]} 
+                      personalRating={profile?.ratings?.[rotationGames[rotationIndex].id]}
+                      groupRating={groupRatings[rotationGames[rotationIndex].id]?.rating}
+                      groupName={groupRatings[rotationGames[rotationIndex].id]?.groupName}
+                    />
                     
                     {/* Play Count Badge - High Visibility Emerald */}
                     <div className="absolute top-4 right-4 bg-emerald-accent/90 backdrop-blur-md px-4 py-2 rounded-xl shadow-2xl z-20 border border-emerald-accent/30 pointer-events-none transition-transform">
@@ -403,17 +418,23 @@ export default function Home() {
             <h2 className="text-xl font-black text-white tracking-tight uppercase tracking-widest text-[10px]">Recently Added to CritShelf</h2>
           </div>
 
-          <div className="flex gap-4 sm:gap-6 overflow-x-auto snap-x snap-mandatory no-scrollbar pb-6 px-2 items-stretch">
+          <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory no-scrollbar pb-6 px-2 items-stretch">
             {loadingRecent ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="min-w-[220px] sm:min-w-[320px] snap-center h-full shrink-0">
-                  <GameCardSkeleton className="h-full min-h-[10rem] sm:min-h-[12rem]" />
+              Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="w-full shrink-0 snap-center min-h-[12rem]">
+                  <GameCardSkeleton className="h-full" />
                 </div>
               ))
             ) : recentGames.length > 0 ? (
               recentGames.map((game) => (
-                <div key={game.id} className="min-w-[220px] sm:min-w-[320px] snap-center h-full shrink-0">
-                  <GameCard game={game} compact />
+                <div key={game.id} className="w-full shrink-0 snap-center">
+                  <GameCard 
+                    game={game} 
+                    compact 
+                    personalRating={profile?.ratings?.[game.id]}
+                    groupRating={groupRatings[game.id]?.rating}
+                    groupName={groupRatings[game.id]?.groupName}
+                  />
                 </div>
               ))
             ) : (

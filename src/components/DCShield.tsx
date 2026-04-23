@@ -106,7 +106,7 @@ export default function DCShield({ value, size = 'md', className, totalUserRatin
       
       {/* DC Value Text - Optimized Alignment */}
       <div className={cn(
-        "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[62%] z-10 font-black text-white drop-shadow-sm tracking-tighter text-center w-full",
+        "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[55%] z-10 font-black text-white drop-shadow-sm tracking-tighter text-center w-full",
         currentSize.text
       )}>
         {value}

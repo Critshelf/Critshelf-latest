@@ -5,11 +5,13 @@ import GameCard, { Game } from '../components/GameCard';
 import AddGameModal from '../components/AddGameModal';
 import GameSearchAndFilter from '../components/GameSearchAndFilter';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
-import { collection, getDocs, query, limit, doc, orderBy, startAfter, getCountFromServer, where } from 'firebase/firestore';
+import { collection, getDocs, query, limit, doc, orderBy, startAfter, getCountFromServer, where, onSnapshot } from 'firebase/firestore';
+import { useUser } from '../contexts/UserContext';
 
 import { MOCK_GAMES } from '../constants';
 
 export default function Browse() {
+  const { profile, groupRatings } = useUser();
   const [searchTerm, setSearchTerm] = useState('');
   const [games, setGames] = useState<Game[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,53 +38,56 @@ export default function Browse() {
     }
   };
 
-  const fetchGames = async (isLoadMore = false) => {
-    if (isLoadMore) setLoadingMore(true);
-    else {
-      setLoading(true);
-      fetchTotalCount();
-    }
+  const fetchMoreGames = async () => {
+    if (!lastDoc || loadingMore) return;
+    setLoadingMore(true);
 
     const path = 'games';
     try {
-      let q = query(
-        collection(db, path), 
+      const q = query(
+        collection(db, path),
         where('isApproved', '==', true),
-        orderBy('title'), 
+        orderBy('title'),
+        startAfter(lastDoc),
         limit(PAGE_SIZE)
       );
-
-      if (isLoadMore && lastDoc) {
-        q = query(
-          collection(db, path),
-          where('isApproved', '==', true),
-          orderBy('title'),
-          startAfter(lastDoc),
-          limit(PAGE_SIZE)
-        );
-      }
 
       const snapshot = await getDocs(q);
       const gameList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
       
       setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
       setHasMore(snapshot.docs.length === PAGE_SIZE);
-
-      if (isLoadMore) {
-        setGames(prev => [...prev, ...gameList]);
-      } else {
-        setGames(gameList);
-      }
+      setGames(prev => [...prev, ...gameList]);
     } catch (error) {
       handleFirestoreError(error, OperationType.LIST, path);
     } finally {
-      setLoading(false);
       setLoadingMore(false);
     }
   };
 
   useEffect(() => {
-    fetchGames();
+    setLoading(true);
+    fetchTotalCount();
+
+    const q = query(
+      collection(db, 'games'), 
+      where('isApproved', '==', true),
+      orderBy('title'), 
+      limit(PAGE_SIZE)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const gameList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
+      setGames(gameList);
+      setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
+      setHasMore(snapshot.docs.length === PAGE_SIZE);
+      setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'games');
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const availableGenres = useMemo(() => {
@@ -195,14 +200,20 @@ export default function Browse() {
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
                   {filteredGames.map(game => (
-                    <GameCard key={game.id} game={game} />
+                    <GameCard 
+                      key={game.id} 
+                      game={game} 
+                      personalRating={profile?.ratings?.[game.id]}
+                      groupRating={groupRatings[game.id]?.rating}
+                      groupName={groupRatings[game.id]?.groupName}
+                    />
                   ))}
                 </div>
 
                 {hasMore && !searchTerm && (
                   <div className="mt-16 flex justify-center">
                     <button
-                      onClick={() => fetchGames(true)}
+                      onClick={() => fetchMoreGames()}
                       disabled={loadingMore}
                       className="flex items-center gap-3 bg-white/5 text-white px-10 py-5 rounded-[2rem] font-black shadow-xl hover:bg-white/10 transition-all disabled:opacity-50 border border-white/10 active:scale-95"
                     >
@@ -245,7 +256,6 @@ export default function Browse() {
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         initialTitle={searchTerm}
-        onSuccess={fetchGames}
       />
     </div>
   );

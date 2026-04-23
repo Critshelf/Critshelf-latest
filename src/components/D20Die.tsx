@@ -17,11 +17,11 @@ export default function D20Die({ value, size = 'md', theme = 'emerald', classNam
   const isNat20 = displayValue === 20 || displayValue === '20';
   
   const sizeClasses = {
-    xs: 'w-9 h-9 text-[24px]',
-    sm: 'w-11 h-11 text-[28px]',
-    md: 'w-16 h-16 text-[40px]',
-    lg: 'w-24 h-24 text-[64px]',
-    xl: 'w-36 h-36 text-[94px]'
+    xs: 'w-9 h-9 text-[20px]',
+    sm: 'w-11 h-11 text-[24px]',
+    md: 'w-16 h-16 text-[32px]',
+    lg: 'w-24 h-24 text-[48px]',
+    xl: 'w-36 h-36 text-[72px]'
   };
 
   const themes = {

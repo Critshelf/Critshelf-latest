@@ -34,7 +34,7 @@ const SHELVES = [
 ];
 
 export default function Collection() {
-  const { user } = useUser();
+  const { user, profile, groupRatings } = useUser();
   const [activeShelf, setActiveShelf] = useState('all');
   const [items, setItems] = useState<CollectionItem[]>([]);
   const [gamesData, setGamesData] = useState<Record<string, Game>>({});
@@ -75,44 +75,41 @@ export default function Collection() {
     return () => unsubscribe();
   }, [user]);
 
-  // Hydrate game data for filtering
+  // Real-time hydration of game data for filtering and display
   useEffect(() => {
-    if (items.length === 0) return;
+    if (items.length === 0) {
+      setGamesData({});
+      return;
+    }
 
-    const hydrateGames = async () => {
-      const missingIds = items
-        .map(item => item.gameId)
-        .filter(id => !gamesData[id]);
+    const allIds = Array.from(new Set(items.map(item => item.gameId)));
+    const chunks = [];
+    for (let i = 0; i < allIds.length; i += 30) {
+      chunks.push(allIds.slice(i, i + 30));
+    }
 
-      if (missingIds.length === 0) return;
+    setLoadingMetadata(true);
+    const unsubscribes: (() => void)[] = [];
 
-      setLoadingMetadata(true);
-      try {
-        // Fetch missing games in chunks of 30 (Firestore limit for 'in' query)
-        const chunks = [];
-        for (let i = 0; i < missingIds.length; i += 30) {
-          chunks.push(missingIds.slice(i, i + 30));
-        }
-
-        const newGamesData: Record<string, Game> = { ...gamesData };
-        
-        for (const chunk of chunks) {
-          const q = query(collection(db, 'games'), where('__name__', 'in', chunk));
-          const snap = await getDocs(q);
+    chunks.forEach(chunk => {
+      const q = query(collection(db, 'games'), where('__name__', 'in', chunk));
+      const unsub = onSnapshot(q, (snap) => {
+        setGamesData(prev => {
+          const updated = { ...prev };
           snap.docs.forEach(d => {
-            newGamesData[d.id] = { id: d.id, ...d.data() } as Game;
+            updated[d.id] = { id: d.id, ...d.data() } as Game;
           });
-        }
-
-        setGamesData(newGamesData);
-      } catch (error) {
-        console.error("Error hydrating collection metadata:", error);
-      } finally {
+          return updated;
+        });
         setLoadingMetadata(false);
-      }
-    };
+      }, (error) => {
+        console.error("Error in real-time hydration:", error);
+        setLoadingMetadata(false);
+      });
+      unsubscribes.push(unsub);
+    });
 
-    hydrateGames();
+    return () => unsubscribes.forEach(un => un());
   }, [items]);
 
   const availableGenres = useMemo(() => {
@@ -284,7 +281,12 @@ export default function Collection() {
                     exit={{ opacity: 0, scale: 0.8 }}
                     className="relative group"
                   >
-                    <GameCard game={game as Game} />
+                    <GameCard 
+                      game={game as Game} 
+                      personalRating={profile?.ratings?.[item.gameId]}
+                      groupRating={groupRatings[item.gameId]?.rating}
+                      groupName={groupRatings[item.gameId]?.groupName}
+                    />
                     
                     {/* Shelf Status Overlay */}
                     <div className="absolute top-4 right-4 z-30 pointer-events-none">

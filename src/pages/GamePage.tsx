@@ -25,7 +25,7 @@ import {
   Flag
 } from 'lucide-react';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
-import { doc, getDoc, collection, query, getDocs, limit, where, setDoc, updateDoc, serverTimestamp, addDoc, orderBy, startAt, endAt } from 'firebase/firestore';
+import { doc, getDoc, collection, query, getDocs, limit, where, setDoc, updateDoc, serverTimestamp, addDoc, orderBy, startAt, endAt, onSnapshot } from 'firebase/firestore';
 import { Game } from '../components/GameCard';
 import { cn, formatPlayTime } from '../lib/utils';
 import { AnimatePresence } from 'motion/react';
@@ -56,6 +56,27 @@ interface Review {
   attackClass?: number;
 }
 
+const BOARD_GAME_VIBES = [
+  "🧠 Brain Burner",
+  "🎉 Casual Fun",
+  "🌊 Chill Experience",
+  "📜 Classic Feel",
+  "⚔️ Competitive Edge",
+  "🤝 Cooperative Spirit",
+  "📑 Deep Strategy",
+  "👨‍👩‍👧‍👦 Family Friendly",
+  "⚡ Fast-Paced",
+  "🗣️ High Interaction",
+  "🎈 Lightweight",
+  "🏆 Masterpiece",
+  "🥳 Party Game",
+  "🔍 Social Deduction",
+  "📦 Standalone",
+  "🏗️ Tableau Builder",
+  "🎭 Thematic",
+  "📻 Vintage style"
+].sort();
+
 export default function GamePage() {
   const { user, profile, refreshProfile } = useUser();
   const { id } = useParams<{ id: string }>();
@@ -66,12 +87,13 @@ export default function GamePage() {
   const [userReview, setUserReview] = useState<{ score: number; text: string; id: string; difficultyRating?: number } | null>(null);
   const [reviewText, setReviewText] = useState('');
   const [personalScore, setPersonalScore] = useState(10);
-  const [difficultyRating, setDifficultyRating] = useState(10);
+  const [difficultyRating, setDifficultyRating] = useState<number | null>(null);
   const [ratingError, setRatingError] = useState('');
   const [communityDC, setCommunityDC] = useState<number | '-'>('-');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [showCollectionMenu, setShowCollectionMenu] = useState(false);
   const [addingToShelf, setAddingToShelf] = useState<string | null>(null);
+  const [collectionStatus, setCollectionStatus] = useState<string | null>(null);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [isTop3ModalOpen, setIsTop3ModalOpen] = useState(false);
   const [selectedVibe, setSelectedVibe] = useState<string>('');
@@ -113,14 +135,23 @@ export default function GamePage() {
       .slice(0, 3);
   }, [allGameReviews]);
 
-  // Deterministic Rating Logic (Matches GameCard.tsx)
+  // Reactive Rating Logic (Calculated from live reviews)
   const getRatings = () => {
     if (!game) return { personal: '-', friends: '-', community: '-' };
     
+    // Calculate community rating from all reviews for instant updates
+    let communityAvg = game.rating || '-';
+    if (allGameReviews.length > 0) {
+      const scores = allGameReviews.map(r => r.score).filter(s => typeof s === 'number');
+      if (scores.length > 0) {
+        communityAvg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+      }
+    }
+
     return {
       personal: userReview ? userReview.score : '-',
       friends: friendsRating,
-      community: game.rating || '-'
+      community: communityAvg
     };
   };
 
@@ -166,10 +197,28 @@ export default function GamePage() {
         }
       });
 
+      setCollectionStatus(shelfId);
       await refreshProfile();
       setShowCollectionMenu(false);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, path);
+    } finally {
+      setAddingToShelf(null);
+    }
+  };
+
+  const removeFromCollection = async () => {
+    if (!user || !game) return;
+    
+    setAddingToShelf('removing');
+    try {
+      const { deleteDoc } = await import('firebase/firestore');
+      await deleteDoc(doc(db, 'userCollections', `${user.uid}_${game.id}`));
+      setCollectionStatus(null);
+      await refreshProfile();
+      alert('Removed from collection');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `userCollections/${user.uid}_${game.id}`);
     } finally {
       setAddingToShelf(null);
     }
@@ -194,6 +243,21 @@ export default function GamePage() {
 
       const docRef = await addDoc(collection(db, 'reviews'), reviewData);
       
+      // Update aggregate game rating in Firestore for global visibility
+      const allScores = allGameReviews.map(r => r.score).filter(s => typeof s === 'number');
+      const newAllScores = [...allScores, personalScore];
+      const newAverage = Math.round(newAllScores.reduce((a, b) => a + b, 0) / newAllScores.length);
+      
+      await updateDoc(doc(db, 'games', game.id), {
+        rating: newAverage
+      });
+
+      // Update user's personal ratings map for global reactivity
+      const currentRatings = profile?.ratings || {};
+      await updateDoc(doc(db, 'users', user.uid), {
+        [`ratings.${game.id}`]: personalScore
+      });
+
       setUserReview({
         id: docRef.id,
         score: personalScore,
@@ -393,152 +457,155 @@ export default function GamePage() {
   };
 
   useEffect(() => {
-    const fetchGameData = async () => {
-      if (!id) return;
-      setLoading(true);
-      const path = `games/${id}`;
-      try {
-        const docRef = doc(db, 'games', id);
-        const docSnap = await getDoc(docRef);
+    if (!id) return;
+    
+    setLoading(true);
+    let unsubscribeGame: (() => void) | null = null;
+    let unsubscribeReviews: (() => void) | null = null;
+    let unsubscribeUserReview: (() => void) | null = null;
+    let unsubscribeUser: (() => void) | null = null;
+    let unsubscribeCollection: (() => void) | null = null;
+    let unsubscribeRecentReviews: (() => void) | null = null;
 
+    const setupListeners = async () => {
+      const docRef = doc(db, 'games', id);
+      
+      // 1. Real-time Game Document Listener
+      unsubscribeGame = onSnapshot(docRef, async (docSnap) => {
         if (docSnap.exists()) {
           const gameData = { id: docSnap.id, ...docSnap.data() } as Game;
           setGame(gameData);
           
-          // Admin Art Check
-          if (profile?.role === 'admin') {
-            const artQ = query(
-              collection(db, 'PendingArt'),
-              where('gameId', '==', id),
-              where('status', '==', 'pending')
-            );
-            const artSnap = await getDocs(artQ);
-            setPendingArtSubmissions(artSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-          }
-          
-          // Fetch ALL reviews for consensus calculation
-          const targetGameId = (docSnap.data() as any).baseGameId || id;
-          let targetGameDataForDC = docSnap.data();
-
-          if ((docSnap.data() as any).baseGameId) {
-            const bSnap = await getDoc(doc(db, 'games', (docSnap.data() as any).baseGameId));
-            if (bSnap.exists()) {
-              targetGameDataForDC = bSnap.data();
-            }
-          }
-
-          const allReviewsQ = query(
-            collection(db, 'reviews'),
-            where('gameId', '==', targetGameId)
-          );
-          const allReviewsSnap = await getDocs(allReviewsQ);
-          const allReviewsData = allReviewsSnap.docs.map(d => d.data());
-          setAllGameReviews(allReviewsData);
-
-          // Community DC Calculation
-          const baseDC = calculateBaseDC(targetGameDataForDC);
-          const difficultyRatings = allReviewsData
-            .map(r => r.difficultyRating)
-            .filter(r => typeof r === 'number');
-          
-          if (difficultyRatings.length > 0) {
-            setCommunityDC(calculateFinalDC(baseDC, difficultyRatings));
-          } else {
-            setCommunityDC(baseDC);
-          }
-
-          // If it's an expansion, fetch the base game
+          // Fetch base game if it's an expansion (doesn't need onSnapshot for now as it's static meta)
           if (gameData.baseGameId) {
             const baseRef = doc(db, 'games', gameData.baseGameId);
             const baseSnap = await getDoc(baseRef);
             if (baseSnap.exists()) {
               setBaseGame({ id: baseSnap.id, ...baseSnap.data() } as Game);
             }
-          } else {
-            setBaseGame(null);
+          }
+
+          // 2. Real-time Reviews Listener (includes DC calculation)
+          const targetGameId = gameData.baseGameId || id;
+          const allReviewsQ = query(collection(db, 'reviews'), where('gameId', '==', targetGameId));
+          
+          if (unsubscribeReviews) unsubscribeReviews();
+          unsubscribeReviews = onSnapshot(allReviewsQ, async (allReviewsSnap) => {
+            const allReviewsData = allReviewsSnap.docs.map(d => d.data());
+            setAllGameReviews(allReviewsData);
+
+            // Fetch target game data for DC calculation (if it's a base game different from current)
+            let dcReferenceData = gameData;
+            if (gameData.baseGameId) {
+              const bSnap = await getDoc(doc(db, 'games', gameData.baseGameId));
+              if (bSnap.exists()) dcReferenceData = bSnap.data() as Game;
+            }
+
+            const baseDC = calculateBaseDC(dcReferenceData);
+            const difficultyRatings = allReviewsData
+              .map(r => r.difficultyRating)
+              .filter(r => typeof r === 'number');
+            
+            setCommunityDC(difficultyRatings.length > 0 ? calculateFinalDC(baseDC, difficultyRatings) : baseDC);
+            
+            // Community DC is inherently updated via state change
+            setLoading(false);
+          });
+
+          // 3. Community Recent Reviews Feed Listener
+          const recentReviewsQ = query(collection(db, 'reviews'), where('gameId', '==', id), limit(10));
+          if (unsubscribeRecentReviews) unsubscribeRecentReviews();
+          unsubscribeRecentReviews = onSnapshot(recentReviewsQ, async (snap) => {
+            const fetchedReviews = snap.docs.map(doc => ({
+              id: doc.id,
+              ...doc.data(),
+              date: 'Recently'
+            })) as any[];
+
+            if (fetchedReviews.length > 0) {
+              const reviewerIds = Array.from(new Set(fetchedReviews.map(r => r.userId)));
+              const usersSnap = await getDocs(query(collection(db, 'users'), where('uid', 'in', reviewerIds)));
+              const userMap = usersSnap.docs.reduce((acc, doc) => {
+                acc[doc.id] = doc.data().attackClass;
+                return acc;
+              }, {} as Record<string, number>);
+              
+              fetchedReviews.forEach(r => {
+                r.attackClass = userMap[r.userId];
+              });
+            }
+            setReviews(fetchedReviews);
+          });
+
+          // Admin check (also static for now)
+          if (profile?.role === 'admin') {
+            const artQ = query(collection(db, 'PendingArt'), where('gameId', '==', id), where('status', '==', 'pending'));
+            const artSnap = await getDocs(artQ);
+            setPendingArtSubmissions(artSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
           }
         } else {
           setGame(null);
+          setLoading(false);
         }
+      });
 
-        // Fetch user's existing review and favorites if logged in
-        if (user) {
-          // Review fetch...
-          const q = query(
-            collection(db, 'reviews'),
-            where('gameId', '==', id),
-            where('userId', '==', user.uid),
-            limit(1)
-          );
-          const querySnapshot = await getDocs(q);
-          if (!querySnapshot.empty) {
-            const doc = querySnapshot.docs[0];
-            const data = doc.data();
-            setUserReview({
-              id: doc.id,
-              score: data.score,
-              difficultyRating: data.difficultyRating,
-              text: data.text
-            });
+      // 3. User-Specific Snapshots
+      if (user) {
+        // User Review Snapshot
+        const userReviewQ = query(collection(db, 'reviews'), where('gameId', '==', id), where('userId', '==', user.uid), limit(1));
+        unsubscribeUserReview = onSnapshot(userReviewQ, (snap) => {
+          if (!snap.empty) {
+            const d = snap.docs[0];
+            const data = d.data();
+            setUserReview({ id: d.id, score: data.score, difficultyRating: data.difficultyRating, text: data.text });
+          } else {
+            setUserReview(null);
           }
+        });
 
-          // Favorites fetch and Friends Rating
-          const userSnap = await getDoc(doc(db, 'users', user.uid));
-          if (userSnap.exists()) {
-            const userData = userSnap.data();
+        // User Profile (for following/favorites)
+        unsubscribeUser = onSnapshot(doc(db, 'users', user.uid), (snap) => {
+          if (snap.exists()) {
+            const userData = snap.data();
             setUserFavorites(userData.favorites || []);
-            const following = userData.following || [];
-
-            // Friends Rating from the already fetched allReviewsData
-            const friendsReviews = allGameReviews.filter(r => following.includes(r.userId));
-            if (friendsReviews.length > 0) {
-              const total = friendsReviews.reduce((acc, r) => acc + r.score, 0);
-              setFriendsRating(Math.round(total / friendsReviews.length));
-            } else {
-              setFriendsRating('-');
-            }
+            // Friends rating calculation logic stays connected to allGameReviews state
           }
-        } else {
-          // If not logged in, community DC is already calculated above
-        }
+        });
 
-        // Fetch community reviews
-        const reviewsQ = query(
-          collection(db, 'reviews'),
-          where('gameId', '==', id),
-          limit(10)
-        );
-        const reviewsSnapshot = await getDocs(reviewsQ);
-        const fetchedReviews = reviewsSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          date: 'Recently'
-        })) as any[];
-
-        if (fetchedReviews.length > 0) {
-          const reviewerIds = Array.from(new Set(fetchedReviews.map(r => r.userId)));
-          const usersSnap = await getDocs(query(collection(db, 'users'), where('uid', 'in', reviewerIds)));
-          const userMap = usersSnap.docs.reduce((acc, doc) => {
-            acc[doc.id] = doc.data().attackClass;
-            return acc;
-          }, {} as Record<string, number>);
-          
-          fetchedReviews.forEach(r => {
-            r.attackClass = userMap[r.userId];
-          });
-        }
-        
-        setReviews(fetchedReviews);
-
-      } catch (error) {
-        handleFirestoreError(error, OperationType.GET, path);
-      } finally {
-        setLoading(false);
+        // Collection Status Snapshot
+        unsubscribeCollection = onSnapshot(doc(db, 'userCollections', `${user.uid}_${id}`), (snap) => {
+          setCollectionStatus(snap.exists() ? snap.data().shelf : null);
+        });
       }
     };
 
-    fetchGameData();
-  }, [id, user]);
+    setupListeners();
+
+    return () => {
+      if (unsubscribeGame) unsubscribeGame();
+      if (unsubscribeReviews) unsubscribeReviews();
+      if (unsubscribeUserReview) unsubscribeUserReview();
+      if (unsubscribeUser) unsubscribeUser();
+      if (unsubscribeCollection) unsubscribeCollection();
+      if (unsubscribeRecentReviews) unsubscribeRecentReviews();
+    };
+  }, [id, user, profile]);
+
+  // Derived friends rating to ensure reactivity
+  useEffect(() => {
+    if (user && allGameReviews.length > 0) {
+      // We need to fetch following from a static place or state
+      // profile comes from UserContext, might be better to use profile since it's already in context
+      const following = (profile as any)?.following || [];
+      const friendsReviews = allGameReviews.filter(r => following.includes(r.userId));
+      if (friendsReviews.length > 0) {
+        const total = friendsReviews.reduce((acc, r) => acc + r.score, 0);
+        setFriendsRating(Math.round(total / friendsReviews.length));
+      } else {
+        setFriendsRating('-');
+      }
+    }
+  }, [allGameReviews, user, profile]);
 
   if (loading) {
     return (
@@ -565,7 +632,7 @@ export default function GamePage() {
   return (
     <div className="min-h-screen bg-charcoal pb-32 md:pt-24">
       {/* Hero Banner */}
-      <div className="relative h-[400px] md:h-[500px] bg-charcoal overflow-hidden">
+      <div className="relative h-[400px] md:h-[500px] bg-charcoal">
         {/* Vibe Blur Background */}
         <div className="absolute inset-0">
           <img 
@@ -592,14 +659,23 @@ export default function GamePage() {
           <ChevronLeft className="w-6 h-6" />
         </button>
 
-        {/* Update Art Button */}
-        <button 
-          onClick={() => setIsUpdateArtModalOpen(true)}
-          className="absolute top-6 right-6 bg-white/5 backdrop-blur-md text-white/40 px-4 py-2 rounded-xl hover:bg-white/10 transition-all z-40 flex items-center gap-2 text-xs font-black uppercase tracking-widest border border-white/10"
-        >
-          <ImageIcon className="w-4 h-4" />
-          Update Art
-        </button>
+        {/* Update Art & Share Buttons */}
+        <div className="absolute top-6 right-6 flex items-center gap-2 z-40">
+          <button 
+            onClick={handleShare}
+            className="bg-white/5 backdrop-blur-md text-white/40 p-2.5 rounded-xl hover:bg-white/10 transition-all border border-white/10"
+            title="Share Game"
+          >
+            <Share2 className="w-5 h-5" />
+          </button>
+          <button 
+            onClick={() => setIsUpdateArtModalOpen(true)}
+            className="bg-white/5 backdrop-blur-md text-white/40 px-4 py-2.5 rounded-xl hover:bg-white/10 transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest border border-white/10"
+          >
+            <ImageIcon className="w-4 h-4" />
+            Update Art
+          </button>
+        </div>
 
         <div className="absolute bottom-12 left-6 right-6 max-w-7xl mx-auto z-30">
           <motion.div
@@ -627,37 +703,120 @@ export default function GamePage() {
               )}
             </div>
             
-            <div className="flex flex-wrap gap-4">
+            <div className="flex items-center gap-3 md:gap-4 overflow-visible">
               <button 
                 onClick={() => setIsLogModalOpen(true)}
-                className="bg-gold-accent text-charcoal px-8 py-4 rounded-2xl font-black shadow-lg hover:shadow-gold-accent/20 transition-all flex items-center gap-3 active:scale-95"
+                className="bg-gold-accent text-charcoal px-6 md:px-8 py-4 rounded-2xl font-black shadow-lg hover:shadow-gold-accent/20 transition-all flex items-center gap-3 active:scale-95 text-xs md:text-base whitespace-nowrap"
               >
-                <Trophy className="w-6 h-6" />
+                <Trophy className="w-5 h-5 md:w-6 md:h-6" />
                 Log a Play
               </button>
               
-              <button 
-                onClick={handleFavorite}
-                disabled={isFavoriting}
-                className={cn(
-                  "backdrop-blur-md p-4 rounded-2xl transition-all border border-white/10 active:scale-95",
-                  userFavorites.some(f => f.gameId === game.id)
-                    ? "bg-emerald-accent text-charcoal border-emerald-accent"
-                    : "bg-white/5 text-white hover:bg-white/10"
-                )}
-              >
-                {isFavoriting ? (
-                  <Loader2 className="w-6 h-6 animate-spin" />
-                ) : (
-                  <Heart className={cn("w-6 h-6", userFavorites.some(f => f.gameId === game.id) && "fill-current")} />
-                )}
-              </button>
-              <button 
-                onClick={handleShare}
-                className="bg-white/5 backdrop-blur-md text-white p-4 rounded-2xl hover:bg-white/10 transition-all border border-white/10"
-              >
-                <Share2 className="w-6 h-6" />
-              </button>
+              {/* Enhanced Collection Status Trigger */}
+              <div className="relative">
+                <button 
+                  onClick={() => setShowCollectionMenu(!showCollectionMenu)}
+                  className={cn(
+                    "flex items-center gap-2 px-4 md:px-6 py-3 md:py-4 rounded-2xl font-black transition-all border backdrop-blur-md active:scale-95 text-[10px] md:text-xs uppercase tracking-widest whitespace-nowrap",
+                    collectionStatus 
+                      ? (collectionStatus === 'owned' ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" : "bg-rose-500/10 border-rose-500/30 text-rose-400")
+                      : "bg-white/5 border-white/10 text-white/60 hover:text-white hover:bg-white/10"
+                  )}
+                >
+                  {collectionStatus ? (
+                    <>
+                      <Check className="w-3 h-3 md:w-4 md:h-4" />
+                      <span className="hidden sm:inline">In Collection:</span> {collectionStatus === 'owned' ? 'Owned' : 'Wishlist'}
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-3 h-3 md:w-4 md:h-4" />
+                      Add to Collection
+                    </>
+                  )}
+                  <ChevronDown className={cn("w-3 h-3 md:w-4 md:h-4 transition-transform", showCollectionMenu && "rotate-180")} />
+                </button>
+
+                <AnimatePresence>
+                  {showCollectionMenu && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute bottom-full mb-3 left-0 w-64 bg-charcoal rounded-3xl shadow-2xl p-3 z-[100] border border-white/10"
+                    >
+                      <div className="space-y-1">
+                        {shelves.map((shelf) => (
+                          <button
+                            key={shelf.id}
+                            onClick={() => addToCollection(shelf.id)}
+                            disabled={addingToShelf === shelf.id}
+                            className={cn(
+                              "w-full flex items-center justify-between p-3 rounded-2xl transition-all group/item",
+                              collectionStatus === shelf.id ? "bg-white/5" : "hover:bg-white/5"
+                            )}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={cn("w-3 h-3 rounded-full", shelf.color, collectionStatus === shelf.id && "ring-2 ring-white/20")} />
+                              <span className={cn(
+                                "font-black text-sm uppercase tracking-widest",
+                                collectionStatus === shelf.id ? "text-white" : "text-white/40 group-hover/item:text-white"
+                              )}>
+                                {shelf.label}
+                                {collectionStatus === shelf.id && " (Active)"}
+                              </span>
+                            </div>
+                            {addingToShelf === shelf.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin text-emerald-accent" />
+                            ) : collectionStatus === shelf.id ? (
+                              <Check className="w-4 h-4 text-emerald-accent" />
+                            ) : (
+                              <Plus className="w-4 h-4 text-white/10 group-hover/item:text-emerald-accent transition-colors" />
+                            )}
+                          </button>
+                        ))}
+                        
+                        {collectionStatus && (
+                          <div className="pt-2 mt-2 border-t border-white/5">
+                            <button
+                              onClick={removeFromCollection}
+                              disabled={addingToShelf === 'removing'}
+                              className="w-full flex items-center gap-3 p-3 rounded-2xl hover:bg-rose-500/10 text-rose-500/60 hover:text-rose-500 transition-all group/remove"
+                            >
+                              {addingToShelf === 'removing' ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <X className="w-4 h-4" />
+                              )}
+                              <span className="font-black text-[10px] uppercase tracking-[0.2em]">Remove from Collection</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              <div className="flex items-center gap-2 pr-2">
+                <button 
+                  onClick={handleFavorite}
+                  disabled={isFavoriting}
+                  className={cn(
+                    "backdrop-blur-md p-4 rounded-2xl transition-all border border-white/10 active:scale-95 whitespace-nowrap",
+                    userFavorites.some(f => f.gameId === game.id)
+                      ? "bg-emerald-accent text-charcoal border-emerald-accent"
+                      : "bg-white/5 text-white hover:bg-white/10"
+                  )}
+                >
+                  {isFavoriting ? (
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                  ) : (
+                    <Heart className={cn("w-6 h-6", userFavorites.some(f => f.gameId === game.id) && "fill-current")} />
+                  )}
+                </button>
+              </div>
             </div>
           </motion.div>
         </div>
@@ -784,53 +943,6 @@ export default function GamePage() {
               <Dices className="w-6 h-6 group-hover:rotate-12 transition-transform" />
               Log a Play
             </button>
-            <div 
-              role="button"
-              tabIndex={0}
-              onClick={() => setShowCollectionMenu(!showCollectionMenu)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  setShowCollectionMenu(!showCollectionMenu);
-                }
-              }}
-              className="bg-white/5 text-white p-4 rounded-2xl font-black hover:bg-white/10 transition-all flex items-center gap-2 relative border border-white/10 cursor-pointer select-none"
-            >
-              <Plus className="w-6 h-6" />
-              <span className="hidden sm:inline">Add to Collection</span>
-              
-              <AnimatePresence>
-                {showCollectionMenu && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    onClick={(e) => e.stopPropagation()}
-                    className="absolute bottom-full mb-3 right-0 w-64 bg-charcoal rounded-3xl shadow-2xl p-3 z-50 border border-white/10 cursor-default"
-                  >
-                    <div className="space-y-1">
-                      {shelves.map((shelf) => (
-                        <button
-                          key={shelf.id}
-                          onClick={() => addToCollection(shelf.id)}
-                          disabled={addingToShelf === shelf.id}
-                          className="w-full flex items-center justify-between p-3 rounded-2xl hover:bg-white/5 transition-all group/item"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={cn("w-3 h-3 rounded-full", shelf.color)} />
-                            <span className="font-black text-white/70 text-sm group-hover/item:text-white">{shelf.label}</span>
-                          </div>
-                          {addingToShelf === shelf.id ? (
-                            <div className="w-4 h-4 border-2 border-emerald-accent border-t-transparent rounded-full animate-spin" />
-                          ) : (
-                            <Plus className="w-4 h-4 text-white/20 group-hover/item:text-emerald-accent transition-colors" />
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
           </div>
         </div>
 
@@ -1062,8 +1174,6 @@ export default function GamePage() {
                 </div>
                 
                 <div className="flex justify-between mt-4 px-2">
-                  <span className="text-[10px] font-black text-white/10 uppercase tracking-widest">Critical Fail</span>
-                  <span className="text-[10px] font-black text-white/10 uppercase tracking-widest">Nat 20</span>
                 </div>
               </div>
 
@@ -1114,11 +1224,11 @@ export default function GamePage() {
                     type="number"
                     min="1"
                     max="20"
-                    value={difficultyRating === 0 ? '' : difficultyRating}
+                    value={difficultyRating === null ? '' : difficultyRating}
                     onChange={(e) => {
                       const val = e.target.value;
                       if (val === '') {
-                        setDifficultyRating(0);
+                        setDifficultyRating(null);
                         setRatingError('');
                         return;
                       }
@@ -1132,15 +1242,16 @@ export default function GamePage() {
                       }
                     }}
                     onBlur={() => {
-                      if (difficultyRating < 1) {
+                      if (difficultyRating !== null && difficultyRating < 1) {
                         setDifficultyRating(1);
                         setRatingError('');
                       }
                     }}
                     className={cn(
-                      "relative z-10 w-full h-full bg-transparent border-none text-center font-black text-white text-3xl outline-none pt-2",
+                      "relative z-10 w-full h-full bg-transparent border-none text-center font-black text-white text-lg md:text-xl outline-none translate-y-[-1px]",
                       "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     )}
+                    placeholder="?"
                   />
                 </div>
                 {ratingError && (
@@ -1150,29 +1261,26 @@ export default function GamePage() {
                 )}
                 
                 <div className="flex justify-between w-full mt-4 px-8">
-                  <span className="text-[10px] font-black text-white/10 uppercase tracking-widest">Very Easy</span>
-                  <span className="text-[10px] font-black text-white/10 uppercase tracking-widest">Insane</span>
                 </div>
               </div>
 
               <div className="space-y-6">
                 <div className="space-y-4">
                   <label className="text-xs font-black text-white/20 uppercase tracking-widest ml-2 block">The Vibe Check</label>
-                  <div className="flex flex-wrap gap-2">
-                    {VIBE_OPTIONS.map((vibe) => (
-                      <button
-                        key={vibe}
-                        onClick={() => setSelectedVibe(vibe === selectedVibe ? '' : vibe)}
-                        className={cn(
-                          "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border",
-                          selectedVibe === vibe 
-                            ? "bg-gold-accent text-charcoal border-gold-accent shadow-lg shadow-gold-accent/20" 
-                            : "bg-white/5 text-white/40 border-white/10 hover:border-white/20"
-                        )}
-                      >
-                        {vibe}
-                      </button>
-                    ))}
+                  <div className="relative group/vibe">
+                    <select
+                      value={selectedVibe}
+                      onChange={(e) => setSelectedVibe(e.target.value)}
+                      className="w-full bg-charcoal border border-white/10 rounded-2xl px-6 py-4 text-white appearance-none outline-none focus:border-gold-accent transition-all font-black uppercase tracking-widest text-xs cursor-pointer"
+                    >
+                      <option value="" disabled>Select a Vibe...</option>
+                      {BOARD_GAME_VIBES.map((vibe) => (
+                        <option key={vibe} value={vibe} className="bg-charcoal text-white py-2">
+                          {vibe}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 w-5 h-5 text-white/20 group-hover/vibe:text-gold-accent transition-colors pointer-events-none" />
                   </div>
                 </div>
 

@@ -52,21 +52,23 @@ export interface Game {
 interface GameCardProps {
   game: Game;
   compact?: boolean;
+  personalRating?: number | string;
+  groupRating?: number | string;
+  groupName?: string;
 }
 
-const GameCard: React.FC<GameCardProps> = ({ game, compact = false }) => {
-  // Mock Social Rating Logic
-  const getSocialRating = () => {
-    // Deterministic mock based on game ID for consistency
-    const hash = game.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    const state = hash % 3;
-    
-    if (state === 0) return { value: (hash % 5) + 16, theme: 'gold' as const, label: 'Personal' };
-    if (state === 1) return { value: (hash % 3) + 15, theme: 'silver' as const, label: 'Friends' };
-    return { value: '-', theme: 'outline' as const, label: 'Unrated' };
-  };
-
-  const social = getSocialRating();
+const GameCard: React.FC<GameCardProps> = ({ 
+  game, 
+  compact = false, 
+  personalRating,
+  groupRating,
+  groupName
+}) => {
+  // Social Rating Logic - strictly based on game data or props if available
+  const communityRating = game.rating;
+  const displayPersonal = personalRating || (game as any).personalRating;
+  const displayGroup = groupRating || (game as any).groupRating;
+  const activeGroupName = groupName || (game as any).groupName;
 
   return (
     <motion.div
@@ -99,13 +101,47 @@ const GameCard: React.FC<GameCardProps> = ({ game, compact = false }) => {
           "relative flex items-center justify-between gap-2 h-full flex-1",
           compact ? "p-4" : "p-6"
         )}>
-          {/* Left Side - Social Rating */}
+          {/* Rating Display */}
           <div className={cn(
-            "flex flex-col items-center gap-1 shrink-0 self-end",
+            "flex flex-col items-center gap-2 shrink-0 self-center",
             compact ? "min-w-[50px]" : "min-w-[70px]"
           )}>
-            <D20Die value={social.value} theme={social.theme} size={compact ? "sm" : "md"} />
-            <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">{social.label}</span>
+            {/* Primary Display: Personal > Group > Community */}
+            {displayPersonal && displayPersonal !== '-' ? (
+              <div className="flex flex-col items-center">
+                <D20Die 
+                  value={displayPersonal} 
+                  theme="gold" 
+                  size={compact ? "xs" : "sm"} 
+                />
+                <span className="text-[7px] font-black text-gold-accent uppercase tracking-widest mt-0.5">
+                  You
+                </span>
+              </div>
+            ) : displayGroup && displayGroup !== '-' ? (
+              <div className="flex flex-col items-center">
+                <D20Die 
+                  value={displayGroup} 
+                  theme="silver" 
+                  size={compact ? "xs" : "sm"} 
+                />
+                <span className="text-[6px] font-black text-white/50 uppercase tracking-tighter mt-0.5 max-w-[50px] truncate text-center">
+                  {activeGroupName || 'Group'}
+                </span>
+              </div>
+            ) : null}
+
+            {/* Community Rating Sub-display */}
+            <div className="flex flex-col items-center">
+              <D20Die 
+                value={communityRating || '-'} 
+                theme={communityRating ? "emerald" : "outline"} 
+                size={compact ? (displayPersonal || displayGroup ? "xs" : "sm") : "md"} 
+              />
+              <span className="text-[8px] font-black text-white/30 uppercase tracking-widest mt-0.5">
+                {communityRating ? 'Rating' : 'Unrated'}
+              </span>
+            </div>
           </div>
 
           {/* Center Content */}
@@ -147,14 +183,11 @@ const GameCard: React.FC<GameCardProps> = ({ game, compact = false }) => {
             )}
           </div>
 
-          {/* Right Side - Community Rating */}
+          {/* Right Side Empty spacer to maintain centering */}
           <div className={cn(
-            "flex flex-col items-center gap-1 shrink-0 self-end",
-            compact ? "min-w-[50px]" : "min-w-[70px]"
-          )}>
-            <D20Die value={game.rating || 18} theme="emerald" size={compact ? "sm" : "md"} />
-            <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">Community</span>
-          </div>
+            "shrink-0",
+            compact ? "w-[50px]" : "w-[70px]"
+          )} />
         </div>
 
         {/* DC Shield Badge (REMOVED FROM HERE) */}
