@@ -34,6 +34,7 @@ export interface Game {
   genres?: string[];
   categories?: string[];
   baseGameId?: string;
+  isWikidataItem?: boolean;
   expansions?: {
     id: string;
     title: string;
@@ -55,6 +56,7 @@ interface GameCardProps {
   personalRating?: number | string;
   groupRating?: number | string;
   groupName?: string;
+  onClick?: (e: React.MouseEvent) => void;
 }
 
 const GameCard: React.FC<GameCardProps> = ({ 
@@ -62,7 +64,8 @@ const GameCard: React.FC<GameCardProps> = ({
   compact = false, 
   personalRating,
   groupRating,
-  groupName
+  groupName,
+  onClick
 }) => {
   // Social Rating Logic - strictly based on game data or props if available
   const communityRating = game.rating;
@@ -73,9 +76,14 @@ const GameCard: React.FC<GameCardProps> = ({
   return (
     <motion.div
       whileHover={{ y: -4, scale: 1.01 }}
+      onClick={onClick}
       className="group relative bg-charcoal rounded-[2rem] shadow-2xl overflow-hidden transition-all duration-300 hover:shadow-emerald-accent/20 border border-white/10 hover:border-emerald-accent/50 h-full flex flex-col"
     >
-      <Link to={`/game/${game.id}`} className="flex flex-col flex-1 w-full min-h-[12rem] relative">
+      <Link 
+        to={`/game/${game.id}`} 
+        className="flex flex-col flex-1 w-full min-h-[12rem] relative"
+        onClick={onClick ? (e) => e.preventDefault() : undefined}
+      >
         {/* Vibe Blur Background */}
         <div className="absolute inset-0 overflow-hidden">
           <img

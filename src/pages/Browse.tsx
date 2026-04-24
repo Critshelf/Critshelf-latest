@@ -1,14 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
-import { motion } from 'motion/react';
-import { Search as SearchIcon, Plus, ChevronDown } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Search as SearchIcon, Plus, ChevronDown, Loader2, Globe } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import GameCard, { Game } from '../components/GameCard';
 import AddGameModal from '../components/AddGameModal';
 import GameSearchAndFilter from '../components/GameSearchAndFilter';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { collection, getDocs, query, limit, doc, orderBy, startAfter, getCountFromServer, where, onSnapshot } from 'firebase/firestore';
 import { useUser } from '../contexts/UserContext';
-
-import { MOCK_GAMES } from '../constants';
+import { searchWikidata, fetchAndSaveWikidataGame } from '../services/wikidataService';
 
 export default function Browse() {
   const { profile, groupRatings } = useUser();
@@ -22,7 +22,12 @@ export default function Browse() {
   const [totalCount, setTotalCount] = useState(0);
   const [debouncedSearch, setDebouncedSearch] = useState('');
   
-  // Filter States
+  // Wikidata Search State
+  const [wikidataResults, setWikidataResults] = useState<Game[]>([]);
+  const [wikidataLoading, setWikidataLoading] = useState(false);
+  const [jitLoadingId, setJitLoadingId] = useState<string | null>(null);
+
+  const navigate = useNavigate();
   const [activePlayerCount, setActivePlayerCount] = useState<number | null>(null);
   const [activePlayTime, setActivePlayTime] = useState<string | null>(null);
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
@@ -123,6 +128,31 @@ export default function Browse() {
     return () => unsubscribe();
   }, [debouncedSearch]);
 
+  // Wikidata Search Effect
+  useEffect(() => {
+    if (!debouncedSearch || debouncedSearch.length < 3) {
+      setWikidataResults([]);
+      return;
+    }
+
+    setWikidataLoading(true);
+    searchWikidata(debouncedSearch).then(results => {
+      const mapped = results.map(res => ({
+        id: res.id,
+        title: res.label,
+        name_lowercase: res.label.toLowerCase(),
+        description: res.description,
+        isWikidataItem: true,
+        coverImage: "https://www.wikidata.org/static/images/project-logos/wikidatawiki.png"
+      } as Game));
+      setWikidataResults(mapped);
+      setWikidataLoading(false);
+    }).catch(err => {
+      console.error("Wikidata search failed:", err);
+      setWikidataLoading(false);
+    });
+  }, [debouncedSearch]);
+
   const availableGenres = useMemo(() => {
     const uniqueCategories = new Set<string>();
     games.forEach(game => {
@@ -133,42 +163,49 @@ export default function Browse() {
     return Array.from(uniqueCategories).sort((a, b) => a.localeCompare(b));
   }, [games]);
 
-  const filteredGames = games.filter(game => {
-    // Basic search is now handled server-side, but we keep client-side for additional filters
-    // and for cases where Firestore results might need refinement (though prefix search is accurate).
-    
-    // Player Count Filter
-    let matchesPlayers = true;
-    if (activePlayerCount) {
-      const min = game.minPlayers || 0;
-      const max = game.maxPlayers || 99;
-      if (activePlayerCount === 5) {
-        matchesPlayers = max >= 5;
-      } else {
-        matchesPlayers = activePlayerCount >= min && activePlayerCount <= max;
+  const filteredGames = useMemo(() => {
+    // Deduplicate Firestore and Wikidata results
+    const fsTitles = new Set(games.map(g => g.title.toLowerCase()));
+    const uniqueWikidata = wikidataResults.filter(wg => !fsTitles.has(wg.title.toLowerCase()));
+    const allGames = [...games, ...uniqueWikidata];
+
+    return allGames.filter(game => {
+      // Basic search is now handled server-side for Firestore, but we keep client-side for additional filters
+      // and for Wikidata results.
+      
+      // Player Count Filter
+      let matchesPlayers = true;
+      if (activePlayerCount) {
+        const min = game.minPlayers || 0;
+        const max = game.maxPlayers || 99;
+        if (activePlayerCount === 5) {
+          matchesPlayers = max >= 5;
+        } else {
+          matchesPlayers = activePlayerCount >= min && activePlayerCount <= max;
+        }
       }
-    }
 
-    // Play Time Filter
-    let matchesTime = true;
-    if (activePlayTime) {
-      const timeStr = game.playTime || "0";
-      const time = parseInt(timeStr);
-      if (activePlayTime === 'quick') matchesTime = time < 30;
-      if (activePlayTime === 'standard') matchesTime = time >= 30 && time <= 90;
-      if (activePlayTime === 'epic') matchesTime = time > 90;
-    }
+      // Play Time Filter
+      let matchesTime = true;
+      if (activePlayTime) {
+        const timeStr = game.playTime || "0";
+        const time = parseInt(timeStr);
+        if (activePlayTime === 'quick') matchesTime = time < 30;
+        if (activePlayTime === 'standard') matchesTime = time >= 30 && time <= 90;
+        if (activePlayTime === 'epic') matchesTime = time > 90;
+      }
 
-    // Genre/Category Filter (Multi-select: Match ANY of selected)
-    let matchesGenre = true;
-    if (selectedGenres.length > 0) {
-      matchesGenre = selectedGenres.some(genre => 
-        game.categories?.includes(genre) || game.genres?.includes(genre)
-      );
-    }
+      // Genre/Category Filter (Multi-select: Match ANY of selected)
+      let matchesGenre = true;
+      if (selectedGenres.length > 0) {
+        matchesGenre = selectedGenres.some(genre => 
+          game.categories?.includes(genre) || game.genres?.includes(genre)
+        );
+      }
 
-    return matchesPlayers && matchesTime && matchesGenre;
-  });
+      return matchesPlayers && matchesTime && matchesGenre;
+    });
+  }, [games, wikidataResults, activePlayerCount, activePlayTime, selectedGenres]);
 
   const hasActiveFilters = activePlayerCount !== null || activePlayTime !== null || selectedGenres.length > 0;
 
@@ -184,6 +221,23 @@ export default function Browse() {
         ? prev.filter(g => g !== genre) 
         : [...prev, genre]
     );
+  };
+
+  const handleGameClick = async (game: Game) => {
+    if (game.isWikidataItem) {
+      setJitLoadingId(game.id);
+      try {
+        const savedId = await fetchAndSaveWikidataGame(game.id);
+        navigate(`/game/${savedId}`);
+      } catch (error) {
+        console.error("JIT Save navigation failed:", error);
+        alert("Failed to fetch game details from Wikidata. Please try again.");
+      } finally {
+        setJitLoadingId(null);
+      }
+    } else {
+      navigate(`/game/${game.id}`);
+    }
   };
 
   return (
@@ -215,6 +269,7 @@ export default function Browse() {
           resultsLabel={searchTerm || hasActiveFilters ? 'Matches Found' : 'Total Games'}
           showAddManualLink={true}
           onAddManualClick={() => setIsAddModalOpen(true)}
+          isLoading={loading || wikidataLoading}
         />
 
         {/* Results Grid */}
@@ -230,13 +285,33 @@ export default function Browse() {
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
                   {filteredGames.map(game => (
-                    <GameCard 
-                      key={game.id} 
-                      game={game} 
-                      personalRating={profile?.ratings?.[game.id]}
-                      groupRating={groupRatings[game.id]?.rating}
-                      groupName={groupRatings[game.id]?.groupName}
-                    />
+                    <div key={game.id} className="relative">
+                      <GameCard 
+                        game={game} 
+                        personalRating={profile?.ratings?.[game.id]}
+                        groupRating={groupRatings[game.id]?.rating}
+                        groupName={groupRatings[game.id]?.groupName}
+                        onClick={() => handleGameClick(game)}
+                      />
+                      {game.isWikidataItem && (
+                        <div className="absolute top-4 right-4 bg-blue-500/80 backdrop-blur-md text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter shadow-lg z-20 flex items-center gap-1 border border-white/20">
+                          <Globe className="w-2.5 h-2.5" /> Wikidata
+                        </div>
+                      )}
+                      <AnimatePresence>
+                        {jitLoadingId === game.id && (
+                          <motion.div 
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute inset-0 bg-charcoal/80 backdrop-blur-sm rounded-[2rem] z-[30] flex flex-col items-center justify-center gap-4 border-2 border-emerald-accent/50"
+                          >
+                            <Loader2 className="w-10 h-10 text-emerald-accent animate-spin" />
+                            <span className="font-black text-xs uppercase tracking-widest text-emerald-accent">Fetching Details...</span>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
                   ))}
                 </div>
 

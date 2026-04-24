@@ -37,7 +37,7 @@ import {
   onAuthStateChanged,
   User as FirebaseUser
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, collection, query, where, getDocs, orderBy, limit, serverTimestamp, updateDoc, arrayUnion } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, where, getDocs, orderBy, limit, serverTimestamp, updateDoc, arrayUnion, getCountFromServer } from 'firebase/firestore';
 import { cn } from '../lib/utils';
 import { Link, useNavigate } from 'react-router-dom';
 import D20Die from '../components/D20Die';
@@ -101,6 +101,9 @@ export default function Profile() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Game[]>([]);
+  const [gamesCount, setGamesCount] = useState<number | '-'>('-');
+  const [groupsCount, setGroupsCount] = useState<number | '-'>('-');
+  const [winsCount, setWinsCount] = useState<number | '-'>('-');
   const [searching, setSearching] = useState(false);
   const [updatingTitle, setUpdatingTitle] = useState(false);
   const navigate = useNavigate();
@@ -177,13 +180,50 @@ export default function Profile() {
       setLoadingContent(true);
       Promise.all([
         fetchRecentActivities(user.uid),
-        fetchFavorites(user.uid)
+        fetchFavorites(user.uid),
+        fetchStats(user.uid)
       ]).finally(() => setLoadingContent(false));
     } else {
       setActivities([]);
       setFavorites([]);
+      setGamesCount('-');
+      setGroupsCount('-');
+      setWinsCount('-');
     }
   }, [user, profile]);
+
+  const fetchStats = async (userId: string) => {
+    try {
+      // Games Count (Only those marked as 'owned')
+      const gamesQ = query(
+        collection(db, 'userCollections'), 
+        where('userId', '==', userId),
+        where('shelf', '==', 'owned')
+      );
+      const gamesSnap = await getCountFromServer(gamesQ);
+      setGamesCount(gamesSnap.data().count);
+
+      // Groups Count (Where user is a member)
+      const groupsQ = query(
+        collection(db, 'groups'), 
+        where('memberIds', 'array-contains', userId)
+      );
+      const groupsSnap = await getCountFromServer(groupsQ);
+      setGroupsCount(groupsSnap.data().count);
+
+      // Wins Count (Where user logged the play AND and they marked themselves as winner)
+      const winsQ = query(
+        collection(db, 'plays'), 
+        where('userId', '==', userId),
+        where('isWinner', '==', true)
+      );
+      const winsSnap = await getCountFromServer(winsQ);
+      setWinsCount(winsSnap.data().count);
+      
+    } catch (error) {
+      console.error("Error fetching profile stats:", error);
+    }
+  };
 
   const fetchFavorites = async (userId: string) => {
     try {
@@ -532,9 +572,9 @@ export default function Profile() {
   }
 
   const stats = [
-    { label: 'Games', value: '12', icon: Dices, color: 'bg-emerald-400', to: '/collection' },
-    { label: 'Groups', value: '1', icon: LayoutGrid, color: 'bg-indigo-400', to: '/social?tab=groups' },
-    { label: 'Wins', value: '5', icon: Trophy, color: 'bg-rose-400', to: '/all-plays' },
+    { label: 'Games', value: gamesCount.toString(), icon: Dices, color: 'bg-emerald-400', to: '/collection' },
+    { label: 'Groups', value: groupsCount.toString(), icon: LayoutGrid, color: 'bg-indigo-400', to: '/social?tab=groups' },
+    { label: 'Wins', value: winsCount.toString(), icon: Trophy, color: 'bg-rose-400', to: '/all-plays' },
   ];
 
   const menuItems = [

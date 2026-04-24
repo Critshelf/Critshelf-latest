@@ -115,6 +115,8 @@ export default function Collection() {
   };
 
   // Real-time hydration of game data for filtering and display
+  const itemIdsKey = useMemo(() => items.map(i => i.gameId).sort().join(','), [items]);
+
   useEffect(() => {
     if (items.length === 0) {
       setGamesData({});
@@ -149,7 +151,8 @@ export default function Collection() {
     });
 
     return () => unsubscribes.forEach(un => un());
-  }, [items]);
+  }, [itemIdsKey]);
+
 
   const availableGenres = useMemo(() => {
     const uniqueCategories = new Set<string>();

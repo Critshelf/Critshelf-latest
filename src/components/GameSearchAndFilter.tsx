@@ -18,6 +18,7 @@ interface GameSearchAndFilterProps {
   placeholder?: string;
   showAddManualLink?: boolean;
   onAddManualClick?: () => void;
+  isLoading?: boolean;
 }
 
 const GameSearchAndFilter: React.FC<GameSearchAndFilterProps> = ({
@@ -34,7 +35,8 @@ const GameSearchAndFilter: React.FC<GameSearchAndFilterProps> = ({
   resultsLabel = "Matches Found",
   placeholder = "Search by title, designer, or publisher...",
   showAddManualLink = false,
-  onAddManualClick
+  onAddManualClick,
+  isLoading = false
 }) => {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
@@ -64,7 +66,7 @@ const GameSearchAndFilter: React.FC<GameSearchAndFilterProps> = ({
             onChange={(e) => onSearchChange(e.target.value)}
           />
           <AnimatePresence>
-            {searchTerm && (
+            {searchTerm && !isLoading && (
               <motion.button 
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -74,6 +76,16 @@ const GameSearchAndFilter: React.FC<GameSearchAndFilterProps> = ({
               >
                 <X className="w-8 h-8" />
               </motion.button>
+            )}
+            {isLoading && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                className="absolute inset-y-0 right-6 flex items-center text-emerald-accent"
+              >
+                <div className="w-8 h-8 border-4 border-emerald-accent border-t-transparent rounded-full animate-spin" />
+              </motion.div>
             )}
           </AnimatePresence>
         </div>

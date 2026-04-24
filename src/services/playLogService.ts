@@ -127,6 +127,9 @@ export async function submitPlayLog(payload: PlayLogPayload) {
   try {
     // 1. Create the main game session record
     const sessionPath = 'plays';
+    const isWinner = players.some(p => p.userId === userId && p.isWinner);
+    const winnerIds = players.filter(p => p.isWinner).map(p => p.userId).filter(Boolean);
+
     await addDoc(collection(db, sessionPath), {
       userId,
       gameId,
@@ -135,6 +138,8 @@ export async function submitPlayLog(payload: PlayLogPayload) {
       playDate: new Date(date), // true Firestore Timestamp
       location,
       players,
+      isWinner,
+      winnerIds,
       rating,
       vibeTag,
       createdAt: serverTimestamp(),

@@ -84,135 +84,134 @@ export default function Home() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    let unsubscribePlays: (() => void) | null = null;
-    let unsubscribeRecent: (() => void) | null = null;
-    let unsubscribeFriends: (() => void) | null = null;
+    // 1. Real-time Recent Games (Global)
+    const qRecent = query(
+      collection(db, 'games'),
+      where('isApproved', '==', true),
+      orderBy('createdAt', 'desc'),
+      limit(5)
+    );
+    
+    const unsubscribeRecent = onSnapshot(qRecent, (snap) => {
+      setRecentGames(snap.docs.map(d => ({ id: d.id, ...d.data() } as Game)));
+      setLoadingRecent(false);
+    }, (error) => {
+      console.error("Recent Games Snapshot Error:", error);
+      setLoadingRecent(false);
+    });
+
+    return () => unsubscribeRecent();
+  }, []);
+
+  useEffect(() => {
+    // 2. Plays -> Rotation (Real-time, depends on user)
+    if (!user) {
+      setLoadingRotation(false);
+      setRotationGames([]);
+      return;
+    }
+
     let unsubscribeRotation: (() => void)[] = [];
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    
+    const qPlays = query(
+      collection(db, 'plays'),
+      where('userId', '==', user.uid),
+      where('playDate', '>=', oneYearAgo),
+      limit(500)
+    );
 
-    const initDashboard = async () => {
-      // 1. Real-time Recent Games
-      const qRecent = query(
-        collection(db, 'games'),
-        where('isApproved', '==', true),
-        orderBy('createdAt', 'desc'),
-        limit(5)
-      );
-      
-      unsubscribeRecent = onSnapshot(qRecent, (snap) => {
-        setRecentGames(snap.docs.map(d => ({ id: d.id, ...d.data() } as Game)));
-        setLoadingRecent(false);
-      }, (error) => {
-        console.error("Recent Games Snapshot Error:", error);
-        setLoadingRecent(false);
-      });
-
-      // 2. Auth-dependent features
-      if (user && profile) {
-        // A. Plays -> Rotation (Real-time)
-        const oneYearAgo = new Date();
-        oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-        
-        const qPlays = query(
-          collection(db, 'plays'),
-          where('userId', '==', user.uid),
-          where('playDate', '>=', oneYearAgo),
-          limit(500)
-        );
-
-        unsubscribePlays = onSnapshot(qPlays, async (playsSnap) => {
-          try {
-            const playCounts: Record<string, number> = {};
-            playsSnap.docs.forEach(d => {
-              const data = d.data();
-              playCounts[data.gameId] = (playCounts[data.gameId] || 0) + 1;
-            });
-
-            const sortedGameIds = Object.entries(playCounts)
-              .sort(([, a], [, b]) => b - a)
-              .slice(0, 3);
-
-            if (sortedGameIds.length === 0) {
-              setRotationGames([]);
-              setLoadingRotation(false);
-              return;
-            }
-
-            const topIds = sortedGameIds.map(([id]) => id);
-            
-            // Clean up previous individual rotation listeners
-            unsubscribeRotation.forEach(un => un());
-            unsubscribeRotation = [];
-
-            // Set up onSnapshot for each game in the top rotation to ensure ratings are fresh
-            topIds.forEach((id, idx) => {
-              const count = sortedGameIds[idx][1];
-              const u = onSnapshot(doc(db, 'games', id), (gSnap) => {
-                if (gSnap.exists()) {
-                  setRotationGames(prev => {
-                    const updated = [...prev];
-                    const gameWithCount = { id: gSnap.id, ...gSnap.data(), playCount: count } as RotationGame;
-                    
-                    const existingIdx = updated.findIndex(g => g.id === id);
-                    if (existingIdx > -1) {
-                      updated[existingIdx] = gameWithCount;
-                    } else {
-                      updated.push(gameWithCount);
-                      // Sort after adding new
-                      updated.sort((a, b) => b.playCount - a.playCount);
-                    }
-                    return updated;
-                  });
-                }
-              });
-              unsubscribeRotation.push(u);
-            });
-          } catch (error) {
-            console.error("Error in Rotation Aggregation:", error);
-          } finally {
-            setLoadingRotation(false);
-          }
-        }, (error) => {
-          console.error("Plays Snapshot Error:", error);
-          setLoadingRotation(false);
+    const unsubscribePlays = onSnapshot(qPlays, async (playsSnap) => {
+      try {
+        const playCounts: Record<string, number> = {};
+        playsSnap.docs.forEach(d => {
+          const data = d.data();
+          playCounts[data.gameId] = (playCounts[data.gameId] || 0) + 1;
         });
 
-        // B. Friends Reviews (Real-time)
-        const following = (profile as any)?.following || [];
-        if (following.length > 0) {
-          const qFriends = query(
-            collection(db, 'activities'),
-            where('type', '==', 'review_added'),
-            where('userId', 'in', following.slice(0, 10)),
-            orderBy('timestamp', 'desc'),
-            limit(3)
-          );
-          
-          unsubscribeFriends = onSnapshot(qFriends, (snap) => {
-            setFriendReviews(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-            setLoadingReviews(false);
-          }, (error) => {
-            console.error("Friends Reviews Snapshot Error:", error);
-            setLoadingReviews(false);
-          });
-        } else {
-          setFriendReviews([]);
-          setLoadingReviews(false);
-        }
-      } else {
-        setLoadingRotation(false);
-        setLoadingReviews(false);
-      }
-    };
+        const sortedGameIds = Object.entries(playCounts)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 3);
 
-    initDashboard();
+        if (sortedGameIds.length === 0) {
+          setRotationGames([]);
+          setLoadingRotation(false);
+          return;
+        }
+
+        const topIds = sortedGameIds.map(([id]) => id);
+        
+        // Clean up previous individual rotation listeners
+        unsubscribeRotation.forEach(un => un());
+        unsubscribeRotation = [];
+
+        // Set up onSnapshot for each game in the top rotation
+        topIds.forEach((id, idx) => {
+          const count = sortedGameIds[idx][1];
+          const u = onSnapshot(doc(db, 'games', id), (gSnap) => {
+            if (gSnap.exists()) {
+              setRotationGames(prev => {
+                const updated = [...prev];
+                const gameWithCount = { id: gSnap.id, ...gSnap.data(), playCount: count } as RotationGame;
+                
+                const existingIdx = updated.findIndex(g => g.id === id);
+                if (existingIdx > -1) {
+                  updated[existingIdx] = gameWithCount;
+                } else {
+                  updated.push(gameWithCount);
+                  updated.sort((a, b) => b.playCount - a.playCount);
+                }
+                return updated;
+              });
+            }
+          });
+          unsubscribeRotation.push(u);
+        });
+      } catch (error) {
+        console.error("Error in Rotation Aggregation:", error);
+      } finally {
+        setLoadingRotation(false);
+      }
+    }, (error) => {
+      console.error("Plays Snapshot Error:", error);
+      setLoadingRotation(false);
+    });
 
     return () => {
-      if (unsubscribeRecent) unsubscribeRecent();
-      if (unsubscribePlays) unsubscribePlays();
-      if (unsubscribeFriends) unsubscribeFriends();
-      unsubscribeRotation.forEach(u => u());
+      unsubscribePlays();
+      unsubscribeRotation.forEach(un => un());
     };
-  }, [user, profile]);
+  }, [user?.uid]);
+
+  useEffect(() => {
+    // 3. Friends Reviews (Real-time, depends on following list)
+    const following = (profile as any)?.following || [];
+    if (!user || following.length === 0) {
+      setFriendReviews([]);
+      setLoadingReviews(false);
+      return;
+    }
+
+    const qFriends = query(
+      collection(db, 'activities'),
+      where('type', '==', 'review_added'),
+      where('userId', 'in', following.slice(0, 10)),
+      orderBy('timestamp', 'desc'),
+      limit(3)
+    );
+    
+    const unsubscribeFriends = onSnapshot(qFriends, (snap) => {
+      setFriendReviews(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoadingReviews(false);
+    }, (error) => {
+      console.error("Friends Reviews Snapshot Error:", error);
+      setLoadingReviews(false);
+    });
+
+    return () => unsubscribeFriends();
+  }, [user?.uid, (profile as any)?.following?.join(',')]);
+
 
   useEffect(() => {
     if (rotationGames.length > 0 && rotationIndex >= rotationGames.length) {

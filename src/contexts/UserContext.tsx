@@ -284,23 +284,38 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const value = React.useMemo(() => ({ 
+    user, 
+    profile, 
+    groupRatings,
+    loading, 
+    signInWithGoogle, 
+    signUpWithEmail,
+    signInWithEmail,
+    signOut, 
+    refreshProfile,
+    updateNotificationPreferences,
+    isUsernameAvailable
+  }), [
+    user, 
+    profile, 
+    groupRatings, 
+    loading, 
+    signInWithGoogle, 
+    signUpWithEmail, 
+    signInWithEmail, 
+    signOut, 
+    refreshProfile, 
+    updateNotificationPreferences, 
+    isUsernameAvailable
+  ]);
+
   return (
-    <UserContext.Provider value={{ 
-      user, 
-      profile, 
-      groupRatings,
-      loading, 
-      signInWithGoogle, 
-      signUpWithEmail,
-      signInWithEmail,
-      signOut, 
-      refreshProfile,
-      updateNotificationPreferences,
-      isUsernameAvailable
-    }}>
+    <UserContext.Provider value={value}>
       {children}
     </UserContext.Provider>
   );
+
 }
 
 export function useUser() {
