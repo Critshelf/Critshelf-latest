@@ -317,6 +317,7 @@ async function runImporter() {
         const publishers = Array.from(game.publishers);
         const finalData = {
           ...game,
+          name_lowercase: game.title.toLowerCase(),
           designers: Array.from(game.designers),
           publishers,
           illustrators: Array.from(game.illustrators),

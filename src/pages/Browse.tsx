@@ -20,6 +20,7 @@ export default function Browse() {
   const [lastDoc, setLastDoc] = useState<any>(null);
   const [hasMore, setHasMore] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   
   // Filter States
   const [activePlayerCount, setActivePlayerCount] = useState<number | null>(null);
@@ -27,6 +28,12 @@ export default function Browse() {
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
 
   const PAGE_SIZE = 20;
+
+  // Debounce search term
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchTerm), 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   const fetchTotalCount = async () => {
     try {
@@ -44,13 +51,27 @@ export default function Browse() {
 
     const path = 'games';
     try {
-      const q = query(
+      let q = query(
         collection(db, path),
         where('isApproved', '==', true),
         orderBy('title'),
         startAfter(lastDoc),
         limit(PAGE_SIZE)
       );
+
+      // If there's a search term, we need to adjust the query for pagination
+      if (debouncedSearch) {
+        const queryTerm = debouncedSearch.toLowerCase();
+        q = query(
+          collection(db, path),
+          where('isApproved', '==', true),
+          where('name_lowercase', '>=', queryTerm),
+          where('name_lowercase', '<=', queryTerm + '\uf8ff'),
+          orderBy('name_lowercase'),
+          startAfter(lastDoc),
+          limit(PAGE_SIZE)
+        );
+      }
 
       const snapshot = await getDocs(q);
       const gameList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
@@ -69,12 +90,24 @@ export default function Browse() {
     setLoading(true);
     fetchTotalCount();
 
-    const q = query(
+    let q = query(
       collection(db, 'games'), 
       where('isApproved', '==', true),
       orderBy('title'), 
       limit(PAGE_SIZE)
     );
+
+    if (debouncedSearch) {
+      const queryTerm = debouncedSearch.toLowerCase();
+      q = query(
+        collection(db, 'games'),
+        where('isApproved', '==', true),
+        where('name_lowercase', '>=', queryTerm),
+        where('name_lowercase', '<=', queryTerm + '\uf8ff'),
+        orderBy('name_lowercase'),
+        limit(PAGE_SIZE)
+      );
+    }
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const gameList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
@@ -88,7 +121,7 @@ export default function Browse() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [debouncedSearch]);
 
   const availableGenres = useMemo(() => {
     const uniqueCategories = new Set<string>();
@@ -101,12 +134,9 @@ export default function Browse() {
   }, [games]);
 
   const filteredGames = games.filter(game => {
-    const query = searchTerm.toLowerCase();
-    const matchesTitle = game.title.toLowerCase().includes(query);
-    const matchesDesigners = game.designers?.some(d => d.toLowerCase().includes(query));
-    const matchesPublishers = game.publishers?.some(p => p.toLowerCase().includes(query));
-    const matchesSearch = matchesTitle || matchesDesigners || matchesPublishers;
-
+    // Basic search is now handled server-side, but we keep client-side for additional filters
+    // and for cases where Firestore results might need refinement (though prefix search is accurate).
+    
     // Player Count Filter
     let matchesPlayers = true;
     if (activePlayerCount) {
@@ -137,7 +167,7 @@ export default function Browse() {
       );
     }
 
-    return matchesSearch && matchesPlayers && matchesTime && matchesGenre;
+    return matchesPlayers && matchesTime && matchesGenre;
   });
 
   const hasActiveFilters = activePlayerCount !== null || activePlayTime !== null || selectedGenres.length > 0;

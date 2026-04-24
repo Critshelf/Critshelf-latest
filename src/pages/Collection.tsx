@@ -7,11 +7,12 @@ import {
   Filter,
   Heart,
   CheckCircle2,
-  Plus
+  Plus,
+  ChevronDown
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
-import { collection, query, where, onSnapshot, orderBy, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, getDocs, doc, getDoc, limit, startAfter } from 'firebase/firestore';
 import { cn } from '../lib/utils';
 import { useUser } from '../contexts/UserContext';
 import GameSearchAndFilter from '../components/GameSearchAndFilter';
@@ -39,7 +40,12 @@ export default function Collection() {
   const [items, setItems] = useState<CollectionItem[]>([]);
   const [gamesData, setGamesData] = useState<Record<string, Game>>({});
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [lastDoc, setLastDoc] = useState<any>(null);
+  const [hasMore, setHasMore] = useState(true);
   const [loadingMetadata, setLoadingMetadata] = useState(false);
+
+  const PAGE_SIZE = 20;
 
   // Filter States
   const [searchTerm, setSearchTerm] = useState('');
@@ -58,7 +64,8 @@ export default function Collection() {
     const q = query(
       collection(db, path),
       where('userId', '==', user.uid),
-      orderBy('addedAt', 'desc')
+      orderBy('addedAt', 'desc'),
+      limit(PAGE_SIZE)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -67,6 +74,8 @@ export default function Collection() {
         ...doc.data()
       })) as CollectionItem[];
       setItems(collectionItems);
+      setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
+      setHasMore(snapshot.docs.length === PAGE_SIZE);
       setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, path);
@@ -74,6 +83,36 @@ export default function Collection() {
 
     return () => unsubscribe();
   }, [user]);
+
+  const fetchMoreItems = async () => {
+    if (!user || !lastDoc || loadingMore) return;
+    setLoadingMore(true);
+
+    const path = 'userCollections';
+    try {
+      const q = query(
+        collection(db, path),
+        where('userId', '==', user.uid),
+        orderBy('addedAt', 'desc'),
+        startAfter(lastDoc),
+        limit(PAGE_SIZE)
+      );
+
+      const snapshot = await getDocs(q);
+      const collectionItems = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as CollectionItem[];
+
+      setItems(prev => [...prev, ...collectionItems]);
+      setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
+      setHasMore(snapshot.docs.length === PAGE_SIZE);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, path);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   // Real-time hydration of game data for filtering and display
   useEffect(() => {
@@ -262,43 +301,62 @@ export default function Collection() {
             ))}
           </div>
         ) : filteredItems.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <AnimatePresence mode="popLayout">
-              {filteredItems.map((item) => {
-                const game = gamesData[item.gameId] || {
-                  id: item.gameId,
-                  title: item.gameTitle,
-                  coverImage: item.gameCover,
-                  playTime: "60"
-                };
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <AnimatePresence mode="popLayout">
+                {filteredItems.map((item) => {
+                  const game = gamesData[item.gameId] || {
+                    id: item.gameId,
+                    title: item.gameTitle,
+                    coverImage: item.gameCover,
+                    playTime: "60"
+                  };
 
-                return (
-                  <motion.div
-                    key={item.id}
-                    layout
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.8 }}
-                    className="relative group"
-                  >
-                    <GameCard 
-                      game={game as Game} 
-                      personalRating={profile?.ratings?.[item.gameId]}
-                      groupRating={groupRatings[item.gameId]?.rating}
-                      groupName={groupRatings[item.gameId]?.groupName}
-                    />
-                    
-                    {/* Shelf Status Overlay */}
-                    <div className="absolute top-4 right-4 z-30 pointer-events-none">
-                      <span className="text-[8px] font-black text-emerald-accent uppercase tracking-widest bg-charcoal/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-emerald-accent/20 shadow-xl group-hover:bg-emerald-accent group-hover:text-charcoal transition-all duration-300">
-                        {SHELVES.find(s => s.id === item.shelf)?.label || item.shelf}
-                      </span>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </AnimatePresence>
-          </div>
+                  return (
+                    <motion.div
+                      key={item.id}
+                      layout
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
+                      className="relative group"
+                    >
+                      <GameCard 
+                        game={game as Game} 
+                        personalRating={profile?.ratings?.[item.gameId]}
+                        groupRating={groupRatings[item.gameId]?.rating}
+                        groupName={groupRatings[item.gameId]?.groupName}
+                      />
+                      
+                      {/* Shelf Status Overlay */}
+                      <div className="absolute top-4 right-4 z-30 pointer-events-none">
+                        <span className="text-[8px] font-black text-emerald-accent uppercase tracking-widest bg-charcoal/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-emerald-accent/20 shadow-xl group-hover:bg-emerald-accent group-hover:text-charcoal transition-all duration-300">
+                          {SHELVES.find(s => s.id === item.shelf)?.label || item.shelf}
+                        </span>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
+            </div>
+
+            {!searchTerm && hasMore && (
+              <div className="mt-16 flex justify-center">
+                <button
+                  onClick={() => fetchMoreItems()}
+                  disabled={loadingMore}
+                  className="flex items-center gap-3 bg-white/5 text-white px-10 py-5 rounded-[2rem] font-black shadow-xl hover:bg-white/10 transition-all disabled:opacity-50 border border-white/10 active:scale-95"
+                >
+                  {loadingMore ? (
+                    <div className="w-5 h-5 border-3 border-emerald-accent border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <ChevronDown className="w-6 h-6" />
+                  )}
+                  {loadingMore ? 'Loading More...' : 'Show More from Vault'}
+                </button>
+              </div>
+            )}
+          </>
         ) : (
           <div className="bg-white/5 rounded-[3rem] p-16 text-center shadow-xl border-2 border-dashed border-white/10">
             <div className="w-20 h-20 bg-white/5 rounded-[2rem] flex items-center justify-center mx-auto mb-6">

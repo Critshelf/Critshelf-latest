@@ -41,6 +41,7 @@ import { calculateBaseDC, calculateFinalDC } from '../lib/dcUtils';
 import { useUser } from '../contexts/UserContext';
 import UserAvatar from '../components/UserAvatar';
 import { logActivity } from '../lib/activityLogger';
+import CollectionStatusDropdown from '../components/CollectionStatusDropdown';
 
 interface Review {
   id: string;
@@ -91,9 +92,6 @@ export default function GamePage() {
   const [ratingError, setRatingError] = useState('');
   const [communityDC, setCommunityDC] = useState<number | '-'>('-');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
-  const [showCollectionMenu, setShowCollectionMenu] = useState(false);
-  const [addingToShelf, setAddingToShelf] = useState<string | null>(null);
-  const [collectionStatus, setCollectionStatus] = useState<string | null>(null);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [isTop3ModalOpen, setIsTop3ModalOpen] = useState(false);
   const [selectedVibe, setSelectedVibe] = useState<string>('');
@@ -107,6 +105,8 @@ export default function GamePage() {
   const [isSubmittingArt, setIsSubmittingArt] = useState(false);
   const [showEditionsModal, setShowEditionsModal] = useState(false);
   const [baseGame, setBaseGame] = useState<Game | null>(null);
+  const [dbExpansions, setDbExpansions] = useState<Game[]>([]);
+  const [loadingExpansions, setLoadingExpansions] = useState(false);
   const [pendingArtSubmissions, setPendingArtSubmissions] = useState<any[]>([]);
   const [isModerating, setIsModerating] = useState(false);
 
@@ -159,70 +159,6 @@ export default function GamePage() {
 
   // Optimistic override for personal rating if user just submitted
   const displayPersonalRating = userReview ? userReview.score : ratings.personal;
-
-  const shelves = [
-    { id: 'owned', label: 'Owned', color: 'bg-emerald-500' },
-    { id: 'wishlist', label: 'Wishlist', color: 'bg-rose-500' },
-  ];
-
-  const addToCollection = async (shelfId: string) => {
-    if (!user || !game) {
-      alert('Please sign in to add games to your collection!');
-      return;
-    }
-
-    setAddingToShelf(shelfId);
-    const path = `userCollections/${user.uid}_${game.id}`;
-    try {
-      await setDoc(doc(db, 'userCollections', `${user.uid}_${game.id}`), {
-        userId: user.uid,
-        gameId: game.id,
-        gameTitle: game.title,
-        gameCover: game.coverImage,
-        shelf: shelfId,
-        addedAt: serverTimestamp(),
-      });
-
-      // Log Activity (New Unified Logger)
-      logActivity({
-        userId: user.uid,
-        userName: user.displayName || 'Anonymous',
-        avatarSeed: profile?.avatarSeed || user.uid,
-        type: 'game_added',
-        metadata: {
-          gameId: game.id,
-          gameTitle: game.title,
-          gameCover: game.coverImage,
-          shelf: shelfId
-        }
-      });
-
-      setCollectionStatus(shelfId);
-      await refreshProfile();
-      setShowCollectionMenu(false);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, path);
-    } finally {
-      setAddingToShelf(null);
-    }
-  };
-
-  const removeFromCollection = async () => {
-    if (!user || !game) return;
-    
-    setAddingToShelf('removing');
-    try {
-      const { deleteDoc } = await import('firebase/firestore');
-      await deleteDoc(doc(db, 'userCollections', `${user.uid}_${game.id}`));
-      setCollectionStatus(null);
-      await refreshProfile();
-      alert('Removed from collection');
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `userCollections/${user.uid}_${game.id}`);
-    } finally {
-      setAddingToShelf(null);
-    }
-  };
 
   const handleSubmitReview = async () => {
     if (!user || !game) return;
@@ -512,7 +448,7 @@ export default function GamePage() {
             setLoading(false);
           });
 
-          // 3. Community Recent Reviews Feed Listener
+          // 4. Community Recent Reviews Feed Listener
           const recentReviewsQ = query(collection(db, 'reviews'), where('gameId', '==', id), limit(10));
           if (unsubscribeRecentReviews) unsubscribeRecentReviews();
           unsubscribeRecentReviews = onSnapshot(recentReviewsQ, async (snap) => {
@@ -537,6 +473,17 @@ export default function GamePage() {
             setReviews(fetchedReviews);
           });
 
+          // 5. Fetch Expansions
+          setLoadingExpansions(true);
+          const expQ = query(collection(db, 'games'), where('baseGameId', '==', id), limit(24));
+          getDocs(expQ).then(snap => {
+            setDbExpansions(snap.docs.map(d => ({ id: d.id, ...d.data() } as Game)));
+            setLoadingExpansions(false);
+          }).catch(err => {
+            console.error("Expansions fetch error:", err);
+            setLoadingExpansions(false);
+          });
+
           // Admin check (also static for now)
           if (profile?.role === 'admin') {
             const artQ = query(collection(db, 'PendingArt'), where('gameId', '==', id), where('status', '==', 'pending'));
@@ -549,7 +496,6 @@ export default function GamePage() {
         }
       });
 
-      // 3. User-Specific Snapshots
       if (user) {
         // User Review Snapshot
         const userReviewQ = query(collection(db, 'reviews'), where('gameId', '==', id), where('userId', '==', user.uid), limit(1));
@@ -571,11 +517,6 @@ export default function GamePage() {
             // Friends rating calculation logic stays connected to allGameReviews state
           }
         });
-
-        // Collection Status Snapshot
-        unsubscribeCollection = onSnapshot(doc(db, 'userCollections', `${user.uid}_${id}`), (snap) => {
-          setCollectionStatus(snap.exists() ? snap.data().shelf : null);
-        });
       }
     };
 
@@ -586,7 +527,6 @@ export default function GamePage() {
       if (unsubscribeReviews) unsubscribeReviews();
       if (unsubscribeUserReview) unsubscribeUserReview();
       if (unsubscribeUser) unsubscribeUser();
-      if (unsubscribeCollection) unsubscribeCollection();
       if (unsubscribeRecentReviews) unsubscribeRecentReviews();
     };
   }, [id, user, profile]);
@@ -713,91 +653,11 @@ export default function GamePage() {
               </button>
               
               {/* Enhanced Collection Status Trigger */}
-              <div className="relative">
-                <button 
-                  onClick={() => setShowCollectionMenu(!showCollectionMenu)}
-                  className={cn(
-                    "flex items-center gap-2 px-4 md:px-6 py-3 md:py-4 rounded-2xl font-black transition-all border backdrop-blur-md active:scale-95 text-[10px] md:text-xs uppercase tracking-widest whitespace-nowrap",
-                    collectionStatus 
-                      ? (collectionStatus === 'owned' ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" : "bg-rose-500/10 border-rose-500/30 text-rose-400")
-                      : "bg-white/5 border-white/10 text-white/60 hover:text-white hover:bg-white/10"
-                  )}
-                >
-                  {collectionStatus ? (
-                    <>
-                      <Check className="w-3 h-3 md:w-4 md:h-4" />
-                      <span className="hidden sm:inline">In Collection:</span> {collectionStatus === 'owned' ? 'Owned' : 'Wishlist'}
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="w-3 h-3 md:w-4 md:h-4" />
-                      Add to Collection
-                    </>
-                  )}
-                  <ChevronDown className={cn("w-3 h-3 md:w-4 md:h-4 transition-transform", showCollectionMenu && "rotate-180")} />
-                </button>
-
-                <AnimatePresence>
-                  {showCollectionMenu && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                      onClick={(e) => e.stopPropagation()}
-                      className="absolute bottom-full mb-3 left-0 w-64 bg-charcoal rounded-3xl shadow-2xl p-3 z-[100] border border-white/10"
-                    >
-                      <div className="space-y-1">
-                        {shelves.map((shelf) => (
-                          <button
-                            key={shelf.id}
-                            onClick={() => addToCollection(shelf.id)}
-                            disabled={addingToShelf === shelf.id}
-                            className={cn(
-                              "w-full flex items-center justify-between p-3 rounded-2xl transition-all group/item",
-                              collectionStatus === shelf.id ? "bg-white/5" : "hover:bg-white/5"
-                            )}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className={cn("w-3 h-3 rounded-full", shelf.color, collectionStatus === shelf.id && "ring-2 ring-white/20")} />
-                              <span className={cn(
-                                "font-black text-sm uppercase tracking-widest",
-                                collectionStatus === shelf.id ? "text-white" : "text-white/40 group-hover/item:text-white"
-                              )}>
-                                {shelf.label}
-                                {collectionStatus === shelf.id && " (Active)"}
-                              </span>
-                            </div>
-                            {addingToShelf === shelf.id ? (
-                              <Loader2 className="w-4 h-4 animate-spin text-emerald-accent" />
-                            ) : collectionStatus === shelf.id ? (
-                              <Check className="w-4 h-4 text-emerald-accent" />
-                            ) : (
-                              <Plus className="w-4 h-4 text-white/10 group-hover/item:text-emerald-accent transition-colors" />
-                            )}
-                          </button>
-                        ))}
-                        
-                        {collectionStatus && (
-                          <div className="pt-2 mt-2 border-t border-white/5">
-                            <button
-                              onClick={removeFromCollection}
-                              disabled={addingToShelf === 'removing'}
-                              className="w-full flex items-center gap-3 p-3 rounded-2xl hover:bg-rose-500/10 text-rose-500/60 hover:text-rose-500 transition-all group/remove"
-                            >
-                              {addingToShelf === 'removing' ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <X className="w-4 h-4" />
-                              )}
-                              <span className="font-black text-[10px] uppercase tracking-[0.2em]">Remove from Collection</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
+              <CollectionStatusDropdown 
+                gameId={game.id}
+                gameTitle={game.title}
+                gameCover={game.coverImage}
+              />
 
               <div className="flex items-center gap-2 pr-2">
                 <button 
@@ -1024,35 +884,56 @@ export default function GamePage() {
         </div>
 
         {/* Expansions Section */}
-        {game.expansions && game.expansions.length > 0 && (
-          <div className="mt-12">
-            <div className="mb-6">
-              <h2 className="text-xl font-black text-white/40 uppercase tracking-widest flex items-center gap-3">
+        {(dbExpansions.length > 0 || (game.expansions && game.expansions.length > 0)) && (
+          <div className="mt-16">
+            <div className="mb-8 overflow-hidden">
+              <div className="flex items-center gap-3 mb-2">
                 <Plus className="w-5 h-5 text-emerald-accent" />
-                Expansions
-              </h2>
+                <h2 className="text-2xl font-black text-white tracking-tight">Expansions</h2>
+              </div>
+              <div className="h-px w-full bg-emerald-accent/20" />
             </div>
             
-            <div className="flex gap-4 overflow-x-auto pb-4 -mx-2 px-2 scrollbar-none snap-x">
-              {game.expansions.map((expansion) => (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
+              {(dbExpansions.length > 0 ? dbExpansions : (game.expansions || [])).map((expansion: any) => (
                 <motion.div
                   key={expansion.id}
                   whileHover={{ y: -4 }}
-                  onClick={() => navigate(`/game/${expansion.id}`)}
-                  className="w-32 shrink-0 snap-start group cursor-pointer"
+                  className="flex flex-col gap-3 group"
                 >
-                  <div className="aspect-[3/4] rounded-2xl overflow-hidden border border-white/10 mb-3 relative">
+                  <div 
+                    onClick={() => navigate(`/game/${expansion.id}`)}
+                    className="aspect-[3/4] rounded-3xl overflow-hidden border border-white/10 relative cursor-pointer shadow-xl group-hover:shadow-emerald-accent/10 transition-all duration-300"
+                  >
                     <img 
-                      src={expansion.boxArtUrl} 
+                      src={expansion.coverImage || expansion.boxArtUrl} 
                       alt={expansion.title} 
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                       referrerPolicy="no-referrer"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
+                      <span className="text-[10px] font-black text-emerald-accent uppercase tracking-widest">
+                        View Details
+                      </span>
+                    </div>
                   </div>
-                  <h4 className="text-[10px] font-black text-white leading-tight line-clamp-2 uppercase tracking-tight group-hover:text-emerald-accent transition-colors">
-                    {expansion.title}
-                  </h4>
+                  
+                  <div className="space-y-3">
+                    <h4 
+                      onClick={() => navigate(`/game/${expansion.id}`)}
+                      className="text-xs font-black text-white leading-tight line-clamp-2 uppercase tracking-tight group-hover:text-emerald-accent transition-colors cursor-pointer"
+                    >
+                      {expansion.title}
+                    </h4>
+                    
+                    <CollectionStatusDropdown 
+                      gameId={expansion.id}
+                      gameTitle={expansion.title}
+                      gameCover={expansion.coverImage || expansion.boxArtUrl}
+                      size="sm"
+                      dropdownPosition="bottom"
+                    />
+                  </div>
                 </motion.div>
               ))}
             </div>
