@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, Plus, Image as ImageIcon, Users, Clock, CheckCircle2, Loader2 } from 'lucide-react';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { useUser } from '../contexts/UserContext';
+import { notifyNewGameSubmission } from '../services/discordService';
 
 interface AddGameModalProps {
   isOpen: boolean;
@@ -12,6 +14,7 @@ interface AddGameModalProps {
 }
 
 const AddGameModal: React.FC<AddGameModalProps> = ({ isOpen, onClose, initialTitle = '', onSuccess }) => {
+  const { user, profile } = useUser();
   const [formData, setFormData] = useState({
     title: initialTitle,
     minPlayers: 2,
@@ -24,38 +27,38 @@ const AddGameModal: React.FC<AddGameModalProps> = ({ isOpen, onClose, initialTit
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) return;
     setIsSubmitting(true);
 
     try {
       const path = 'games';
       const gameData = {
         ...formData,
-        playTime: formData.playTime,
+        name_lowercase: formData.title.toLowerCase(),
+        playTime: formData.playTime.toString(),
         createdAt: serverTimestamp(),
+        submittedBy: user.uid,
+        submittedByName: profile?.displayName || user.displayName || 'Gamer',
         trending: false,
         isVerified: false,
-        isApproved: false,
+        isApproved: false, // Strict pending state
         status: 'pending',
         hasHighResArt: formData.coverImage ? true : false
       };
       
       const docRef = await addDoc(collection(db, path), gameData);
 
-      // Discord Notification
-      try {
-        await fetch('/api/webhooks/new-game', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            gameId: docRef.id,
-            gameTitle: formData.title,
-            bggId: 'manual',
-            importedBy: 'user_manual'
-          })
-        });
-      } catch (notifyError) {
-        console.error("Failed to notify Discord about manual game:", notifyError);
-      }
+      // Discord Notification via dedicated service
+      await notifyNewGameSubmission({
+        id: docRef.id,
+        title: formData.title,
+        minPlayers: formData.minPlayers,
+        maxPlayers: formData.maxPlayers,
+        playTime: formData.playTime,
+        coverImage: formData.coverImage,
+        submittedBy: profile?.displayName || user.displayName || 'Gamer',
+        userId: user.uid
+      });
 
       setIsSuccess(true);
       setTimeout(() => {
