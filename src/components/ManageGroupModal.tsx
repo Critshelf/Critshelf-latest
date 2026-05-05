@@ -25,9 +25,11 @@ import {
   arrayUnion, 
   arrayRemove,
   getDoc,
-  getDocs
+  getDocs,
+  deleteDoc
 } from 'firebase/firestore';
 import { useUser } from '../contexts/UserContext';
+import { useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import UserAvatar from './UserAvatar';
 
@@ -67,10 +69,12 @@ const ManageGroupModal: React.FC<ManageGroupModalProps> = ({
   onRefresh 
 }) => {
   const { user } = useUser();
+  const navigate = useNavigate();
   const [requests, setRequests] = useState<JoinRequest[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [isUpdatingPrivacy, setIsUpdatingPrivacy] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -165,6 +169,21 @@ const ManageGroupModal: React.FC<ManageGroupModalProps> = ({
       handleFirestoreError(error, OperationType.UPDATE, `groups/${groupId}/transfer`);
     } finally {
       setProcessingId(null);
+    }
+  };
+
+  const handleDeleteGroup = async () => {
+    if (!window.confirm("CRITICAL: Are you sure you want to delete this group? This will permanently remove all chat history, events, and member associations. This cannot be undone.")) return;
+    
+    setIsDeleting(true);
+    try {
+      await deleteDoc(doc(db, 'groups', groupId));
+      onClose();
+      navigate('/social?tab=groups');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `groups/${groupId}`);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -365,6 +384,36 @@ const ManageGroupModal: React.FC<ManageGroupModalProps> = ({
                       )}
                     </div>
                   ))}
+                </div>
+              </section>
+
+              {/* Danger Zone */}
+              <section className="space-y-4 pt-12 border-t border-white/5">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-1 h-4 bg-rose-500 rounded-full" />
+                  <h3 className="text-xs font-black text-rose-500/60 uppercase tracking-widest">Danger Zone</h3>
+                </div>
+
+                <div className="bg-rose-500/5 border border-rose-500/10 rounded-[2.5rem] p-8 space-y-6">
+                  <div>
+                    <h4 className="text-lg font-black text-rose-500 mb-2">Delete Group</h4>
+                    <p className="text-sm font-bold text-rose-500/40 leading-relaxed mb-6">
+                      Once you delete a group, there is no going back. All chat logs, scheduled events, and member connections will be permanently wiped from the Dice-20 database.
+                    </p>
+                    <button
+                      disabled={isDeleting}
+                      onClick={handleDeleteGroup}
+                      className="w-full flex items-center justify-center gap-3 py-4 bg-rose-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-rose-500/20 hover:scale-[1.02] active:scale-95 transition-all"
+                    >
+                      {isDeleting ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-white" />
+                      ) : (
+                        <>
+                          <Trash2 className="w-4 h-4" /> Delete This Group
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </section>
             </div>

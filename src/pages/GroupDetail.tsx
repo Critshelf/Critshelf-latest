@@ -22,7 +22,9 @@ import {
   SearchX,
   Loader2,
   BarChart3,
-  Pencil
+  Pencil,
+  LogOut,
+  UserMinus
 } from 'lucide-react';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { 
@@ -556,6 +558,35 @@ export default function GroupDetail() {
     }
   };
 
+  const handleLeaveGroup = async () => {
+    if (!user || !group) return;
+
+    const userMember = group.members.find(m => m.userId === user.uid);
+    const otherLeaders = group.members.filter(m => m.userId !== user.uid && m.role === 'leader');
+
+    if (userMember?.role === 'leader' && otherLeaders.length === 0) {
+      alert("UNAUTHORIZED: You are the sole leader of this group. You must transfer leadership to another member or delete the group via Admin Settings before leaving.");
+      return;
+    }
+
+    if (!window.confirm("Are you sure you want to leave this group? Your history remains, but you will lose access to private group features.")) return;
+
+    try {
+      const groupRef = doc(db, 'groups', group.id);
+      const updatedMembers = group.members.filter(m => m.userId !== user.uid);
+      const updatedMemberIds = (group.memberIds || []).filter(id => id !== user.uid);
+
+      await updateDoc(groupRef, {
+        members: updatedMembers,
+        memberIds: updatedMemberIds
+      });
+
+      navigate('/social?tab=groups');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `groups/${group.id}/leave`);
+    }
+  };
+
   const isLeader = group?.members?.find(m => m.userId === user?.uid)?.role === 'leader';
 
   if (loading || !group) {
@@ -633,6 +664,20 @@ export default function GroupDetail() {
               >
                 <UserPlus className="w-5 h-5" /> Invite Friends
               </button>
+
+              <div className="pt-2">
+                <button 
+                  onClick={handleLeaveGroup}
+                  className="w-full bg-white/5 hover:bg-rose-500/10 text-white/40 hover:text-rose-500 px-6 py-4 rounded-2xl font-black transition-all active:scale-95 flex items-center justify-center gap-2 border border-white/5 hover:border-rose-500/20 group relative overflow-hidden"
+                >
+                  <LogOut className="w-4 h-4 transition-transform group-hover:translate-x-1" /> Leave Group
+                </button>
+                {isLeader && (group?.members?.filter(m => m.role === 'leader').length === 1) && (
+                  <p className="text-[9px] font-black text-white/20 uppercase tracking-widest mt-3 text-center px-4 leading-relaxed">
+                    <span className="text-gold-accent">Note:</span> You are the sole leader. Transfer leadership before leaving.
+                  </p>
+                )}
+              </div>
             </motion.div>
 
             <motion.div 
