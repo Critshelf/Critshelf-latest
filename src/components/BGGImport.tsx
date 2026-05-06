@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Upload, X, Loader2, CheckCircle2, AlertCircle, FileText } from 'lucide-react';
 import Papa from 'papaparse';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
-import { collection, query, where, getDocs, doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, setDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { useUser } from '../contexts/UserContext';
 
 interface BGGImportProps {
@@ -25,44 +25,6 @@ export default function BGGImport({ isOpen, onClose }: BGGImportProps) {
   const [progress, setProgress] = useState<ImportProgress | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const fetchWikidata = async (bggId: string, title: string) => {
-    const endpoint = "https://query.wikidata.org/sparql?format=json";
-    const sparql = `
-      SELECT ?image ?minPlayers ?maxPlayers WHERE {
-        ?item wdt:P2339 "${bggId}".
-        OPTIONAL { ?item wdt:P18 ?image. }
-        OPTIONAL { ?item wdt:P1872 ?minPlayers. }
-        OPTIONAL { ?item wdt:P1873 ?maxPlayers. }
-      } LIMIT 1
-    `;
-    
-    try {
-      const response = await fetch(`${endpoint}&query=${encodeURIComponent(sparql)}`);
-      if (!response.ok) throw new Error('Wikidata response not ok');
-      const data = await response.json();
-      const result = data.results.bindings[0];
-
-      if (!result) return null;
-
-      let imageUrl = '';
-      if (result.image) {
-        // Extract filename from URL (e.g., http://commons.wikimedia.org/wiki/Special:FilePath/FileName.jpg)
-        const fullUrl = result.image.value;
-        const filename = fullUrl.split('/').pop();
-        imageUrl = `https://commons.wikimedia.org/wiki/Special:FilePath/${filename}`;
-      }
-
-      return {
-        image: imageUrl || `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(title)}`,
-        minPlayers: result.minPlayers ? parseInt(result.minPlayers.value) : undefined,
-        maxPlayers: result.maxPlayers ? parseInt(result.maxPlayers.value) : undefined,
-      };
-    } catch (error) {
-      console.error('Wikidata fetch error:', error);
-      return null;
-    }
-  };
-
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !user) return;
@@ -75,151 +37,107 @@ export default function BGGImport({ isOpen, onClose }: BGGImportProps) {
       complete: async (results) => {
         const rows = results.data as any[];
         const total = rows.length;
-        setProgress({ total, current: 0, status: 'Analyzing collection...', successCount: 0, errorCount: 0 });
+        setProgress({ total, current: 0, status: 'Starting batch import...', successCount: 0, errorCount: 0 });
 
-        const missingGamesQueue: any[] = [];
-        const existingGamesMap = new Map<string, any>();
+        // Blind Upsert Logic: Zero Reads
+        // We use deterministic IDs for games and user collection items
+        // Game ID: bgg_{bggId}
+        // User Collection ID: {userId}_bgg_{bggId}
 
-        // Step 1: Initial Firestore Check
-        for (let i = 0; i < rows.length; i++) {
-          const row = rows[i];
-          const bggId = String(row.objectid || row['Object ID'] || row['ObjectID'] || '');
-          const objectname = row.objectname || row['Object Name'] || row['ObjectName'] || '';
-          
-          if (!bggId || !objectname) {
-            setProgress(prev => prev ? { ...prev, current: i + 1 } : null);
-            continue;
-          }
+        const BATCH_LIMIT = 400; // Safe limit below 500
+        let batch = writeBatch(db);
+        let opCount = 0;
 
-          setProgress(prev => prev ? { ...prev, current: i + 1, status: `Analyzing: ${objectname}` } : null);
+        try {
+          for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            const bggIdRaw = row.objectid || row['Object ID'] || row['ObjectID'] || '';
+            const bggId = String(bggIdRaw).trim();
+            const objectname = row.objectname || row['Object Name'] || row['ObjectName'] || '';
+            const bggRating = typeof row.rating === 'number' ? row.rating : 0;
+            const isOwned = row.own === 1 || row['Own'] === 1;
+            const isWishlist = row.wishlist === 1 || row['Wishlist'] === 1;
 
-          try {
-            const gamesQuery = query(collection(db, 'games'), where('bggId', '==', bggId));
-            const gamesSnap = await getDocs(gamesQuery);
-            
-            if (!gamesSnap.empty) {
-              existingGamesMap.set(bggId, {
-                id: gamesSnap.docs[0].id,
-                data: gamesSnap.docs[0].data()
-              });
-            } else {
-              missingGamesQueue.push({ bggId, objectname, row });
+            if (!bggId || !objectname) {
+              setProgress(prev => prev ? { ...prev, current: i + 1 } : null);
+              continue;
             }
-          } catch (error) {
-            console.error(`Check error for ${objectname}:`, error);
-          }
-        }
 
-        const totalToFetch = missingGamesQueue.length;
-        let remainingCount = totalToFetch;
-
-        // Step 2: Implement Batch Processing with Countdown
-        const BATCH_SIZE = 100;
-        for (let i = 0; i < missingGamesQueue.length; i += BATCH_SIZE) {
-          const currentBatch = missingGamesQueue.slice(i, i + BATCH_SIZE);
-          
-          setProgress(prev => prev ? { 
-            ...prev, 
-            status: `Importing... ${remainingCount} missing games left to fetch from Wikidata.` 
-          } : null);
-
-          await Promise.all(currentBatch.map(async (item) => {
-            try {
-              const wikiData = await fetchWikidata(item.bggId, item.objectname);
-              const gameId = `bgg_${item.bggId}`;
-              const gameData = {
-                title: item.objectname,
-                coverImage: wikiData?.image || `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(item.objectname)}`,
-                minPlayers: wikiData?.minPlayers || 1,
-                maxPlayers: wikiData?.maxPlayers || 4,
-                playTime: "60",
-                bggId: item.bggId,
-                hasHighResArt: false,
-                isApproved: false,
-                status: 'pending',
-                createdAt: serverTimestamp()
-              };
-
-              await setDoc(doc(db, 'games', gameId), gameData);
-              
-              // Notify Discord about new game
-              try {
-                await fetch('/api/webhooks/new-game', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    gameId: gameId,
-                    gameTitle: item.objectname,
-                    bggId: item.bggId,
-                    importedBy: user.uid
-                  })
-                });
-              } catch (notifyError) {
-                console.error("Failed to notify Discord about new game:", notifyError);
-              }
-
-              existingGamesMap.set(item.bggId, { id: gameId, data: gameData });
-            } catch (error) {
-              console.error(`Wikidata fetch/save error for ${item.objectname}:`, error);
-            }
-          }));
-
-          remainingCount -= currentBatch.length;
-          console.log(`Wikidata Batch Complete. Processed: ${currentBatch.length}. Remaining items to fetch: ${remainingCount}`);
-        }
-
-        // Step 3: Finalize User Collections
-        setProgress(prev => prev ? { ...prev, status: 'Finalizing collection...' } : null);
-        for (let i = 0; i < rows.length; i++) {
-          const row = rows[i];
-          const bggId = String(row.objectid || row['Object ID'] || row['ObjectID'] || '');
-          const objectname = row.objectname || row['Object Name'] || row['ObjectName'] || '';
-          const bggRating = typeof row.rating === 'number' ? row.rating : 0;
-          const isOwned = row.own === 1 || row['Own'] === 1;
-          const isWishlist = row.wishlist === 1 || row['Wishlist'] === 1;
-
-          if (!bggId || !objectname) continue;
-
-          const gameInfo = existingGamesMap.get(bggId);
-          if (!gameInfo) {
-            setProgress(prev => prev ? { ...prev, current: i + 1, errorCount: prev.errorCount + 1 } : null);
-            continue;
-          }
-
-          try {
+            const gameId = `bgg_${bggId}`;
             const shelf = isWishlist && !isOwned ? 'wishlist' : 'owned';
-            const userCollId = `${user.uid}_${gameInfo.id}`;
-            
-            await setDoc(doc(db, 'userCollections', userCollId), {
+            const userCollId = `${user.uid}_${gameId}`;
+            const reviewId = `${user.uid}_${gameId}`;
+
+            // 1. Game Document (Blind Upsert)
+            // We use merge: true so we don't overwrite detailed info if it already exists
+            const gameRef = doc(db, 'games', gameId);
+            batch.set(gameRef, {
+              title: objectname,
+              name_lowercase: objectname.toLowerCase(),
+              bggId: bggId,
+              isApproved: true, // Auto-approve BGG imports
+              status: 'published',
+              updatedAt: serverTimestamp()
+            }, { merge: true });
+            opCount++;
+
+            // 2. User Collection Document (Blind Upsert)
+            const collRef = doc(db, 'userCollections', userCollId);
+            batch.set(collRef, {
               userId: user.uid,
-              gameId: gameInfo.id,
-              gameTitle: gameInfo.data.title,
-              gameCover: gameInfo.data.coverImage,
+              gameId: gameId,
+              gameTitle: objectname,
               shelf: shelf,
               addedAt: serverTimestamp()
-            });
+            }, { merge: true });
+            opCount++;
 
+            // 3. Optional Rating (Blind Upsert)
             if (bggRating > 0) {
-              const reviewId = `${user.uid}_${gameInfo.id}`;
-              await setDoc(doc(db, 'reviews', reviewId), {
-                gameId: gameInfo.id,
+              const reviewRef = doc(db, 'reviews', reviewId);
+              batch.set(reviewRef, {
+                gameId: gameId,
                 userId: user.uid,
                 userName: user.displayName || 'Gamer',
                 userAvatar: user.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.uid}`,
                 score: bggRating,
                 createdAt: serverTimestamp()
               }, { merge: true });
+              opCount++;
             }
 
-            setProgress(prev => prev ? { ...prev, current: i + 1, successCount: prev.successCount + 1 } : null);
-          } catch (error) {
-            console.error(`Error finalizing ${objectname}:`, error);
-            setProgress(prev => prev ? { ...prev, current: i + 1, errorCount: prev.errorCount + 1 } : null);
+            // Commit batch when approaching limit
+            if (opCount >= BATCH_LIMIT) {
+              await batch.commit();
+              batch = writeBatch(db);
+              opCount = 0;
+              setProgress(prev => prev ? { 
+                ...prev, 
+                current: i + 1, 
+                successCount: i + 1,
+                status: `Processed ${i + 1} of ${total} games...` 
+              } : null);
+            }
           }
-        }
 
-        setProgress(prev => prev ? { ...prev, status: 'Import complete!' } : null);
-        setIsImporting(false);
+          // Final commit
+          if (opCount > 0) {
+            await batch.commit();
+          }
+
+          setProgress(prev => prev ? { 
+            ...prev, 
+            current: total, 
+            successCount: total, 
+            status: 'All games synced successfully!' 
+          } : null);
+
+        } catch (error) {
+          handleFirestoreError(error, OperationType.WRITE, 'batch_bgg_import');
+          setProgress(prev => prev ? { ...prev, status: 'Import failed due to database error.', errorCount: 1 } : null);
+        } finally {
+          setIsImporting(false);
+        }
       },
       error: (error) => {
         console.error('CSV Parse Error:', error);
