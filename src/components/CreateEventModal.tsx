@@ -304,7 +304,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({ isOpen, onClose, gr
                           }}
                           className="w-full flex items-center gap-4 p-4 hover:bg-white/5 transition-colors border-b border-white/5 last:border-0"
                         >
-                          <img src={game.coverImage} className="w-10 h-10 rounded-lg object-cover" alt={game.title} />
+                          <img src={game.coverImage || undefined} className="w-10 h-10 rounded-lg object-cover" alt={game.title} />
                           <div className="flex-1 text-left">
                             <p className="font-black text-white text-sm truncate">{game.title}</p>
                             <p className="text-[10px] text-white/20 font-bold uppercase">{game.publishers?.[0] || 'Game Studio'}</p>
@@ -322,7 +322,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({ isOpen, onClose, gr
                       key={game.id}
                       className="bg-emerald-accent/10 border border-emerald-accent/20 rounded-xl p-2 pr-3 flex items-center gap-3"
                     >
-                      <img src={game.coverImage} className="w-8 h-8 rounded-lg object-cover" alt={game.title} />
+                      <img src={game.coverImage || undefined} className="w-8 h-8 rounded-lg object-cover" alt={game.title} />
                       <span className="text-[10px] font-black text-white truncate max-w-[100px]">{game.title}</span>
                       <button 
                         type="button"

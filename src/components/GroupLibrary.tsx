@@ -325,7 +325,7 @@ export default function GroupLibrary({ groupId, members }: GroupLibraryProps) {
                 {/* Blurred Art Background */}
                 <div className="absolute inset-0 overflow-hidden">
                   <img 
-                    src={game.cover} 
+                    src={game.cover || undefined} 
                     className="w-full h-full object-cover blur-xl opacity-40 group-hover:scale-110 transition-transform duration-700" 
                     alt=""
                   />

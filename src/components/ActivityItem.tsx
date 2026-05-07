@@ -154,7 +154,7 @@ const ActivityItem: React.FC<ActivityItemProps> = ({ activity, compact = false }
       {!compact && metadata.gameCover && (
         <div className="shrink-0 w-12 h-16 rounded-lg overflow-hidden border border-white/5 shadow-2l group-hover:scale-105 transition-transform duration-300">
           <img 
-            src={metadata.gameCover} 
+            src={metadata.gameCover || undefined} 
             alt={metadata.gameTitle}
             className="w-full h-full object-cover"
             referrerPolicy="no-referrer"

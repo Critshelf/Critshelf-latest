@@ -65,6 +65,14 @@
           "type": "string",
           "description": "Full description from Wikipedia"
         },
+        "isExpansion": {
+          "type": "boolean",
+          "description": "Whether this is an expansion for another game"
+        },
+        "parentGameId": {
+          "type": "string",
+          "description": "The ID of the base game (if this is an expansion)"
+        },
         "expansions": {
           "type": "array",
           "items": {

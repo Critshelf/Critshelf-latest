@@ -85,7 +85,7 @@ export default function NewArrivals() {
               <div className="h-56 overflow-hidden relative bg-black/20">
                 {/* Blurred Background Banner */}
                 <img 
-                  src={game.bannerImage || game.coverImage} 
+                  src={game.bannerImage || game.coverImage || undefined} 
                   alt=""
                   className={cn(
                     "absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-125",

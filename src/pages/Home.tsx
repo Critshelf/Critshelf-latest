@@ -90,6 +90,7 @@ export default function Home() {
     const qRecent = query(
       collection(db, 'games'),
       where('isApproved', '==', true),
+      where('isExpansion', '==', false),
       orderBy('createdAt', 'desc'),
       limit(5)
     );
@@ -153,6 +154,9 @@ export default function Home() {
           const count = sortedGameIds[idx][1];
           const u = onSnapshot(doc(db, 'games', id), (gSnap) => {
             if (gSnap.exists()) {
+              const gData = gSnap.data();
+              if (gData.isExpansion) return; // Skip expansions in home rotation
+
               setRotationGames(prev => {
                 const updated = [...prev];
                 const gameWithCount = { id: gSnap.id, ...gSnap.data(), playCount: count } as RotationGame;
@@ -508,7 +512,7 @@ export default function Home() {
                         <div className="flex items-center gap-4">
                           <div className="w-12 h-16 rounded-xl overflow-hidden border border-white/10 shadow-lg flex-shrink-0">
                             <img 
-                              src={activity.metadata.gameCover} 
+                              src={activity.metadata.gameCover || undefined} 
                               alt={activity.metadata.gameTitle}
                               className="w-full h-full object-cover transition-transform group-hover:scale-110"
                               referrerPolicy="no-referrer"

@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Plus, Image as ImageIcon, Users, Clock, CheckCircle2, Loader2 } from 'lucide-react';
+import { X, Plus, Image as ImageIcon, Users, Clock, CheckCircle2, Loader2, Search as SearchIcon } from 'lucide-react';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, where, getDocs, limit } from 'firebase/firestore';
 import { useUser } from '../contexts/UserContext';
 import { notifyNewGameSubmission } from '../services/discordService';
+import { Game } from './GameCard';
+import { cn } from '../lib/utils';
 
 interface AddGameModalProps {
   isOpen: boolean;
@@ -20,14 +22,25 @@ const AddGameModal: React.FC<AddGameModalProps> = ({ isOpen, onClose, initialTit
     minPlayers: 2,
     maxPlayers: 4,
     playTime: 60,
-    coverImage: ''
+    coverImage: '',
+    isExpansion: false,
+    baseGameId: ''
   });
+  const [baseGameSearch, setBaseGameSearch] = useState('');
+  const [baseGameOptions, setBaseGameOptions] = useState<Game[]>([]);
+  const [isSearchingBase, setIsSearchingBase] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+
+    if (formData.isExpansion && !formData.baseGameId) {
+      alert('Please select a base game for this expansion!');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -42,6 +55,8 @@ const AddGameModal: React.FC<AddGameModalProps> = ({ isOpen, onClose, initialTit
         trending: false,
         isVerified: false,
         isApproved: false, // Strict pending state
+        isExpansion: formData.isExpansion,
+        baseGameId: formData.isExpansion ? formData.baseGameId : null,
         status: 'pending',
         hasHighResArt: formData.coverImage ? true : false
       };
@@ -217,6 +232,117 @@ const AddGameModal: React.FC<AddGameModalProps> = ({ isOpen, onClose, initialTit
                         onChange={e => setFormData({ ...formData, coverImage: e.target.value })}
                       />
                     </div>
+                  </div>
+
+                  {/* Expansion Toggle */}
+                  <div className="space-y-4 pt-4 border-t border-white/5">
+                    <div className="flex items-center justify-between px-2">
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "w-10 h-10 rounded-xl flex items-center justify-center transition-all",
+                          formData.isExpansion ? "bg-emerald-accent/20 text-emerald-accent" : "bg-white/5 text-white/20"
+                        )}>
+                          <Plus className={cn("w-5 h-5", formData.isExpansion && "rotate-45")} />
+                        </div>
+                        <div>
+                          <p className="text-sm font-black text-white">This is an expansion</p>
+                          <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest leading-none mt-1">Requires a base game</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, isExpansion: !prev.isExpansion, baseGameId: '' }))}
+                        className={cn(
+                          "w-12 h-6 rounded-full transition-all relative overflow-hidden",
+                          formData.isExpansion ? "bg-emerald-accent" : "bg-white/10"
+                        )}
+                      >
+                        <motion.div
+                          animate={{ x: formData.isExpansion ? 24 : 4 }}
+                          className="absolute left-0 top-1 w-4 h-4 bg-white rounded-full shadow-lg"
+                        />
+                      </button>
+                    </div>
+
+                    <AnimatePresence>
+                      {formData.isExpansion && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="space-y-4 overflow-hidden"
+                        >
+                          <div className="space-y-2">
+                            <label className="text-xs font-black text-white/20 uppercase tracking-widest ml-2">Link to Base Game</label>
+                            <div className="relative">
+                              <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
+                              <input
+                                type="text"
+                                placeholder="Search our database for the base game..."
+                                className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-6 focus:border-emerald-accent outline-none transition-all font-bold text-white text-sm"
+                                value={baseGameSearch}
+                                onChange={async (e) => {
+                                  const search = e.target.value;
+                                  setBaseGameSearch(search);
+                                  if (search.length >= 2) {
+                                    setIsSearchingBase(true);
+                                    try {
+                                      const q = query(
+                                        collection(db, 'games'),
+                                        where('isApproved', '==', true),
+                                        where('isExpansion', '==', false),
+                                        where('name_lowercase', '>=', search.toLowerCase()),
+                                        where('name_lowercase', '<=', search.toLowerCase() + '\uf8ff'),
+                                        limit(5)
+                                      );
+                                      const snap = await getDocs(q);
+                                      setBaseGameOptions(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game)));
+                                    } catch (err) {
+                                      console.error("Base game search error:", err);
+                                    } finally {
+                                      setIsSearchingBase(false);
+                                    }
+                                  } else {
+                                    setBaseGameOptions([]);
+                                  }
+                                }}
+                              />
+                              {isSearchingBase && (
+                                <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                                  <Loader2 className="w-4 h-4 text-emerald-accent animate-spin" />
+                                </div>
+                              )}
+                            </div>
+
+                            {baseGameOptions.length > 0 && (
+                              <div className="bg-charcoal/50 border border-white/10 rounded-2xl overflow-hidden shadow-xl">
+                                {baseGameOptions.map(game => (
+                                  <button
+                                    key={game.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setFormData(prev => ({ ...prev, baseGameId: game.id }));
+                                      setBaseGameSearch(game.title);
+                                      setBaseGameOptions([]);
+                                    }}
+                                    className={cn(
+                                      "w-full flex items-center gap-3 p-3 text-left hover:bg-white/5 transition-colors border-b last:border-0 border-white/5",
+                                      formData.baseGameId === game.id && "bg-emerald-accent/10 border-l-2 border-l-emerald-accent"
+                                    )}
+                                  >
+                                    <img src={game.coverImage || undefined} className="w-8 h-8 rounded shrink-0 object-cover" />
+                                    <div className="min-w-0">
+                                      <p className="text-xs font-black text-white truncate">{game.title}</p>
+                                      <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest">{game.publisher}</p>
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
 
                   <button

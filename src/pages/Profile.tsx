@@ -732,7 +732,7 @@ export default function Profile() {
                     {/* Blurred Art Background Layer */}
                     <div className="absolute inset-0 overflow-hidden">
                       <img 
-                        src={favorite.gameCover} 
+                        src={favorite.gameCover || undefined} 
                         alt=""
                         className="absolute inset-0 w-full h-full object-cover blur-2xl scale-125 transition-transform duration-700 group-hover:scale-150"
                         referrerPolicy="no-referrer"
@@ -1196,7 +1196,7 @@ export default function Profile() {
                         className="w-full flex items-center gap-4 p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-emerald-accent/30 hover:bg-emerald-accent/5 transition-all group text-left"
                       >
                         <div className="w-16 h-20 rounded-lg overflow-hidden shrink-0">
-                          <img src={game.coverImage} alt={game.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          <img src={game.coverImage || undefined} alt={game.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                         </div>
                         <div className="flex-1">
                           <h4 className="font-black text-white group-hover:text-emerald-accent transition-colors">{game.title}</h4>

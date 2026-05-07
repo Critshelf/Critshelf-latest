@@ -612,7 +612,7 @@ export default function GamePage() {
         {/* Vibe Blur Background */}
         <div className="absolute inset-0">
           <img 
-            src={game.bannerImage || game.coverImage} 
+            src={game.bannerImage || game.coverImage || undefined} 
             alt="" 
             className={cn(
               "w-full h-full object-cover scale-110 transiton-all duration-700",
@@ -736,7 +736,7 @@ export default function GamePage() {
                 <div key={art.id} className="bg-charcoal/40 rounded-2xl p-4 border border-white/5 flex flex-col gap-4">
                   <div className="aspect-square rounded-xl overflow-hidden border border-white/10">
                     <img 
-                      src={art.proposedImageUrl} 
+                      src={art.proposedImageUrl || undefined} 
                       alt="Proposed Art"
                       className="w-full h-full object-cover" 
                       referrerPolicy="no-referrer"
@@ -942,7 +942,7 @@ export default function GamePage() {
                     className="aspect-[3/4] rounded-3xl overflow-hidden border border-white/10 relative cursor-pointer shadow-xl group-hover:shadow-emerald-accent/10 transition-all duration-300"
                   >
                     <img 
-                      src={expansion.coverImage || expansion.boxArtUrl} 
+                      src={expansion.coverImage || expansion.boxArtUrl || undefined} 
                       alt={expansion.title} 
                       className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                       referrerPolicy="no-referrer"
@@ -1347,7 +1347,7 @@ export default function GamePage() {
                   >
                     <div className="w-24 h-24 shrink-0 rounded-xl overflow-hidden border border-white/10 bg-black/20">
                       <img 
-                        src={edition.boxArtUrl} 
+                        src={edition.boxArtUrl || undefined} 
                         alt={edition.title} 
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                         referrerPolicy="no-referrer"
@@ -1422,7 +1422,7 @@ export default function GamePage() {
                     className="w-full flex items-center gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-emerald-accent/30 transition-all group text-left"
                   >
                     <img 
-                      src={fav.gameCover} 
+                      src={fav.gameCover || undefined} 
                       alt={fav.gameTitle} 
                       className="w-16 h-16 rounded-xl object-cover border border-white/10"
                       referrerPolicy="no-referrer"

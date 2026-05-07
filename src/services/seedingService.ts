@@ -57,6 +57,11 @@ export async function seedGames() {
         maxPlayers: parseInt(record.max_players || '4'),
         ageRange: record.minimum_age ? `${record.minimum_age}+` : '12+',
         rating: parseFloat(record.avg_rating || '7.5'),
+        isApproved: true,
+        isExpansion: false,
+        baseGameId: null,
+        status: 'approved',
+        name_lowercase: title.toLowerCase(),
         trending: true,
         wikidataId: getWikidataId(title),
         createdAt: serverTimestamp()

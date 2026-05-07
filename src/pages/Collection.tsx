@@ -170,7 +170,10 @@ export default function Collection() {
 
       const game = gamesData[item.gameId];
       
-      // 2. Search Filter (Can search by title even without hydrated data)
+      // 2. Expansion Filter (Hide expansions from main collection view)
+      if (game?.isExpansion) return false;
+      
+      // 3. Search Filter (Can search by title even without hydrated data)
       const query = searchTerm.toLowerCase();
       const matchesTitle = item.gameTitle.toLowerCase().includes(query);
       if (query && !matchesTitle) return false;

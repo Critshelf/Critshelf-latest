@@ -106,120 +106,122 @@ export default function Navbar() {
             )
           ))}
 
-          {/* Profile Item (Special) */}
-          <div className="relative" ref={profileMenuRef}>
-            {user ? (
-              <button
-                onClick={() => setShowProfileMenu(!showProfileMenu)}
-                className={cn(
-                  "flex flex-col items-center gap-1 transition-all duration-300 px-4 py-2 rounded-2xl group",
-                  showProfileMenu ? "text-emerald-accent bg-emerald-accent/10" : "text-white/40 hover:text-emerald-accent hover:bg-emerald-accent/10"
-                )}
-              >
-                <UserAvatar 
-                  user={profile || user} 
-                  size="xs" 
+          {/* Global Actions (Profile) */}
+          <div className="relative flex items-center">
+            <div className="relative" ref={profileMenuRef}>
+              {user ? (
+                <button
+                  onClick={() => setShowProfileMenu(!showProfileMenu)}
                   className={cn(
-                    "w-6 h-6 rounded-lg transition-transform group-hover:scale-110",
-                    showProfileMenu && "ring-2 ring-emerald-accent ring-offset-2 ring-offset-charcoal"
+                    "flex flex-col items-center gap-1 transition-all duration-300 px-4 py-2 rounded-2xl group",
+                    showProfileMenu ? "text-emerald-accent bg-emerald-accent/10" : "text-white/40 hover:text-emerald-accent hover:bg-emerald-accent/10"
                   )}
-                  unreadCount={unreadCount}
-                />
-                <span className="text-[10px] font-black uppercase tracking-widest hidden sm:block">Profile</span>
-              </button>
-            ) : (
-              <NavLink
-                to="/auth"
-                className={({ isActive }) => cn(
-                  "flex flex-col items-center gap-1 transition-all duration-300 px-4 py-2 rounded-2xl",
-                  isActive 
-                    ? "text-emerald-accent" 
-                    : "text-white/40 hover:text-emerald-accent hover:bg-emerald-accent/10"
-                )}
-              >
-                <LogIn className="w-6 h-6" />
-                <span className="text-[10px] font-black uppercase tracking-widest hidden sm:block">Sign In</span>
-              </NavLink>
-            )}
-
-            {/* Profile Dropdown */}
-            <AnimatePresence>
-              {showProfileMenu && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                  className="absolute bottom-full mb-4 right-0 w-64 bg-charcoal/95 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden z-[100] md:bottom-auto md:top-full md:mt-4"
                 >
-                  <div className="p-4 border-b border-white/10 flex items-center gap-3 bg-white/5">
-                    <UserAvatar user={profile || user} size="sm" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-black text-white truncate">{profile?.displayName || user?.displayName || 'User'}</p>
-                      <p className="text-[9px] font-bold text-white/40 truncate uppercase tracking-widest">@{profile?.username || 'critter'}</p>
-                    </div>
-                  </div>
-
-                  <div className="p-2">
-                    <button
-                      onClick={() => navigate('/profile')}
-                      className="w-full flex items-center gap-3 p-3 text-white/60 hover:text-white hover:bg-white/5 rounded-2xl transition-all group"
-                    >
-                      <User className="w-4 h-4 text-emerald-accent" />
-                      <span className="flex-1 text-left text-[11px] font-black uppercase tracking-widest">My Profile</span>
-                      <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setShowNotifications(true);
-                        setShowProfileMenu(false);
-                      }}
-                      className="w-full flex items-center gap-3 p-3 text-white/60 hover:text-white hover:bg-white/5 rounded-2xl transition-all group"
-                    >
-                      <div className="relative">
-                        <Bell className="w-4 h-4 text-gold-accent" />
-                        {unreadCount > 0 && (
-                          <span className="absolute -top-1 -right-1 w-2 h-2 bg-rose-500 rounded-full" />
-                        )}
-                      </div>
-                      <span className="flex-1 text-left text-[11px] font-black uppercase tracking-widest">Notifications</span>
-                      {unreadCount > 0 && (
-                        <span className="bg-rose-500/20 text-rose-500 text-[9px] font-black px-2 py-0.5 rounded-full">
-                          {unreadCount}
-                        </span>
-                      )}
-                    </button>
-
-                    <button
-                      onClick={() => navigate('/settings')}
-                      className="w-full flex items-center gap-3 p-3 text-white/60 hover:text-white hover:bg-white/5 rounded-2xl transition-all group"
-                    >
-                      <Settings className="w-4 h-4 text-blue-400" />
-                      <span className="flex-1 text-left text-[11px] font-black uppercase tracking-widest">Settings</span>
-                      <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </button>
-
-                    <div className="my-2 border-t border-white/5" />
-
-                    <button
-                      onClick={handleSignOut}
-                      className="w-full flex items-center gap-3 p-3 text-rose-500/60 hover:text-rose-500 hover:bg-rose-500/5 rounded-2xl transition-all"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      <span className="flex-1 text-left text-[11px] font-black uppercase tracking-widest">Sign Out</span>
-                    </button>
-                  </div>
-                </motion.div>
+                  <UserAvatar 
+                    user={profile || user} 
+                    size="xs" 
+                    className={cn(
+                      "w-6 h-6 rounded-lg transition-transform group-hover:scale-110",
+                      showProfileMenu && "ring-2 ring-emerald-accent ring-offset-2 ring-offset-charcoal"
+                    )}
+                    unreadCount={unreadCount}
+                  />
+                  <span className="text-[10px] font-black uppercase tracking-widest hidden sm:block">Profile</span>
+                </button>
+              ) : (
+                <NavLink
+                  to="/auth"
+                  className={({ isActive }) => cn(
+                    "flex flex-col items-center gap-1 transition-all duration-300 px-4 py-2 rounded-2xl",
+                    isActive 
+                      ? "text-emerald-accent" 
+                      : "text-white/40 hover:text-emerald-accent hover:bg-emerald-accent/10"
+                  )}
+                >
+                  <LogIn className="w-6 h-6" />
+                  <span className="text-[10px] font-black uppercase tracking-widest hidden sm:block">Sign In</span>
+                </NavLink>
               )}
-            </AnimatePresence>
+
+              {/* Profile Dropdown */}
+              <AnimatePresence>
+                {showProfileMenu && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    className="absolute bottom-full mb-4 right-0 w-64 bg-charcoal/95 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden z-[100] md:bottom-auto md:top-full md:mt-4"
+                  >
+                    <div className="p-4 border-b border-white/10 flex items-center gap-3 bg-white/5">
+                      <UserAvatar user={profile || user} size="sm" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-black text-white truncate">{profile?.displayName || user?.displayName || 'User'}</p>
+                        <p className="text-[9px] font-bold text-white/40 truncate uppercase tracking-widest">@{profile?.username || 'critter'}</p>
+                      </div>
+                    </div>
+
+                    <div className="p-2">
+                      <button
+                        onClick={() => navigate('/profile')}
+                        className="w-full flex items-center gap-3 p-3 text-white/60 hover:text-white hover:bg-white/5 rounded-2xl transition-all group"
+                      >
+                        <User className="w-4 h-4 text-emerald-accent" />
+                        <span className="flex-1 text-left text-[11px] font-black uppercase tracking-widest">My Profile</span>
+                        <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setShowNotifications(true);
+                          setShowProfileMenu(false);
+                        }}
+                        className="w-full flex items-center gap-3 p-3 text-white/60 hover:text-white hover:bg-white/5 rounded-2xl transition-all group"
+                      >
+                        <div className="relative">
+                          <Bell className="w-4 h-4 text-gold-accent" />
+                          {unreadCount > 0 && (
+                            <span className="absolute -top-1 -right-1 w-2 h-2 bg-rose-500 rounded-full" />
+                          )}
+                        </div>
+                        <span className="flex-1 text-left text-[11px] font-black uppercase tracking-widest">Notifications</span>
+                        {unreadCount > 0 && (
+                          <span className="bg-rose-500/20 text-rose-500 text-[9px] font-black px-2 py-0.5 rounded-full">
+                            {unreadCount}
+                          </span>
+                        )}
+                      </button>
+
+                      <button
+                        onClick={() => navigate('/settings')}
+                        className="w-full flex items-center gap-3 p-3 text-white/60 hover:text-white hover:bg-white/5 rounded-2xl transition-all group"
+                      >
+                        <Settings className="w-4 h-4 text-blue-400" />
+                        <span className="flex-1 text-left text-[11px] font-black uppercase tracking-widest">Settings</span>
+                        <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </button>
+
+                      <div className="my-2 border-t border-white/5" />
+
+                      <button
+                        onClick={handleSignOut}
+                        className="w-full flex items-center gap-3 p-3 text-rose-500/60 hover:text-rose-500 hover:bg-rose-500/5 rounded-2xl transition-all"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        <span className="flex-1 text-left text-[11px] font-black uppercase tracking-widest">Sign Out</span>
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            <NotificationTray 
+              isOpen={showNotifications} 
+              onClose={() => setShowNotifications(false)} 
+            />
           </div>
         </div>
       </nav>
-
-      <NotificationTray 
-        isOpen={showNotifications} 
-        onClose={() => setShowNotifications(false)} 
-      />
 
       <LogPlayModal 
         isOpen={isLogModalOpen} 

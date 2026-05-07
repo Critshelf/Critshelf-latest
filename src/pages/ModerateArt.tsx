@@ -74,7 +74,10 @@ export default function ModerateArt() {
                 'moderation',
                 'Art Approved! 🎨',
                 `Your high-res art submission for "${gameData?.title || gameId}" has been approved.`,
-                `/game/${gameId}`
+                {
+                  gameId: gameId,
+                  actionUrl: `/game/${gameId}`
+                }
               );
             }
           }
@@ -104,7 +107,10 @@ export default function ModerateArt() {
                 'moderation',
                 'Art Rejected',
                 `Your art submission for "${gameData?.title || gameId}" was not accepted at this time.`,
-                `/game/${gameId}`
+                {
+                  gameId: gameId,
+                  actionUrl: `/game/${gameId}`
+                }
               );
             }
           }

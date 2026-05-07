@@ -66,7 +66,10 @@ export default function ModerateGame() {
               'moderation',
               'Game Approved! 🎲',
               `Your import request for "${data.title}" has been approved. It's now live!`,
-              `/game/${gameId}`
+              {
+                gameId: gameId,
+                actionUrl: `/game/${gameId}`
+              }
             );
           }
 
@@ -80,7 +83,9 @@ export default function ModerateGame() {
               'moderation',
               'Import Rejected',
               `Your import request for "${data.title}" was not accepted at this time.`,
-              '/browse'
+              {
+                actionUrl: '/browse'
+              }
             );
           }
 

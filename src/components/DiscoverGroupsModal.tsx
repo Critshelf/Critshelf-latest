@@ -93,19 +93,29 @@ const DiscoverGroupsModal: React.FC<DiscoverGroupsModalProps> = ({ isOpen, onClo
 
   const handleJoinWithCode = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !joinCode.trim() || joinCode.length !== 6) return;
+    const cleanCode = joinCode.trim().toUpperCase();
+    
+    if (!user) return;
+    if (!cleanCode) {
+      setJoinCodeError('Please enter a code');
+      return;
+    }
+    if (cleanCode.length !== 6) {
+      setJoinCodeError('Code must be 6 digits');
+      return;
+    }
 
     setIsJoiningWithCode(true);
     setJoinCodeError('');
     try {
       const q = query(
         collection(db, 'groups'),
-        where('joinCode', '==', joinCode.trim().toUpperCase())
+        where('joinCode', '==', cleanCode)
       );
       
       const snapshot = await getDocs(q);
       if (snapshot.empty) {
-        setJoinCodeError('Invalid invite code');
+        setJoinCodeError('Invalid or expired invite code');
         return;
       }
 
@@ -135,9 +145,13 @@ const DiscoverGroupsModal: React.FC<DiscoverGroupsModalProps> = ({ isOpen, onClo
         groupName: groupData.name
       });
 
+      // Success! Clear state and navigate
+      setJoinCode('');
       onNavigateToGroup(groupDoc.id);
       onClose();
     } catch (error) {
+      setJoinCodeError('Connection error. Please try again.');
+      console.error("Join code error:", error);
       handleFirestoreError(error, OperationType.UPDATE, 'groups_join_code');
     } finally {
       setIsJoiningWithCode(false);
@@ -311,7 +325,7 @@ const DiscoverGroupsModal: React.FC<DiscoverGroupsModalProps> = ({ isOpen, onClo
                       />
                       <button
                         type="submit"
-                        disabled={joinCode.length !== 6 || isJoiningWithCode}
+                        disabled={isJoiningWithCode}
                         className="absolute right-3 top-1/2 -translate-y-1/2 p-4 bg-gold-accent text-charcoal rounded-xl shadow-xl disabled:opacity-30 transition-all hover:scale-105 active:scale-95 flex items-center gap-2 group/btn"
                       >
                         {isJoiningWithCode ? (

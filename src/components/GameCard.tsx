@@ -34,6 +34,7 @@ export interface Game {
   genres?: string[];
   categories?: string[];
   baseGameId?: string;
+  isExpansion?: boolean;
   isWikidataItem?: boolean;
   expansions?: {
     id: string;
@@ -87,7 +88,7 @@ const GameCard: React.FC<GameCardProps> = ({
         {/* Vibe Blur Background */}
         <div className="absolute inset-0 overflow-hidden">
           <img
-            src={game.bannerImage || game.coverImage}
+            src={game.bannerImage || game.coverImage || undefined}
             alt=""
             className={cn(
               "w-full h-full object-cover transition-transform duration-700 group-hover:scale-125",

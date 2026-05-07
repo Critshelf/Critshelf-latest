@@ -23,6 +23,9 @@ export interface Notification {
   isRead: boolean;
   createdAt: any;
   actionUrl?: string;
+  groupId?: string;
+  gameId?: string;
+  targetId?: string;
 }
 
 export interface NotificationPreferences {
@@ -47,7 +50,12 @@ export async function sendNotification(
   type: NotificationType, 
   title: string, 
   message: string, 
-  actionUrl?: string
+  context?: {
+    actionUrl?: string;
+    groupId?: string;
+    gameId?: string;
+    targetId?: string;
+  }
 ) {
   try {
     // 1. Fetch user's notification preferences
@@ -71,7 +79,10 @@ export async function sendNotification(
       type,
       title,
       message,
-      actionUrl: actionUrl || null,
+      actionUrl: context?.actionUrl || null,
+      groupId: context?.groupId || null,
+      gameId: context?.gameId || null,
+      targetId: context?.targetId || null,
       isRead: false,
       createdAt: serverTimestamp()
     });

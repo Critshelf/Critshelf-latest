@@ -59,6 +59,7 @@ export default function Browse() {
       let q = query(
         collection(db, path),
         where('isApproved', '==', true),
+        where('isExpansion', '==', false),
         orderBy('title'),
         startAfter(lastDoc),
         limit(PAGE_SIZE)
@@ -70,6 +71,7 @@ export default function Browse() {
         q = query(
           collection(db, path),
           where('isApproved', '==', true),
+          where('isExpansion', '==', false),
           where('name_lowercase', '>=', queryTerm),
           where('name_lowercase', '<=', queryTerm + '\uf8ff'),
           orderBy('name_lowercase'),
@@ -98,6 +100,7 @@ export default function Browse() {
     let q = query(
       collection(db, 'games'), 
       where('isApproved', '==', true),
+      where('isExpansion', '==', false),
       orderBy('title'), 
       limit(PAGE_SIZE)
     );
@@ -107,6 +110,7 @@ export default function Browse() {
       q = query(
         collection(db, 'games'),
         where('isApproved', '==', true),
+        where('isExpansion', '==', false),
         where('name_lowercase', '>=', queryTerm),
         where('name_lowercase', '<=', queryTerm + '\uf8ff'),
         orderBy('name_lowercase'),

@@ -230,7 +230,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({ isOpen, onClose, 
                         className="relative bg-white/5 p-4 rounded-3xl border border-white/10 group hover:border-gold-accent/30 transition-all flex items-center gap-4"
                       >
                         <img 
-                          src={game.boxArt} 
+                          src={game.boxArt || undefined} 
                           alt={game.title} 
                           className="w-16 h-16 rounded-xl object-cover shrink-0 shadow-lg"
                           referrerPolicy="no-referrer"

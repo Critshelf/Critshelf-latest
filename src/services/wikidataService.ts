@@ -78,6 +78,8 @@ export async function fetchAndSaveWikidataGame(qid: string): Promise<string> {
       playTime: "0",
       rating: 0,
       isApproved: true,
+      isExpansion: false,
+      baseGameId: null,
       wikidataId: qid,
       updatedAt: new Date().toISOString(),
       publicationDate: result.pubDate ? result.pubDate.value : ""

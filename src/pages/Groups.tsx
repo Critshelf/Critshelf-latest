@@ -184,7 +184,7 @@ export default function Groups() {
                   >
                     <div className="h-full w-full absolute inset-0">
                       <img 
-                        src={group.bannerImage.replace('1200/400', '600/300')} 
+                        src={group.bannerImage ? group.bannerImage.replace('1200/400', '600/300') : undefined} 
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 opacity-40 group-hover:opacity-60" 
                         alt={group.name}
                         loading="lazy"
@@ -244,7 +244,7 @@ export default function Groups() {
 
                 <div className="flex gap-6">
                   <div className="w-14 h-14 rounded-2xl overflow-hidden shrink-0 shadow-md border border-white/10">
-                    <img src={item.userAvatar} className="w-full h-full object-cover" alt={item.userName} loading="lazy" />
+                    <img src={item.userAvatar || undefined} className="w-full h-full object-cover" alt={item.userName} loading="lazy" />
                   </div>
                   
                   <div className="flex-1">

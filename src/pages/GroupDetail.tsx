@@ -606,7 +606,7 @@ export default function GroupDetail() {
       {/* Banner */}
       <div className="h-64 bg-charcoal relative">
         <img 
-          src={group.bannerImage} 
+          src={group.bannerImage || undefined} 
           className="w-full h-full object-cover opacity-30 blur-sm" 
           alt={group.name}
           referrerPolicy="no-referrer"
@@ -834,7 +834,7 @@ export default function GroupDetail() {
                           <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-accent/5 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-110" />
                           <div className="relative flex gap-6">
                             <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-md shrink-0 border-2 border-white/10">
-                              <img src={item.userAvatar} className="w-full h-full object-cover" alt={item.userName} />
+                              <img src={item.userAvatar || undefined} className="w-full h-full object-cover" alt={item.userName} />
                             </div>
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-2">
@@ -901,7 +901,7 @@ export default function GroupDetail() {
                               </div>
                             </div>
                             <div className="hidden sm:block w-24 h-24 rounded-2xl overflow-hidden shadow-lg border-4 border-charcoal rotate-6 group-hover:rotate-0 transition-transform">
-                              <img src={item.gameCover} className="w-full h-full object-cover opacity-60 group-hover:opacity-100" alt={item.gameTitle} />
+                              <img src={item.gameCover || undefined} className="w-full h-full object-cover opacity-60 group-hover:opacity-100" alt={item.gameTitle} />
                             </div>
                           </div>
                         </motion.div>
@@ -914,7 +914,7 @@ export default function GroupDetail() {
                           <div className="absolute top-0 right-0 w-32 h-32 bg-gold-accent/5 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-110" />
                           <div className="relative flex gap-6">
                             <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-md shrink-0 border-2 border-white/10">
-                              <img src={item.userAvatar} className="w-full h-full object-cover" alt={item.userName} />
+                              <img src={item.userAvatar || undefined} className="w-full h-full object-cover" alt={item.userName} />
                             </div>
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-2">
@@ -946,7 +946,7 @@ export default function GroupDetail() {
                               </div>
                             </div>
                             <div className="hidden sm:block w-24 h-24 rounded-2xl overflow-hidden shadow-lg border-4 border-charcoal -rotate-6 group-hover:rotate-0 transition-transform">
-                              <img src={item.gameCover} className="w-full h-full object-cover opacity-60 group-hover:opacity-100" alt={item.gameTitle} />
+                              <img src={item.gameCover || undefined} className="w-full h-full object-cover opacity-60 group-hover:opacity-100" alt={item.gameTitle} />
                             </div>
                           </div>
                         </motion.div>
@@ -1063,7 +1063,7 @@ export default function GroupDetail() {
                       )}
                     >
                       <img 
-                        src={friend.photoURL} 
+                        src={friend.photoURL || undefined} 
                         alt={friend.displayName} 
                         className="w-12 h-12 rounded-xl object-cover border border-white/10"
                       />

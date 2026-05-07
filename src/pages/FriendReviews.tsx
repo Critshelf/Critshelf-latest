@@ -154,7 +154,7 @@ export default function FriendReviews() {
                       <div className="flex items-center gap-6">
                         <div className="w-16 h-20 rounded-2xl overflow-hidden border border-white/10 shadow-2xl shrink-0">
                           <img 
-                            src={activity.metadata.gameCover} 
+                            src={activity.metadata.gameCover || undefined} 
                             alt={activity.metadata.gameTitle}
                             className="w-full h-full object-cover transition-transform group-hover:scale-110"
                             referrerPolicy="no-referrer"

@@ -95,7 +95,7 @@ const PollCard: React.FC<PollCardProps> = ({ poll, onScheduleEvent }) => {
       <div className="flex items-start justify-between mb-8">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl overflow-hidden border-2 border-white/10 shadow-lg">
-            <img src={poll.creatorAvatar} className="w-full h-full object-cover" alt={poll.creatorName} />
+            <img src={poll.creatorAvatar || undefined} className="w-full h-full object-cover" alt={poll.creatorName} />
           </div>
           <div>
             <h3 className="text-2xl font-black text-white tracking-tight">{poll.title}</h3>
@@ -199,7 +199,7 @@ const PollCard: React.FC<PollCardProps> = ({ poll, onScheduleEvent }) => {
                         )}
                         title={`${v.userName} (${v.status})`}
                       >
-                        <img src={v.userAvatar} className="w-full h-full object-cover" alt={v.userName} />
+                        <img src={v.userAvatar || undefined} className="w-full h-full object-cover" alt={v.userName} />
                       </div>
                     ))}
                     {votes.length > 5 && (

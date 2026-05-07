@@ -32,6 +32,7 @@ import { useUser } from '../contexts/UserContext';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import UserAvatar from './UserAvatar';
+import { sendNotification } from '../services/notificationService';
 
 interface JoinRequest {
   id: string;
@@ -123,16 +124,46 @@ const ManageGroupModal: React.FC<ManageGroupModalProps> = ({
     try {
       const requestRef = doc(db, 'groups', groupId, 'JoinRequests', requestId);
       
+      // Fetch group info for notification
+      const groupRef = doc(db, 'groups', groupId);
+      const groupSnap = await getDoc(groupRef);
+      const groupName = groupSnap.exists() ? groupSnap.data().name : 'a group';
+
       if (action === 'accept' && requestUserId) {
         // Add to group members
-        const groupRef = doc(db, 'groups', groupId);
         await updateDoc(groupRef, {
           members: arrayUnion({ userId: requestUserId, role: 'member' }),
           memberIds: arrayUnion(requestUserId)
         });
         
         await updateDoc(requestRef, { status: 'accepted' });
+
+        // Notify user
+        await sendNotification(
+          requestUserId,
+          'groups',
+          'Join Request Accepted! 🎉',
+          `You have been accepted into "${groupName}".`,
+          {
+            groupId: groupId,
+            actionUrl: `/groups/${groupId}`
+          }
+        );
+
         onRefresh();
+      } else if (action === 'deny' && requestUserId) {
+        await updateDoc(requestRef, { status: 'declined' });
+
+        // Notify user
+        await sendNotification(
+          requestUserId,
+          'groups',
+          'Join Request Declined',
+          `Your request to join "${groupName}" was not accepted.`,
+          {
+            groupId: groupId
+          }
+        );
       } else {
         await updateDoc(requestRef, { status: 'declined' });
       }
@@ -324,7 +355,7 @@ const ManageGroupModal: React.FC<ManageGroupModalProps> = ({
                         <div className="flex items-center gap-3 w-full sm:w-auto">
                           <button
                             disabled={!!processingId}
-                            onClick={() => handleAction(req.id, 'deny')}
+                            onClick={() => handleAction(req.id, 'deny', req.userId)}
                             className="flex-1 sm:flex-none px-6 py-3 rounded-xl border border-rose-500/30 text-rose-500 font-black text-xs uppercase tracking-widest hover:bg-rose-500/5 transition-all"
                           >
                             Deny

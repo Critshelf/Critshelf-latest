@@ -122,7 +122,10 @@ export default function UserSearchView() {
           'social',
           'New Follower! 👋',
           `${profile?.displayName || 'Someone'} just started following you.`,
-          `/user/${profile?.username || user.uid}`
+          { 
+            targetId: user.uid,
+            actionUrl: `/profile` // fallback to profile
+          }
         );
       }
       await refreshProfile();

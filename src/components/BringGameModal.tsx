@@ -153,7 +153,7 @@ const BringGameModal: React.FC<BringGameModalProps> = ({ isOpen, onClose, eventI
                       className="bg-white/5 p-4 rounded-3xl border border-white/10 flex items-center gap-4 group hover:border-emerald-accent/30 transition-all"
                     >
                       <img 
-                        src={game.coverImage} 
+                        src={game.coverImage || undefined} 
                         alt={game.title} 
                         className="w-16 h-16 rounded-xl object-cover shrink-0"
                         referrerPolicy="no-referrer"

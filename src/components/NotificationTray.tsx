@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Bell, Check, ExternalLink, Inbox, Loader2 } from 'lucide-react';
+import { Bell, Check, ArrowRight, Inbox, Loader2 } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { 
   collection, 
@@ -82,13 +82,47 @@ export default function NotificationTray({ isOpen, onClose }: NotificationTrayPr
     if (!notif.isRead) {
       await markAsRead(user.uid, notif.id);
     }
+    
     onClose();
+
+    // 1. Priority: Explicit actionUrl
     if (notif.actionUrl) {
       if (notif.actionUrl.startsWith('http')) {
         window.open(notif.actionUrl, '_blank');
       } else {
-        navigate(notif.actionUrl);
+        // Fallback for missing user route which seems to be a common issue
+        if (notif.actionUrl.startsWith('/user/') && !notif.actionUrl.includes('/profile')) {
+          navigate('/profile'); // fallback to own profile if we don't have public user pages yet
+        } else {
+          navigate(notif.actionUrl);
+        }
       }
+      return;
+    }
+
+    // 2. Fallback: Dynamic routing based on type and IDs
+    const { type, groupId, gameId, targetId } = notif;
+    
+    switch (type) {
+      case 'groups':
+        if (groupId) navigate(`/groups/${groupId}`);
+        else navigate('/groups');
+        break;
+      case 'library':
+        if (gameId) navigate(`/game/${gameId}`);
+        else if (targetId) navigate(`/game/${targetId}`);
+        else navigate('/browse');
+        break;
+      case 'social':
+        if (targetId) navigate('/profile'); // fallback to profile for follow notifications etc
+        else navigate('/social');
+        break;
+      case 'moderation':
+        if (gameId) navigate(`/game/${gameId}`);
+        else navigate('/browse');
+        break;
+      default:
+        navigate('/');
     }
   };
 
@@ -102,7 +136,7 @@ export default function NotificationTray({ isOpen, onClose }: NotificationTrayPr
           initial={{ opacity: 0, y: 10, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 10, scale: 0.95 }}
-          className="absolute bottom-full mb-4 right-0 w-[22rem] bg-charcoal/95 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden z-[100] md:bottom-auto md:top-full md:mt-4"
+          className="absolute bottom-full mb-4 right-0 w-[22rem] bg-charcoal border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden z-[100] md:bottom-auto md:top-full md:mt-4"
         >
           {/* Header */}
           <div className="p-6 border-b border-white/10 flex items-center justify-between bg-white/5">
@@ -131,10 +165,10 @@ export default function NotificationTray({ isOpen, onClose }: NotificationTrayPr
                 <p className="text-[10px] font-black uppercase tracking-widest">Scanning Waves...</p>
               </div>
             ) : notifications.length === 0 ? (
-              <div className="p-12 text-center text-white/20">
-                <Inbox className="w-10 h-10 mx-auto mb-4 text-white/5" />
-                <h4 className="text-white/60 font-black mb-1">Silence is Golden</h4>
-                <p className="text-[9px] font-black uppercase tracking-widest">No notifications yet</p>
+              <div className="p-12 text-center py-20 bg-black/20">
+                <Inbox className="w-12 h-12 mx-auto mb-4 text-emerald-accent/10" />
+                <h4 className="text-white font-black mb-1">Silence is Golden</h4>
+                <p className="text-[10px] font-black uppercase tracking-widest text-white/20">No new notifications in the queue</p>
               </div>
             ) : (
               notifications.map((notif) => (
@@ -175,9 +209,15 @@ export default function NotificationTray({ isOpen, onClose }: NotificationTrayPr
                     <p className="text-xs font-medium text-white/40 leading-relaxed line-clamp-2">
                       {notif.message}
                     </p>
-                    {notif.actionUrl && (
-                      <div className="pt-1 flex items-center gap-1 text-[8px] font-black text-emerald-accent uppercase tracking-tighter">
-                        View Details <ExternalLink className="w-2.5 h-2.5" />
+                    
+                    {/* View Details Logic with Safety Check */}
+                    {(notif.actionUrl || notif.groupId || notif.gameId || notif.targetId) ? (
+                      <div className="pt-2 flex items-center gap-1.5 text-[9px] font-black text-emerald-accent uppercase tracking-widest group-hover:translate-x-1 transition-transform">
+                        View Details <ArrowRight className="w-3 h-3" />
+                      </div>
+                    ) : (
+                      <div className="pt-2 text-[8px] font-black text-white/10 uppercase tracking-widest italic">
+                        Info only
                       </div>
                     )}
                   </div>

@@ -137,7 +137,7 @@ const RequestGameModal: React.FC<RequestGameModalProps> = ({ isOpen, onClose, gr
 
             <div className="p-8 space-y-6 max-h-[60vh] overflow-y-auto no-scrollbar">
               <div className="flex gap-4 p-4 bg-white/5 rounded-2xl border border-white/5">
-                <img src={game.cover} className="w-16 h-20 object-cover rounded-lg shadow-md" alt={game.title} />
+                <img src={game.cover || undefined} className="w-16 h-20 object-cover rounded-lg shadow-md" alt={game.title} />
                 <div>
                   <h3 className="text-lg font-black text-white mb-1">{game.title}</h3>
                   <p className="text-xs font-bold text-white/30">Owned by {game.owners.map(o => o.displayName).join(', ')}</p>
