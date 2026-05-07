@@ -4,6 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import { Dices, LogIn, Sparkles, Mail, Lock, User, Loader2, AlertTriangle, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
+// import logo from '../assets/logo.png';
+const logo = '/logo.png'; // Place your logo.png in the public folder
+
 export default function Auth() {
   const { user, signInWithGoogle, signInWithEmail, signUpWithEmail, loading } = useUser();
   const navigate = useNavigate();
@@ -65,9 +68,15 @@ export default function Auth() {
           <motion.div 
             initial={{ scale: 0.5, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="w-16 h-16 bg-gold-accent/10 rounded-2xl flex items-center justify-center mx-auto border border-gold-accent/20 shadow-2xl shadow-gold-accent/10 mb-6"
+            className="mb-6 w-24 h-24 mx-auto flex items-center justify-center bg-white rounded-3xl shadow-inner overflow-hidden border border-white/10"
           >
-            <Dices className="w-8 h-8 text-gold-accent" />
+            <img 
+              src={logo} 
+              alt="CritShelf Logo" 
+              loading="eager"
+              style={{ mixBlendMode: 'multiply' as any }}
+              className="w-full h-full object-contain contrast-[1.1]"
+            />
           </motion.div>
           <motion.div
             initial={{ y: 20, opacity: 0 }}
