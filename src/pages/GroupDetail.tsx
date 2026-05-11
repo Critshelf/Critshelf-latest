@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -58,8 +58,9 @@ import EditGroupAvatarModal from '../components/EditGroupAvatarModal';
 import ManageGroupModal from '../components/ManageGroupModal';
 import EventCard, { GroupEvent } from '../components/EventCard';
 import { Poll } from '../components/PollCard';
-import { BarChart3 as PollIcon } from 'lucide-react';
+import { BarChart3 as PollIcon, Search, Mail } from 'lucide-react';
 import UserAvatar from '../components/UserAvatar';
+import { sendNotification } from '../services/notificationService';
 
 interface Group {
   id: string;
@@ -152,6 +153,9 @@ export default function GroupDetail() {
   const [following, setFollowing] = useState<Member[]>([]);
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
   const [isInviting, setIsInviting] = useState(false);
+  const [inviteSearch, setInviteSearch] = useState('');
+  const [inviteSearchResults, setInviteSearchResults] = useState<any[]>([]);
+  const [isSearchingUsers, setIsSearchingUsers] = useState(false);
   const [activeTab, setActiveTab] = useState<'feed' | 'chat' | 'library' | 'events'>('feed');
   const [activePollsCount, setActivePollsCount] = useState(0);
   const [isCreatePollOpen, setIsCreatePollOpen] = useState(false);
@@ -407,10 +411,10 @@ export default function GroupDetail() {
 
     setIsInviting(true);
     try {
-      const batch: any[] = [];
+      const promises: Promise<any>[] = [];
       for (const friendId of selectedFriends) {
         const inviteRef = doc(collection(db, 'GroupInvites'));
-        batch.push(setDoc(inviteRef, {
+        promises.push(setDoc(inviteRef, {
           groupId: group.id,
           groupName: group.name,
           fromUserId: user.uid,
@@ -419,15 +423,61 @@ export default function GroupDetail() {
           status: 'pending',
           createdAt: serverTimestamp()
         }));
+
+        // Send In-App Notification
+        promises.push(sendNotification(
+          friendId,
+          'group_invite',
+          'Group Invitation! ⚔️',
+          `You've been invited to join "${group.name}".`,
+          {
+            groupId: group.id,
+            actionUrl: `/groups/${group.id}`
+          }
+        ));
       }
-      await Promise.all(batch);
+      await Promise.all(promises);
       alert('Invites sent!');
       setIsInviteModalOpen(false);
       setSelectedFriends([]);
+      setInviteSearch('');
+      setInviteSearchResults([]);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'GroupInvites');
     } finally {
       setIsInviting(false);
+    }
+  };
+
+  const handleSearchUsers = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteSearch.trim() || !user) return;
+
+    setIsSearchingUsers(true);
+    try {
+      // Search by email or username
+      const emailQuery = query(collection(db, 'users'), where('email', '==', inviteSearch.trim().toLowerCase()), limit(10));
+      const usernameQuery = query(collection(db, 'users'), where('username', '==', inviteSearch.trim().toLowerCase()), limit(10));
+      const displayQuery = query(collection(db, 'users'), where('displayName', '>=', inviteSearch.trim()), where('displayName', '<=', inviteSearch.trim() + '\uf8ff'), limit(10));
+
+      const [emailSnap, userSnap, dispSnap] = await Promise.all([
+        getDocs(emailQuery),
+        getDocs(usernameQuery),
+        getDocs(displayQuery)
+      ]);
+
+      const results = new Map();
+      [...emailSnap.docs, ...userSnap.docs, ...dispSnap.docs].forEach(doc => {
+        if (doc.id !== user.uid) {
+          results.set(doc.id, { uid: doc.id, ...doc.data() });
+        }
+      });
+
+      setInviteSearchResults(Array.from(results.values()));
+    } catch (error) {
+      console.error("User search failed:", error);
+    } finally {
+      setIsSearchingUsers(false);
     }
   };
 
@@ -1062,7 +1112,66 @@ export default function GroupDetail() {
                 <p className="text-white/40 font-bold mt-2">Grow the {group.name} crew!</p>
               </div>
 
+              {/* User Search Input */}
+              <div className="mb-6 space-y-2">
+                <label className="text-[10px] font-black text-white/20 uppercase tracking-widest ml-4">Search by Username or Email</label>
+                <form onSubmit={handleSearchUsers} className="relative group">
+                  <input
+                    type="text"
+                    value={inviteSearch}
+                    onChange={(e) => setInviteSearch(e.target.value)}
+                    placeholder="Search gamers..."
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-4 py-4 text-white placeholder:text-white/10 outline-none focus:border-emerald-accent/50 transition-all font-bold"
+                  />
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/20 group-focus-within:text-emerald-accent transition-colors" />
+                  {isSearchingUsers && (
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                      <Loader2 className="w-4 h-4 animate-spin text-emerald-accent" />
+                    </div>
+                  )}
+                </form>
+              </div>
+
               <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar">
+                {/* Search Results */}
+                {inviteSearchResults.length > 0 && (
+                  <div className="pb-4 border-b border-white/5 mb-4">
+                    <p className="text-[10px] font-black text-emerald-accent uppercase tracking-widest mb-3 ml-2">Search Results</p>
+                    <div className="space-y-2">
+                      {inviteSearchResults.map((searchedUser) => (
+                        <button
+                          key={searchedUser.uid}
+                          onClick={() => {
+                            setSelectedFriends(prev => 
+                              prev.includes(searchedUser.uid) 
+                                ? prev.filter(id => id !== searchedUser.uid) 
+                                : [...prev, searchedUser.uid]
+                            );
+                          }}
+                          className={cn(
+                            "w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left",
+                            selectedFriends.includes(searchedUser.uid) 
+                              ? "bg-emerald-accent/10 border-emerald-accent/30" 
+                              : "bg-white/5 border-white/10"
+                          )}
+                        >
+                          <img 
+                            src={searchedUser.photoURL || undefined} 
+                            alt={searchedUser.displayName} 
+                            className="w-10 h-10 rounded-lg object-cover border border-white/10"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-black text-white text-sm truncate">{searchedUser.displayName}</h4>
+                            <p className="text-[9px] font-bold text-white/20 truncate">{searchedUser.email || `@${searchedUser.username}`}</p>
+                          </div>
+                          {selectedFriends.includes(searchedUser.uid) && <Check className="w-4 h-4 text-emerald-accent" />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <p className="text-[10px] font-black text-white/20 uppercase tracking-widest mb-3 ml-2">Your Friends</p>
                 {following.filter(f => ! (group.memberIds || group.members.map((m: any) => typeof m === 'string' ? m : m.userId)).includes(f.uid)).length > 0 ? (
                   following.filter(f => ! (group.memberIds || group.members.map((m: any) => typeof m === 'string' ? m : m.userId)).includes(f.uid)).map((friend) => (
                     <button

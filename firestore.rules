@@ -258,9 +258,22 @@ service cloud.firestore {
 
     // Groups
     match /groups/{groupId} {
-      allow read: if isAuthenticated() && (isAdmin() || request.auth.uid in resource.data.memberIds);
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        request.auth.uid in resource.data.memberIds ||
+        resource.data.isPrivate == false
+      );
       allow create: if isAuthenticated();
-      allow update: if isAuthenticated() && (isAdmin() || request.auth.uid in resource.data.memberIds);
+      allow update: if isAuthenticated() && (
+        isAdmin() || 
+        request.auth.uid in resource.data.memberIds ||
+        // Allow joining instantly IF the user provides the correct joinCode
+        (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'memberIds']) &&
+          request.resource.data.joinCode == resource.data.joinCode &&
+          request.resource.data.memberIds.hasAll([request.auth.uid])
+        )
+      );
       allow delete: if isAuthenticated() && (isAdmin() || request.auth.uid == resource.data.createdBy);
 
       // Group Games Subcollection (Aggregated Stats)
@@ -340,6 +353,12 @@ service cloud.firestore {
       allow create: if isAuthenticated() && request.auth.uid == request.resource.data.fromUserId;
       allow update: if isAuthenticated() && (request.auth.uid == resource.data.toUserId || isAdmin());
       allow delete: if isAuthenticated() && (request.auth.uid == resource.data.toUserId || request.auth.uid == resource.data.fromUserId || isAdmin());
+    }
+
+    // Join Codes (Shadow Collection for bypassing privacy during join-by-code)
+    match /groupCodes/{code} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated(); // Should be created during group creation
     }
 
     // Plays

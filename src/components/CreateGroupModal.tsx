@@ -32,13 +32,14 @@ const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ isOpen, onClose, on
     setLoading(true);
     try {
       const groupId = name.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now();
+      const joinCode = generateJoinCode();
       const groupData = {
         name: name.trim(),
         description: description.trim(),
         avatarSeed: avatarSeed,
         members: [{ userId: user.uid, role: 'leader' }],
         memberIds: [user.uid],
-        joinCode: generateJoinCode(),
+        joinCode: joinCode,
         isPrivate: isPrivate,
         createdBy: user.uid,
         createdAt: serverTimestamp(),
@@ -46,6 +47,13 @@ const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ isOpen, onClose, on
       };
 
       await setDoc(doc(db, 'groups', groupId), groupData);
+      
+      // Create join code mapping for private/bypass join code lookup
+      await setDoc(doc(db, 'groupCodes', joinCode), {
+        groupId,
+        groupName: name.trim(),
+        isPrivate
+      });
       
       // Log Activity
       logActivity({

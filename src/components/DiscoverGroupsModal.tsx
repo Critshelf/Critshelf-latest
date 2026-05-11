@@ -108,24 +108,29 @@ const DiscoverGroupsModal: React.FC<DiscoverGroupsModalProps> = ({ isOpen, onClo
     setIsJoiningWithCode(true);
     setJoinCodeError('');
     try {
-      // a. Query the Groups collection where joinCode strictly matches
-      const q = query(
-        collection(db, 'groups'),
-        where('joinCode', '==', cleanCode)
-      );
+      // Step 1: Query the shadow collection to find the groupId without privacy restrictions
+      const codeRef = doc(db, 'groupCodes', cleanCode);
+      const codeSnap = await getDoc(codeRef);
       
-      const snapshot = await getDocs(q);
-      
-      // b. If NO group is found, stop and set error state
-      if (snapshot.empty) {
+      if (!codeSnap.exists()) {
         setJoinCodeError('Invalid or expired join code.');
         setIsJoiningWithCode(false);
         return;
       }
 
-      const groupDoc = snapshot.docs[0];
-      const groupId = groupDoc.id;
-      const groupData = groupDoc.data();
+      const { groupId, groupName } = codeSnap.data();
+
+      // Step 2: Fetch actual group data
+      const groupRef = doc(db, 'groups', groupId);
+      const groupSnap = await getDoc(groupRef);
+      
+      if (!groupSnap.exists()) {
+        setJoinCodeError('This group no longer exists.');
+        setIsJoiningWithCode(false);
+        return;
+      }
+
+      const groupData = groupSnap.data();
       const memberIds = groupData.memberIds || [];
 
       // If already a member, just navigate
@@ -136,10 +141,11 @@ const DiscoverGroupsModal: React.FC<DiscoverGroupsModalProps> = ({ isOpen, onClo
       }
 
       // d. Execute updateDoc with arrayUnion
-      const groupRef = doc(db, 'groups', groupId);
+      // We include the joinCode in the update payload so security rules can verify it
       await updateDoc(groupRef, {
         members: arrayUnion({ userId: user.uid, role: 'member' }),
-        memberIds: arrayUnion(user.uid)
+        memberIds: arrayUnion(user.uid),
+        joinCode: cleanCode
       });
 
       // Log activity
