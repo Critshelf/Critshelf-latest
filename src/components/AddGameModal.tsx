@@ -289,7 +289,6 @@ const AddGameModal: React.FC<AddGameModalProps> = ({ isOpen, onClose, initialTit
                                     try {
                                       const q = query(
                                         collection(db, 'games'),
-                                        where('isApproved', '==', true),
                                         where('isExpansion', '==', false),
                                         where('name_lowercase', '>=', search.toLowerCase()),
                                         where('name_lowercase', '<=', search.toLowerCase() + '\uf8ff'),

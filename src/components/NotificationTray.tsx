@@ -104,6 +104,14 @@ export default function NotificationTray({ isOpen, onClose }: NotificationTrayPr
     const { type, groupId, gameId, targetId } = notif;
     
     switch (type) {
+      case 'group_invite':
+        if (groupId) {
+          navigate(`/groups/${groupId}`);
+        } else {
+          console.warn("Missing groupId in group_invite notification");
+          navigate('/social?tab=groups');
+        }
+        break;
       case 'groups':
         if (groupId) navigate(`/groups/${groupId}`);
         else navigate('/groups');

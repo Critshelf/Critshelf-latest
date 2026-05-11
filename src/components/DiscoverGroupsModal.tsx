@@ -97,62 +97,68 @@ const DiscoverGroupsModal: React.FC<DiscoverGroupsModalProps> = ({ isOpen, onClo
     
     if (!user) return;
     if (!cleanCode) {
-      setJoinCodeError('Please enter a code');
+      setJoinCodeError('Please enter a 6-digit code');
       return;
     }
     if (cleanCode.length !== 6) {
-      setJoinCodeError('Code must be 6 digits');
+      setJoinCodeError('Invalid code: Must be exactly 6 digits');
       return;
     }
 
     setIsJoiningWithCode(true);
     setJoinCodeError('');
     try {
+      // a. Query the Groups collection where joinCode strictly matches
       const q = query(
         collection(db, 'groups'),
         where('joinCode', '==', cleanCode)
       );
       
       const snapshot = await getDocs(q);
+      
+      // b. If NO group is found, stop and set error state
       if (snapshot.empty) {
-        setJoinCodeError('Invalid or expired invite code');
+        setJoinCodeError('Invalid or expired join code.');
+        setIsJoiningWithCode(false);
         return;
       }
 
       const groupDoc = snapshot.docs[0];
+      const groupId = groupDoc.id;
       const groupData = groupDoc.data();
       const memberIds = groupData.memberIds || [];
 
+      // If already a member, just navigate
       if (memberIds.includes(user.uid)) {
-        onNavigateToGroup(groupDoc.id);
+        onNavigateToGroup(groupId);
         onClose();
         return;
       }
 
-      // Direct join
-      await updateDoc(doc(db, 'groups', groupDoc.id), {
+      // d. Execute updateDoc with arrayUnion
+      const groupRef = doc(db, 'groups', groupId);
+      await updateDoc(groupRef, {
         members: arrayUnion({ userId: user.uid, role: 'member' }),
         memberIds: arrayUnion(user.uid)
       });
 
-      // Log Activity
+      // Log activity
       logActivity({
         userId: user.uid,
         userName: user.displayName || 'Anonymous',
         avatarSeed: (profile as any)?.avatarSeed || user.uid,
         type: 'new_member',
-        groupId: groupDoc.id,
+        groupId: groupId,
         groupName: groupData.name
       });
 
-      // Success! Clear state and navigate
+      // e. Route the user after success
       setJoinCode('');
-      onNavigateToGroup(groupDoc.id);
+      onNavigateToGroup(groupId);
       onClose();
-    } catch (error) {
-      setJoinCodeError('Connection error. Please try again.');
-      console.error("Join code error:", error);
-      handleFirestoreError(error, OperationType.UPDATE, 'groups_join_code');
+    } catch (error: any) {
+      console.error("Failed to join group:", error);
+      setJoinCodeError('Failed to join group. Please try again.');
     } finally {
       setIsJoiningWithCode(false);
     }

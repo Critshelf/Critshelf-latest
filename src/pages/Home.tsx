@@ -71,40 +71,20 @@ interface Review {
   attackClass?: number;
 }
 
+import { useRecentGames } from '../hooks/useRecentGames';
+
 export default function Home() {
   const { profile, user, groupRatings } = useUser();
   const [rotationGames, setRotationGames] = useState<RotationGame[]>([]);
   const [rotationIndex, setRotationIndex] = useState(0);
-  const [recentGames, setRecentGames] = useState<Game[]>([]);
+  const { recentGames, loading: loadingRecent } = useRecentGames();
   const [friendReviews, setFriendReviews] = useState<any[]>([]);
   
   const [loadingRotation, setLoadingRotation] = useState(true);
-  const [loadingRecent, setLoadingRecent] = useState(true);
   const [loadingReviews, setLoadingReviews] = useState(true);
   
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    // 1. Real-time Recent Games (Global)
-    const qRecent = query(
-      collection(db, 'games'),
-      where('isApproved', '==', true),
-      where('isExpansion', '==', false),
-      orderBy('createdAt', 'desc'),
-      limit(5)
-    );
-    
-    const unsubscribeRecent = onSnapshot(qRecent, (snap) => {
-      setRecentGames(snap.docs.map(d => ({ id: d.id, ...d.data() } as Game)));
-      setLoadingRecent(false);
-    }, (error) => {
-      console.error("Recent Games Snapshot Error:", error);
-      setLoadingRecent(false);
-    });
-
-    return () => unsubscribeRecent();
-  }, []);
 
   useEffect(() => {
     // 2. Plays -> Rotation (Real-time, depends on user)

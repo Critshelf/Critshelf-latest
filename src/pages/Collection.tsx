@@ -61,12 +61,16 @@ export default function Collection() {
     }
 
     const path = 'userCollections';
-    const q = query(
+    let q = query(
       collection(db, path),
-      where('userId', '==', user.uid),
-      orderBy('addedAt', 'desc'),
-      limit(PAGE_SIZE)
+      where('userId', '==', user.uid)
     );
+
+    if (activeShelf !== 'all') {
+      q = query(q, where('shelf', '==', activeShelf));
+    }
+
+    q = query(q, orderBy('addedAt', 'desc'), limit(PAGE_SIZE));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const collectionItems = snapshot.docs.map(doc => ({
@@ -82,7 +86,7 @@ export default function Collection() {
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, activeShelf]);
 
   const fetchMoreItems = async () => {
     if (!user || !lastDoc || loadingMore) return;
@@ -90,9 +94,16 @@ export default function Collection() {
 
     const path = 'userCollections';
     try {
-      const q = query(
+      let q = query(
         collection(db, path),
-        where('userId', '==', user.uid),
+        where('userId', '==', user.uid)
+      );
+
+      if (activeShelf !== 'all') {
+        q = query(q, where('shelf', '==', activeShelf));
+      }
+
+      q = query(q, 
         orderBy('addedAt', 'desc'),
         startAfter(lastDoc),
         limit(PAGE_SIZE)

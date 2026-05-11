@@ -93,8 +93,8 @@ const GameCard: React.FC<GameCardProps> = ({
             className={cn(
               "w-full h-full object-cover transition-transform duration-700 group-hover:scale-125",
               game.hasHighResArt 
-                ? "opacity-100 filter-none" 
-                : (!game.bannerImage ? "blur-[8px] opacity-40" : "opacity-50")
+                ? "opacity-100 filter-none brightness-100 grayscale-0" 
+                : (!game.bannerImage ? "blur-[8px] opacity-40 grayscale brightness-75" : "opacity-50 grayscale brightness-75")
             )}
             style={game.bannerImage ? game.bannerStyles : undefined}
             referrerPolicy="no-referrer"
@@ -103,7 +103,12 @@ const GameCard: React.FC<GameCardProps> = ({
         </div>
         
         {/* Gradient Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-r from-charcoal via-charcoal/90 to-transparent" />
+        <div className={cn(
+          "absolute inset-0 transition-opacity duration-500",
+          game.hasHighResArt 
+            ? "bg-gradient-to-r from-charcoal/80 via-charcoal/40 to-transparent" 
+            : "bg-gradient-to-r from-charcoal via-charcoal/90 to-transparent"
+        )} />
         
         {/* Content */}
         <div className={cn(
@@ -205,6 +210,17 @@ const GameCard: React.FC<GameCardProps> = ({
         {game.trending && (
           <div className="absolute top-4 left-4 bg-emerald-accent text-charcoal text-[8px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-lg z-20 flex items-center gap-1">
             <TrendingUp className="w-3 h-3" /> Trending
+          </div>
+        )}
+
+        {/* Unverified Badge */}
+        {game.isApproved === false && (
+          <div className={cn(
+            "absolute top-4 bg-amber-500 text-white text-[8px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-lg z-20 flex items-center gap-1",
+            game.trending ? "left-24" : "left-4"
+          )}>
+            <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+            Unverified
           </div>
         )}
         

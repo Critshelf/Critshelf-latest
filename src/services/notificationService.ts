@@ -13,7 +13,7 @@ import {
   getDocs
 } from 'firebase/firestore';
 
-export type NotificationType = 'moderation' | 'social' | 'library' | 'groups';
+export type NotificationType = 'moderation' | 'social' | 'library' | 'groups' | 'group_invite';
 
 export interface Notification {
   id: string;

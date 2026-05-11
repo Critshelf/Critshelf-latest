@@ -19,7 +19,7 @@ export default function Browse() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [lastDoc, setLastDoc] = useState<any>(null);
   const [hasMore, setHasMore] = useState(true);
-  const [totalCount, setTotalCount] = useState(0);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
   const [debouncedSearch, setDebouncedSearch] = useState('');
   
   // Wikidata Search State
@@ -36,101 +36,122 @@ export default function Browse() {
 
   // Debounce search term
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(searchTerm), 500);
+    const timer = setTimeout(() => setDebouncedSearch(searchTerm), 300);
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  const fetchTotalCount = async () => {
-    try {
-      const coll = collection(db, 'games');
-      const snapshot = await getCountFromServer(coll);
-      setTotalCount(snapshot.data().count);
-    } catch (error) {
-      console.error("Error fetching count:", error);
+  const [currentLevel, setCurrentLevel] = useState(1);
+
+  // Total count
+  useEffect(() => {
+    const fetchTotalCount = async () => {
+      try {
+        const snapshot = await getCountFromServer(collection(db, 'games'));
+        setTotalCount(snapshot.data().count);
+      } catch (error) {
+        console.error("Error fetching count:", error);
+      }
+    };
+    fetchTotalCount();
+  }, []);
+
+  const buildBaseQuery = (level: number) => {
+    let q = query(collection(db, 'games'));
+
+    if (level === 1) {
+      q = query(q, where('isExpansion', '==', false));
+    } else if (level === 2) {
+      // Level 2 was previously just approved, now it is same as Level 1
+      q = query(q, where('isExpansion', '==', false));
     }
+
+    if (debouncedSearch) {
+      const queryTerm = debouncedSearch.toLowerCase();
+      q = query(q, 
+        where('name_lowercase', '>=', queryTerm),
+        where('name_lowercase', '<=', queryTerm + '\uf8ff'),
+        orderBy('name_lowercase')
+      );
+    } else {
+      q = query(q, orderBy('title'));
+    }
+
+    return q;
   };
+
+  useEffect(() => {
+    setLoading(true);
+    let unsubscribe: (() => void) | undefined;
+
+    const startSearch = async (level: number) => {
+      try {
+        setCurrentLevel(level);
+        const q = buildBaseQuery(level);
+        const limitedQ = query(q, limit(PAGE_SIZE));
+
+        unsubscribe = onSnapshot(limitedQ, (snapshot) => {
+          const gameList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
+          
+          if (gameList.length === 0 && level < 3 && !debouncedSearch) {
+            if (unsubscribe) unsubscribe();
+            startSearch(level + 1);
+            return;
+          }
+
+          setGames(gameList);
+          setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
+          setHasMore(snapshot.docs.length === PAGE_SIZE);
+          setLoading(false);
+        }, (error) => {
+          console.warn(`Search level ${level} failed:`, error.message);
+          if (level < 3) {
+            if (unsubscribe) unsubscribe();
+            startSearch(level + 1);
+          } else {
+            setLoading(false);
+          }
+        });
+      } catch (err) {
+        console.error("Critical search error:", err);
+        setLoading(false);
+      }
+    };
+
+    startSearch(1);
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [debouncedSearch, activePlayerCount, JSON.stringify(selectedGenres)]);
 
   const fetchMoreGames = async () => {
     if (!lastDoc || loadingMore) return;
     setLoadingMore(true);
 
-    const path = 'games';
     try {
-      let q = query(
-        collection(db, path),
-        where('isApproved', '==', true),
-        where('isExpansion', '==', false),
-        orderBy('title'),
+      const q = query(
+        buildBaseQuery(currentLevel),
         startAfter(lastDoc),
         limit(PAGE_SIZE)
       );
 
-      // If there's a search term, we need to adjust the query for pagination
-      if (debouncedSearch) {
-        const queryTerm = debouncedSearch.toLowerCase();
-        q = query(
-          collection(db, path),
-          where('isApproved', '==', true),
-          where('isExpansion', '==', false),
-          where('name_lowercase', '>=', queryTerm),
-          where('name_lowercase', '<=', queryTerm + '\uf8ff'),
-          orderBy('name_lowercase'),
-          startAfter(lastDoc),
-          limit(PAGE_SIZE)
-        );
-      }
-
       const snapshot = await getDocs(q);
       const gameList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
       
-      setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
-      setHasMore(snapshot.docs.length === PAGE_SIZE);
-      setGames(prev => [...prev, ...gameList]);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.LIST, path);
+      if (snapshot.docs.length > 0) {
+        setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
+        setHasMore(snapshot.docs.length === PAGE_SIZE);
+        setGames(prev => [...prev, ...gameList]);
+      } else {
+        setHasMore(false);
+      }
+    } catch (error: any) {
+      console.warn("fetchMoreGames failed:", error.message);
+      setHasMore(false);
     } finally {
       setLoadingMore(false);
     }
   };
-
-  useEffect(() => {
-    setLoading(true);
-    fetchTotalCount();
-
-    let q = query(
-      collection(db, 'games'), 
-      where('isApproved', '==', true),
-      where('isExpansion', '==', false),
-      orderBy('title'), 
-      limit(PAGE_SIZE)
-    );
-
-    if (debouncedSearch) {
-      const queryTerm = debouncedSearch.toLowerCase();
-      q = query(
-        collection(db, 'games'),
-        where('isApproved', '==', true),
-        where('isExpansion', '==', false),
-        where('name_lowercase', '>=', queryTerm),
-        where('name_lowercase', '<=', queryTerm + '\uf8ff'),
-        orderBy('name_lowercase'),
-        limit(PAGE_SIZE)
-      );
-    }
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const gameList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
-      setGames(gameList);
-      setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
-      setHasMore(snapshot.docs.length === PAGE_SIZE);
-      setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'games');
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [debouncedSearch]);
 
   // Wikidata Search Effect
   useEffect(() => {

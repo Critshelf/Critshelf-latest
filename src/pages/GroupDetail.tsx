@@ -178,11 +178,6 @@ export default function GroupDetail() {
 
   useEffect(() => {
     if (!id || !user) return;
-    fetchGroupData(id);
-  }, [id, user]);
-
-  useEffect(() => {
-    if (!id || !user) return;
     const now = new Date();
     const q = query(
       collection(db, 'groupPolls'),
@@ -207,10 +202,9 @@ export default function GroupDetail() {
       .map(v => ({
         userId: v.userId,
         displayName: v.userName,
-        status: v.status === 'maybe' ? 'maybe' : 'going' // Map yes to going, maybe to maybe
+        status: v.status === 'maybe' ? 'maybe' : 'going'
       }));
 
-    // Ensure creator is included as "going" if not already in votes
     if (!attendees.some(a => a.userId === poll.creatorId)) {
       attendees.push({
         userId: poll.creatorId,
@@ -221,14 +215,43 @@ export default function GroupDetail() {
 
     setPrefilledEventData({
       title: poll.title,
-      dateTime: poll.options[optionIndex], // Assuming option is a datetime-local compatible string or close
+      dateTime: poll.options[optionIndex],
       attendees,
       sourcePollId: poll.id
     });
     
-    setIsActivePollsOpen(false); // Close polls view
-    setIsCreateEventOpen(true); // Open event creator
+    setIsActivePollsOpen(false);
+    setIsCreateEventOpen(true);
   };
+
+  useEffect(() => {
+    if (!id || !user) return;
+    
+    // Use onSnapshot for real-time group data updates (members, info, etc.)
+    const unsubscribe = onSnapshot(doc(db, 'groups', id), (groupDoc) => {
+      if (groupDoc.exists()) {
+        const groupData = { id: groupDoc.id, ...groupDoc.data() } as Group;
+        setGroup(groupData);
+        // Fetch full profiles for member IDs
+        fetchMembers(groupData.memberIds || groupData.members.map((m: any) => typeof m === 'string' ? m : m.userId));
+        
+        // Initial fetches for other data (these have their own listeners or are fetch-once)
+        fetchEvents(id);
+        fetchRequests(id);
+        fetchPlays(id);
+        fetchFollowing();
+      } else {
+        console.warn("Group not found, redirecting...");
+        navigate('/social?tab=groups');
+      }
+      setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'groups/' + id);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [id, user]);
 
   const fetchGroupData = async (groupId: string) => {
     const path = 'groups';
@@ -242,13 +265,9 @@ export default function GroupDetail() {
         fetchRequests(groupId);
         fetchPlays(groupId);
         fetchFollowing();
-      } else {
-        navigate('/social?tab=groups');
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.GET, path);
-    } finally {
-      setLoading(false);
     }
   };
 

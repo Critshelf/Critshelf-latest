@@ -485,7 +485,13 @@ export default function GamePage() {
     
     // DC and Ratings rely on ALL reviews for that game (or base game)
     const targetGameId = game.baseGameId || id;
-    const allReviewsQ = query(collection(db, 'reviews'), where('gameId', '==', targetGameId));
+    // Limit and optimize reviews query for community stats calculation
+    // This prevents massive read counts for popular games
+    const allReviewsQ = query(
+      collection(db, 'reviews'), 
+      where('gameId', '==', targetGameId),
+      limit(100) // Caps aggregate reads to 100 per page load
+    );
     
     const unsubscribe = onSnapshot(allReviewsQ, async (allReviewsSnap) => {
       const allReviewsData = allReviewsSnap.docs.map(d => d.data());
@@ -617,8 +623,8 @@ export default function GamePage() {
             className={cn(
               "w-full h-full object-cover scale-110 transiton-all duration-700",
               game.hasHighResArt 
-                ? "opacity-100 filter-none" 
-                : (!game.bannerImage ? "blur-2xl opacity-30" : "opacity-40")
+                ? "opacity-100 filter-none brightness-100 grayscale-0" 
+                : (!game.bannerImage ? "blur-2xl opacity-30 grayscale brightness-75" : "opacity-40 grayscale brightness-75")
             )}
             style={game.bannerImage ? game.bannerStyles : undefined}
             referrerPolicy="no-referrer"
@@ -626,7 +632,12 @@ export default function GamePage() {
         </div>
         
         {/* Gradient Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-r from-charcoal via-charcoal/60 to-transparent" />
+        <div className={cn(
+          "absolute inset-0 transition-opacity duration-500",
+          game.hasHighResArt 
+            ? "bg-gradient-to-r from-charcoal/80 via-charcoal/20 to-transparent" 
+            : "bg-gradient-to-r from-charcoal via-charcoal/60 to-transparent"
+        )} />
         
         <button 
           onClick={() => navigate(-1)}
@@ -661,6 +672,12 @@ export default function GamePage() {
             <p className="text-emerald-accent font-black uppercase tracking-widest text-sm mb-2">
               {game.publishers?.[0] || game.publisher || 'Independent Publisher'}
             </p>
+            {game.isApproved === false && (
+              <div className="flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-500 text-[10px] font-black uppercase tracking-[0.2em] shadow-lg mb-4 w-fit">
+                <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                Unverified Listing
+              </div>
+            )}
             <div className="flex items-center gap-4 mb-6">
               <GameTitleWithDC 
                 game={game} 

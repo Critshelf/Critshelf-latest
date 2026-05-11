@@ -19,7 +19,6 @@ export default function NewArrivals() {
         // Try sorting by createdAt first
         const q = query(
           collection(db, path), 
-          where('isApproved', '==', true),
           orderBy('createdAt', 'desc'), 
           limit(5)
         );
@@ -32,7 +31,6 @@ export default function NewArrivals() {
           // Fallback to document ID sorting if createdAt doesn't exist on all docs
           const qFallback = query(
             collection(db, path), 
-            where('isApproved', '==', true),
             orderBy('__name__', 'desc'), 
             limit(5)
           );
@@ -99,8 +97,15 @@ export default function NewArrivals() {
                 <div className="absolute inset-0 bg-gradient-to-t from-charcoal to-transparent opacity-60" />
                 
                 {/* Small indicator for newness */}
-                <div className="absolute top-3 right-3 bg-emerald-accent text-charcoal text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest shadow-lg">
-                  New
+                <div className="absolute top-3 right-3 flex flex-col gap-1 items-end">
+                  <div className="bg-emerald-accent text-charcoal text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest shadow-lg">
+                    New
+                  </div>
+                  {game.isApproved === false && (
+                    <div className="bg-amber-500 text-white text-[7px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest shadow-lg">
+                      Unverified
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="p-4 flex-1 flex flex-col justify-center relative z-10">
