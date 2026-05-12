@@ -9,6 +9,7 @@ import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { collection, getDocs, query, limit, doc, orderBy, startAfter, getCountFromServer, where, onSnapshot } from 'firebase/firestore';
 import { useUser } from '../contexts/UserContext';
 import { searchWikidata, fetchAndSaveWikidataGame } from '../services/wikidataService';
+import { BOARD_GAME_CATEGORIES } from '../constants';
 
 export default function Browse() {
   const { profile, groupRatings } = useUser();
@@ -61,8 +62,12 @@ export default function Browse() {
     if (level === 1) {
       q = query(q, where('isExpansion', '==', false));
     } else if (level === 2) {
-      // Level 2 was previously just approved, now it is same as Level 1
       q = query(q, where('isExpansion', '==', false));
+    }
+
+    if (selectedGenres.length > 0) {
+      // Use the first selected genre for server-side filtering
+      q = query(q, where('categories', 'array-contains', selectedGenres[0]));
     }
 
     if (debouncedSearch) {
@@ -169,16 +174,6 @@ export default function Browse() {
     });
   }, [debouncedSearch]);
 
-  const availableGenres = useMemo(() => {
-    const uniqueCategories = new Set<string>();
-    games.forEach(game => {
-      // Use both categories (patched) and genres (original) for maximum coverage
-      game.categories?.forEach(cat => uniqueCategories.add(cat));
-      game.genres?.forEach(genre => uniqueCategories.add(genre));
-    });
-    return Array.from(uniqueCategories).sort((a, b) => a.localeCompare(b));
-  }, [games]);
-
   const filteredGames = useMemo(() => {
     // Deduplicate Firestore and Wikidata results
     const fsTitles = new Set(games.map(g => g.title.toLowerCase()));
@@ -234,8 +229,8 @@ export default function Browse() {
   const toggleGenre = (genre: string) => {
     setSelectedGenres(prev => 
       prev.includes(genre) 
-        ? prev.filter(g => g !== genre) 
-        : [...prev, genre]
+        ? [] 
+        : [genre]
     );
   };
 
@@ -280,7 +275,7 @@ export default function Browse() {
           onPlayTimeChange={setActivePlayTime}
           selectedGenres={selectedGenres}
           onGenresChange={setSelectedGenres}
-          availableGenres={availableGenres}
+          availableGenres={BOARD_GAME_CATEGORIES}
           totalResults={searchTerm || hasActiveFilters ? filteredGames.length : totalCount}
           resultsLabel={searchTerm || hasActiveFilters ? 'Matches Found' : 'Total Games'}
           showAddManualLink={true}

@@ -18,6 +18,7 @@ import { useUser } from '../contexts/UserContext';
 import GameSearchAndFilter from '../components/GameSearchAndFilter';
 import GameCard, { Game } from '../components/GameCard';
 import BGGImport from '../components/BGGImport';
+import { BOARD_GAME_CATEGORIES } from '../constants';
 import { Upload } from 'lucide-react';
 
 interface CollectionItem {
@@ -164,16 +165,6 @@ export default function Collection() {
     return () => unsubscribes.forEach(un => un());
   }, [itemIdsKey]);
 
-
-  const availableGenres = useMemo(() => {
-    const uniqueCategories = new Set<string>();
-    (Object.values(gamesData) as Game[]).forEach(game => {
-      game.categories?.forEach(cat => uniqueCategories.add(cat));
-      game.genres?.forEach(genre => uniqueCategories.add(genre));
-    });
-    return Array.from(uniqueCategories).sort((a, b) => a.localeCompare(b));
-  }, [gamesData]);
-
   const filteredItems = useMemo(() => {
     return items.filter(item => {
       // 1. Shelf Filter
@@ -303,7 +294,7 @@ export default function Collection() {
             onPlayTimeChange={setActivePlayTime}
             selectedGenres={selectedGenres}
             onGenresChange={setSelectedGenres}
-            availableGenres={availableGenres}
+            availableGenres={BOARD_GAME_CATEGORIES}
             totalResults={filteredItems.length}
             resultsLabel="Collection Matches"
             placeholder="Search your collection..."

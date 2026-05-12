@@ -106,3 +106,32 @@ export const VIBE_OPTIONS = [
   "🤬 Friendship Ender",
   "🎉 Party Starter"
 ];
+
+export const BOARD_GAME_CATEGORIES = [
+  "Abstract",
+  "Adventure",
+  "Area Control",
+  "Bluffing",
+  "Card Game",
+  "Civilization",
+  "Cooperative",
+  "Deckbuilding",
+  "Deduction",
+  "Dice",
+  "Economic",
+  "Family",
+  "Fantasy",
+  "Horror",
+  "Miniatures",
+  "Party",
+  "Puzzle",
+  "Racing",
+  "Real-time",
+  "Roll-and-Write",
+  "Science Fiction",
+  "Strategy",
+  "Thematic",
+  "Trivia",
+  "Wargame",
+  "Worker Placement"
+];
