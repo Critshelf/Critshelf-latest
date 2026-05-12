@@ -51,7 +51,7 @@ import GameCard, { Game } from '../components/GameCard';
 import { useUser } from '../contexts/UserContext';
 import ActivityItem from '../components/ActivityItem';
 // import logo from '../assets/logo.png';
-const logo = '/logo.png'; // Place your logo.png in the public folder
+const logo = '/logo.png?v=2'; // Adding version parameter to force refresh of updated asset
 
 interface RotationGame extends Game {
   playCount: number;

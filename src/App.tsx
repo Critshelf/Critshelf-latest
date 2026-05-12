@@ -37,7 +37,7 @@ function AppContent() {
     <Router>
       <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
         <Navbar />
-        <main>
+        <main className="pb-32">
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/browse" element={<Browse />} />

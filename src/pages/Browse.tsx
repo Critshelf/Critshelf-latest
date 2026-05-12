@@ -92,24 +92,15 @@ export default function Browse() {
         unsubscribe = onSnapshot(limitedQ, (snapshot) => {
           const gameList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
           
-          if (gameList.length === 0 && level < 3 && !debouncedSearch) {
-            if (unsubscribe) unsubscribe();
-            startSearch(level + 1);
-            return;
-          }
-
           setGames(gameList);
           setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
           setHasMore(snapshot.docs.length === PAGE_SIZE);
           setLoading(false);
         }, (error) => {
-          console.warn(`Search level ${level} failed:`, error.message);
-          if (level < 3) {
-            if (unsubscribe) unsubscribe();
-            startSearch(level + 1);
-          } else {
-            setLoading(false);
+          if (error.code === 'resource-exhausted') {
+            console.error("Firestore quota exceeded in Browse.");
           }
+          setLoading(false);
         });
       } catch (err) {
         console.error("Critical search error:", err);

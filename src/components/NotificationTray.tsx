@@ -144,7 +144,7 @@ export default function NotificationTray({ isOpen, onClose }: NotificationTrayPr
           initial={{ opacity: 0, y: 10, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 10, scale: 0.95 }}
-          className="absolute bottom-full mb-4 right-0 w-[22rem] bg-charcoal border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden z-[100] md:bottom-auto md:top-full md:mt-4"
+          className="absolute bottom-full mb-4 right-0 w-[22rem] bg-charcoal border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden z-[100]"
         >
           {/* Header */}
           <div className="p-6 border-b border-white/10 flex items-center justify-between bg-white/5">

@@ -428,35 +428,39 @@ export default function GamePage() {
       setLoading(false);
     });
 
-    // 2. Community Recent Reviews Feed Listener
-    const recentReviewsQ = query(collection(db, 'reviews'), where('gameId', '==', id), orderBy('createdAt', 'desc'), limit(10));
-    unsubscribeRecentReviews = onSnapshot(recentReviewsQ, async (snap) => {
-      const fetchedReviews = snap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        date: 'Recently'
-      })) as any[];
+    // 2. Community Recent Reviews Feed - Fetch Once (or refresh on post)
+    const fetchRecentReviews = async () => {
+      const recentReviewsQ = query(collection(db, 'reviews'), where('gameId', '==', id), orderBy('createdAt', 'desc'), limit(10));
+      try {
+        const snap = await getDocs(recentReviewsQ);
+        const fetchedReviews = snap.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          date: 'Recently'
+        })) as any[];
 
-      if (fetchedReviews.length > 0) {
-        try {
-          const reviewerIds = Array.from(new Set(fetchedReviews.map(r => r.userId)));
-          const usersSnap = await getDocs(query(collection(db, 'users'), where('uid', 'in', reviewerIds)));
-          const userMap = usersSnap.docs.reduce((acc, doc) => {
-            acc[doc.id] = doc.data().attackClass;
-            return acc;
-          }, {} as Record<string, number>);
-          
-          fetchedReviews.forEach(r => {
-            r.attackClass = userMap[r.userId];
-          });
-        } catch (err) {
-          console.error("User map fetch error:", err);
+        if (fetchedReviews.length > 0) {
+          try {
+            const reviewerIds = Array.from(new Set(fetchedReviews.map(r => r.userId)));
+            const usersSnap = await getDocs(query(collection(db, 'users'), where('uid', 'in', reviewerIds)));
+            const userMap = usersSnap.docs.reduce((acc, doc) => {
+              acc[doc.id] = (doc.data() as any).attackClass;
+              return acc;
+            }, {} as Record<string, number>);
+            
+            fetchedReviews.forEach(r => {
+              r.attackClass = userMap[r.userId];
+            });
+          } catch (err) {
+            console.error("User map fetch error:", err);
+          }
         }
+        setReviews(fetchedReviews);
+      } catch (error) {
+        console.error("Recent reviews fetch error:", error);
       }
-      setReviews(fetchedReviews);
-    }, (error) => {
-      console.error("Recent reviews snapshot error:", error);
-    });
+    };
+    fetchRecentReviews();
 
     // 3. Fetch Expansions Once (or when id changes)
     const fetchExpansions = async () => {
@@ -479,47 +483,42 @@ export default function GamePage() {
     };
   }, [id]);
 
-  // Separate effect for reviews and DC calculation to avoid nested listeners
+  // Separate effect for reviews and DC calculation - Fetch Once
   useEffect(() => {
     if (!id || !game) return;
     
     // DC and Ratings rely on ALL reviews for that game (or base game)
     const targetGameId = game.baseGameId || id;
-    // Limit and optimize reviews query for community stats calculation
-    // This prevents massive read counts for popular games
-    const allReviewsQ = query(
-      collection(db, 'reviews'), 
-      where('gameId', '==', targetGameId),
-      limit(100) // Caps aggregate reads to 100 per page load
-    );
-    
-    const unsubscribe = onSnapshot(allReviewsQ, async (allReviewsSnap) => {
-      const allReviewsData = allReviewsSnap.docs.map(d => d.data());
-      setAllGameReviews(allReviewsData);
+    const fetchStats = async () => {
+      try {
+        const allReviewsQ = query(
+          collection(db, 'reviews'), 
+          where('gameId', '==', targetGameId),
+          limit(100) 
+        );
+        const allReviewsSnap = await getDocs(allReviewsQ);
+        const allReviewsData = allReviewsSnap.docs.map(d => d.data());
+        setAllGameReviews(allReviewsData);
 
-      // DC Reference Data (Static or from game state)
-      let dcReferenceData = game;
-      if (game.baseGameId && (!baseGame || baseGame.id !== game.baseGameId)) {
-        // Only fetch if we don't have it already
-        try {
+        let dcReferenceData = game;
+        if (game.baseGameId && (!baseGame || baseGame.id !== game.baseGameId)) {
           const bSnap = await getDoc(doc(db, 'games', game.baseGameId));
           if (bSnap.exists()) dcReferenceData = bSnap.data() as Game;
-        } catch (err) {
-          console.error("DC base game fetch error:", err);
+        } else if (baseGame) {
+          dcReferenceData = baseGame;
         }
-      } else if (baseGame) {
-        dcReferenceData = baseGame;
+
+        const baseDC = calculateBaseDC(dcReferenceData);
+        const difficultyRatings = allReviewsData
+          .map(r => r.difficultyRating)
+          .filter(r => typeof r === 'number');
+        
+        setCommunityDC(difficultyRatings.length > 0 ? calculateFinalDC(baseDC, difficultyRatings) : baseDC);
+      } catch (error) {
+        console.error("Stats fetch error:", error);
       }
-
-      const baseDC = calculateBaseDC(dcReferenceData);
-      const difficultyRatings = allReviewsData
-        .map(r => r.difficultyRating)
-        .filter(r => typeof r === 'number');
-      
-      setCommunityDC(difficultyRatings.length > 0 ? calculateFinalDC(baseDC, difficultyRatings) : baseDC);
-    });
-
-    return () => unsubscribe();
+    };
+    fetchStats();
   }, [id, game?.id, game?.baseGameId, baseGame?.id]);
 
   // Separate effect for user-specific data

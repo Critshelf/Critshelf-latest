@@ -236,14 +236,6 @@ export default function GroupDetail() {
       if (groupDoc.exists()) {
         const groupData = { id: groupDoc.id, ...groupDoc.data() } as Group;
         setGroup(groupData);
-        // Fetch full profiles for member IDs
-        fetchMembers(groupData.memberIds || groupData.members.map((m: any) => typeof m === 'string' ? m : m.userId));
-        
-        // Initial fetches for other data (these have their own listeners or are fetch-once)
-        fetchEvents(id);
-        fetchRequests(id);
-        fetchPlays(id);
-        fetchFollowing();
       } else {
         console.warn("Group not found, redirecting...");
         navigate('/social?tab=groups');
@@ -255,6 +247,31 @@ export default function GroupDetail() {
     });
 
     return () => unsubscribe();
+  }, [id, user, navigate]);
+
+  // Secondary fetches - only run when relevant data changes or initially
+  useEffect(() => {
+    if (!id || !group) return;
+    
+    // Fetch members profile data whenever memberIds changes
+    const memberIds = group.memberIds || group.members.map((m: any) => typeof m === 'string' ? m : m.userId);
+    fetchMembers(memberIds);
+  }, [group?.memberIds, id]);
+
+  useEffect(() => {
+    if (!id || !user) return;
+    
+    // Setup listeners for feed and events (once per group visit)
+    const unsubEvents = fetchEvents(id);
+    const unsubRequests = fetchRequests(id);
+    const unsubPlays = fetchPlays(id);
+    fetchFollowing();
+
+    return () => {
+      unsubEvents();
+      unsubRequests();
+      unsubPlays();
+    };
   }, [id, user]);
 
   const fetchGroupData = async (groupId: string) => {

@@ -119,7 +119,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let unsubscribeProfile: (() => void) | null = null;
     let unsubscribeGroups: (() => void) | null = null;
-    let groupListeners: (() => void)[] = [];
+    const groupListeners = new Map<string, () => void>();
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
@@ -139,43 +139,55 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           }
           setLoading(false);
         }, (error) => {
-          console.error("Profile Snapshot Error:", error);
+          if (error.code === 'resource-exhausted') {
+            console.error("Profile Snapshot Error (Quota Exceeded)");
+          }
           setLoading(false);
         });
 
         // Setup real-time groups and group ratings listener
         const qGroups = query(collection(db, 'groups'), where('memberIds', 'array-contains', currentUser.uid));
         unsubscribeGroups = onSnapshot(qGroups, (groupsSnap) => {
-          // Clean up existing group subcollection listeners
-          groupListeners.forEach(un => un());
-          groupListeners = [];
+          const currentGroupIds = new Set(groupsSnap.docs.map(d => d.id));
+          
+          // 1. Cleanup listeners for groups we're no longer in
+          for (const [gid, unsub] of groupListeners.entries()) {
+            if (!currentGroupIds.has(gid)) {
+              unsub();
+              groupListeners.delete(gid);
+            }
+          }
 
+          // 2. Add listeners for new groups
           groupsSnap.docs.forEach(groupDoc => {
-            const groupData = groupDoc.data();
-            const groupName = groupData.name;
             const groupId = groupDoc.id;
+            const groupName = groupDoc.data().name;
 
-            const subUn = onSnapshot(collection(db, 'groups', groupId, 'GroupGames'), (gamesSnap) => {
-              setGroupRatings(prev => {
-                const next = { ...prev };
-                gamesSnap.docs.forEach(gameDoc => {
-                  const gameData = gameDoc.data();
-                  // Store the rating, potentially overwriting if in multiple groups (simple fallback)
-                  next[gameDoc.id] = {
-                    gameId: gameDoc.id,
-                    rating: gameData.average_d20,
-                    groupName: groupName
-                  };
+            if (!groupListeners.has(groupId)) {
+              const subUn = onSnapshot(collection(db, 'groups', groupId, 'GroupGames'), (gamesSnap) => {
+                setGroupRatings(prev => {
+                  const next = { ...prev };
+                  gamesSnap.docs.forEach(gameDoc => {
+                    next[gameDoc.id] = {
+                      gameId: gameDoc.id,
+                      rating: gameDoc.data().average_d20,
+                      groupName: groupName
+                    };
+                  });
+                  return next;
                 });
-                return next;
+              }, (error) => {
+                if (error.code !== 'resource-exhausted') {
+                  console.error(`GroupGames Snapshot Error for ${groupId}:`, error);
+                }
               });
-            }, (error) => {
-              console.error(`GroupGames Snapshot Error for ${groupId}:`, error);
-            });
-            groupListeners.push(subUn);
+              groupListeners.set(groupId, subUn);
+            }
           });
         }, (error) => {
-          console.error("Groups Snapshot Error:", error);
+          if (error.code === 'resource-exhausted') {
+            console.error("Groups Snapshot Error (Quota Exceeded)");
+          }
         });
       } else {
         setProfile(null);
@@ -183,7 +195,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         if (unsubscribeProfile) unsubscribeProfile();
         if (unsubscribeGroups) unsubscribeGroups();
         groupListeners.forEach(un => un());
-        groupListeners = [];
+        groupListeners.clear();
         setLoading(false);
       }
     });
@@ -193,6 +205,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       if (unsubscribeProfile) unsubscribeProfile();
       if (unsubscribeGroups) unsubscribeGroups();
       groupListeners.forEach(un => un());
+      groupListeners.clear();
     };
   }, []);
 

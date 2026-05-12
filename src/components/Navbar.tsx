@@ -69,7 +69,7 @@ export default function Navbar() {
 
   return (
     <>
-      <nav className="fixed bottom-6 left-6 right-6 bg-charcoal/80 backdrop-blur-xl border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.5)] rounded-[2rem] px-4 py-3 z-50 md:top-6 md:bottom-auto md:max-w-4xl md:mx-auto">
+      <nav className="fixed bottom-6 left-6 right-6 bg-charcoal/80 backdrop-blur-xl border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.5)] rounded-[2rem] px-4 py-3 z-50 md:max-w-4xl md:mx-auto">
         <div className="flex justify-around items-center">
           {navItems.map(({ to, icon: Icon, label, isAction }) => (
             isAction ? (
@@ -150,7 +150,7 @@ export default function Navbar() {
                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    className="absolute bottom-full mb-4 right-0 w-64 bg-charcoal/95 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden z-[100] md:bottom-auto md:top-full md:mt-4"
+                    className="absolute bottom-full mb-4 right-0 w-64 bg-charcoal/95 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden z-[100]"
                   >
                     <div className="p-4 border-b border-white/10 flex items-center gap-3 bg-white/5">
                       <UserAvatar user={profile || user} size="sm" />

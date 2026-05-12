@@ -5,7 +5,7 @@ import { Dices, LogIn, Sparkles, Mail, Lock, User, Loader2, AlertTriangle, Arrow
 import { motion, AnimatePresence } from 'motion/react';
 
 // import logo from '../assets/logo.png';
-const logo = '/logo.png'; // Place your logo.png in the public folder
+const logo = '/logo.png?v=2'; // Adding version parameter to force refresh
 
 export default function Auth() {
   const { user, signInWithGoogle, signInWithEmail, signUpWithEmail, loading } = useUser();
