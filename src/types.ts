@@ -6,6 +6,8 @@ export interface Game {
   coverImage?: string;
   thumbnail?: string;
   bannerImage?: string;
+  hasHighResArt?: boolean;
+  customImageApproved?: boolean;
   minPlayers?: number;
   maxPlayers?: number;
   playTime?: string;

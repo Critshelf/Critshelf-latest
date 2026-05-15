@@ -9,7 +9,8 @@ import {
   Dices,
   CheckCircle2,
   Megaphone,
-  Users
+  Users,
+  Clock
 } from 'lucide-react';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { 
@@ -23,7 +24,7 @@ import {
   addDoc,
   serverTimestamp
 } from 'firebase/firestore';
-import { cn } from '../lib/utils';
+import { cn, formatPlayTime } from '../lib/utils';
 import LogPlayModal from './LogPlayModal';
 import D20Die from './D20Die';
 import GameTitleWithDC from './GameTitleWithDC';
@@ -86,89 +87,89 @@ export default function GroupLibrary({ groupId, members }: GroupLibraryProps) {
   useEffect(() => {
     if (!members.length || !user) return;
 
-    // 1. Listen to Group Games Stats
-    const statsUnsubscribe = onSnapshot(collection(db, 'groups', groupId, 'GroupGames'), (snapshot) => {
-      const stats: Record<string, any> = {};
-      snapshot.docs.forEach(d => {
-        stats[d.id] = d.data();
-      });
-      setGroupGameStats(stats);
-    });
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        // 1. Fetch Group Games Stats
+        const statsSnap = await getDocs(collection(db, 'groups', groupId, 'GroupGames'));
+        const stats: Record<string, any> = {};
+        statsSnap.docs.forEach(d => {
+          stats[d.id] = d.data();
+        });
+        setGroupGameStats(stats);
 
-    const memberIds = members.map(m => m.uid);
-    // Firestore 'in' query limit is 30. If group > 30, we'd need to chunk.
-    const q = query(
-      collection(db, 'userCollections'),
-      where('userId', 'in', memberIds.slice(0, 30)),
-      where('shelf', '==', 'owned')
-    );
+        // 2. Fetch Member Collections
+        const memberIds = members.map(m => m.uid);
+        const q = query(
+          collection(db, 'userCollections'),
+          where('userId', 'in', memberIds.slice(0, 30)),
+          where('shelf', '==', 'owned')
+        );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CollectionItem));
-      
-      // Deduplication and grouping logic
-      const gameMap = new Map<string, LibraryGame>();
+        const collSnap = await getDocs(q);
+        const items = collSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as CollectionItem));
+        
+        const gameMap = new Map<string, LibraryGame>();
 
-      items.forEach(item => {
-        const owner = members.find(m => m.uid === item.userId);
-        if (!owner) return;
+        items.forEach(item => {
+          const owner = members.find(m => m.uid === item.userId);
+          if (!owner) return;
 
-        if (gameMap.has(item.gameId)) {
-          const existing = gameMap.get(item.gameId)!;
-          if (!existing.owners.find(o => o.uid === owner.uid)) {
-            existing.owners.push(owner);
+          if (gameMap.has(item.gameId)) {
+            const existing = gameMap.get(item.gameId)!;
+            if (!existing.owners.find(o => o.uid === owner.uid)) {
+              existing.owners.push(owner);
+            }
+          } else {
+            gameMap.set(item.gameId, {
+              gameId: item.gameId,
+              title: item.gameTitle,
+              cover: item.gameCover,
+              owners: [owner],
+              communityRating: (item as any).communityRating || 18
+            });
           }
-        } else {
-          gameMap.set(item.gameId, {
-            gameId: item.gameId,
-            title: item.gameTitle,
-            cover: item.gameCover,
-            owners: [owner],
-            communityRating: (item as any).communityRating || 18
-          });
-        }
-      });
+        });
 
-      // Mock Data Integration for "Friday Night Dice"
-      if (groupId === 'friday_night_dice') {
-        const corey = members.find(m => m.displayName.toLowerCase().includes('corey')) || members[0];
-        const natasha = members.find(m => m.displayName.toLowerCase().includes('natasha')) || members[1];
+        // Mock Data for "Friday Night Dice"
+        if (groupId === 'friday_night_dice') {
+          const corey = members.find(m => m.displayName.toLowerCase().includes('corey')) || members[0];
+          const natasha = members.find(m => m.displayName.toLowerCase().includes('natasha')) || members[1];
 
-        if (corey && natasha) {
-          gameMap.set('loveletter', {
-            gameId: 'loveletter',
-            title: 'Love Letter',
-            cover: 'https://images.unsplash.com/photo-1611996591156-66715960c811?auto=format&fit=crop&q=80&w=400',
-            owners: [corey, natasha],
-            communityRating: 19
-          });
-          gameMap.set('ticket-to-ride', {
-            gameId: 'ticket-to-ride',
-            title: 'Ticket to Ride',
-            cover: 'https://images.unsplash.com/photo-1610819013583-67021be397e7?auto=format&fit=crop&q=80&w=400',
-            owners: [natasha],
-            communityRating: 17
-          });
-          gameMap.set('worker-removal-proto', {
-            gameId: 'worker-removal-proto',
-            title: 'Worker Removal Prototype',
-            cover: 'https://images.unsplash.com/photo-1553481187-be93c21490a9?auto=format&fit=crop&q=80&w=400',
-            owners: [corey],
-            communityRating: 20
-          });
+          if (corey && natasha) {
+            gameMap.set('loveletter', {
+              gameId: 'loveletter',
+              title: 'Love Letter',
+              cover: 'https://images.unsplash.com/photo-1611996591156-66715960c811?auto=format&fit=crop&q=80&w=400',
+              owners: [corey, natasha],
+              communityRating: 19
+            });
+            gameMap.set('ticket-to-ride', {
+              gameId: 'ticket-to-ride',
+              title: 'Ticket to Ride',
+              cover: 'https://images.unsplash.com/photo-1610819013583-67021be397e7?auto=format&fit=crop&q=80&w=400',
+              owners: [natasha],
+              communityRating: 17
+            });
+            gameMap.set('worker-removal-proto', {
+              gameId: 'worker-removal-proto',
+              title: 'Worker Removal Prototype',
+              cover: 'https://images.unsplash.com/photo-1553481187-be93c21490a9?auto=format&fit=crop&q=80&w=400',
+              owners: [corey],
+              communityRating: 20
+            });
+          }
         }
+
+        setLibraryGames(Array.from(gameMap.values()));
+      } catch (error) {
+        handleFirestoreError(error, OperationType.LIST, 'GroupLibrary');
+      } finally {
+        setLoading(false);
       }
-
-      setLibraryGames(Array.from(gameMap.values()));
-      setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'userCollections');
-    });
-
-    return () => {
-      unsubscribe();
-      statsUnsubscribe();
     };
+
+    fetchData();
   }, [members, groupId, user]);
 
   // Fetch Game Metadata for advanced filtering
@@ -320,36 +321,80 @@ export default function GroupLibrary({ groupId, members }: GroupLibraryProps) {
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}
-                className="bg-charcoal rounded-[2.5rem] overflow-hidden shadow-2xl border border-white/10 group hover:border-emerald-accent/50 transition-all relative"
+                className="bg-charcoal rounded-[2.5rem] overflow-hidden shadow-2xl border border-white/10 group hover:border-emerald-accent/50 transition-all relative flex flex-col h-full"
               >
-                {/* Blurred Art Background */}
-                <div className="absolute inset-0 overflow-hidden">
+                {/* Visual Background */}
+                <div className="absolute inset-0 overflow-hidden pointer-events-none">
                   <img 
                     src={game.cover || undefined} 
-                    className="w-full h-full object-cover blur-xl opacity-40 group-hover:scale-110 transition-transform duration-700" 
+                    className="w-full h-full object-cover grayscale opacity-30 group-hover:scale-110 group-hover:opacity-40 transition-all duration-700 blur-[2px]" 
                     alt=""
                   />
-                  <div className="absolute inset-0 bg-charcoal/60" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-charcoal via-charcoal/60 to-transparent" />
                 </div>
 
-                <div className="relative h-48 flex items-center justify-between px-8 gap-4">
-                  {/* Left Side - Group Rating */}
-                  <div className="flex flex-col items-center gap-1 min-w-[70px] shrink-0">
-                    <D20Die value={groupGameStats[game.gameId]?.average_d20 || '-'} theme="silver" size="md" />
-                    <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">Group</span>
+                <div className="relative flex flex-col flex-1 p-8 min-h-[220px]">
+                  {/* Top: Ratings & Badges */}
+                  <div className="flex justify-between items-start mb-auto">
+                    <div className="flex flex-col gap-2">
+                      {game.isApproved === false && (
+                        <div className="bg-amber-500 text-white text-[7px] font-black px-2 py-1 rounded-lg uppercase tracking-widest shadow-lg flex items-center gap-1 w-fit">
+                          <div className="w-1 h-1 rounded-full bg-white animate-pulse" /> Unverified
+                        </div>
+                      )}
+                      {game.isExpansion && (
+                        <div className="bg-indigo-500 text-white text-[7px] font-black px-2 py-1 rounded-lg uppercase tracking-widest shadow-lg w-fit">
+                          Expansion
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex gap-3">
+                      {/* Group Rating */}
+                      <div className="flex flex-col items-center opacity-60 group-hover:opacity-100 transition-opacity">
+                        <D20Die value={groupGameStats[game.gameId]?.average_d20 || '-'} theme="silver" size="xs" />
+                        <span className="text-[6px] font-black text-white/30 uppercase tracking-widest mt-0.5">Group</span>
+                      </div>
+                      {/* Community Rating */}
+                      <div className="flex flex-col items-center opacity-60 group-hover:opacity-100 transition-opacity">
+                        <D20Die value={game.communityRating || 18} theme="emerald" size="xs" />
+                        <span className="text-[6px] font-black text-white/30 uppercase tracking-widest mt-0.5">VAULT</span>
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Center Content */}
-                  <div className="flex-1 text-center min-w-0">
+                  {/* Main Display */}
+                  <div className="mt-auto">
+                    {(game.categories?.[0] || game.genres?.[0]) && (
+                      <span className="text-[10px] font-black text-emerald-accent uppercase tracking-[0.2em] mb-2 block">
+                        {game.categories?.[0] || game.genres?.[0]}
+                      </span>
+                    )}
+
                     <GameTitleWithDC 
                       game={{ id: game.gameId, title: game.title, coverImage: game.cover }} 
                       shieldSize="sm" 
-                      containerClassName="justify-center mb-2 w-full"
-                      titleClassName="text-xl font-black text-white leading-tight group-hover:text-emerald-accent transition-colors"
+                      containerClassName="mb-3 w-full"
+                      titleClassName="text-xl font-black text-white leading-tight group-hover:text-emerald-accent transition-colors truncate"
                     />
-                    <div className="flex items-center justify-center gap-2">
+
+                    {/* Minimal Stats & Owners */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4 text-white/40 group-hover:text-white/60 transition-colors">
+                        <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest">
+                          <Users className="w-3.5 h-3.5 opacity-50" />
+                          <span>{game.minPlayers ? `${game.minPlayers}-${game.maxPlayers}` : '2-4'}</span>
+                        </div>
+                        {game.playTime && (
+                          <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest">
+                            <Clock className="w-3.5 h-3.5 opacity-50" />
+                            <span>{formatPlayTime(game.playTime)}</span>
+                          </div>
+                        )}
+                      </div>
+
                       <div className="flex -space-x-2">
-                        {game.owners.map((owner) => (
+                        {game.owners.slice(0, 3).map((owner) => (
                           <div 
                             key={owner.uid} 
                             className="w-6 h-6 rounded-full border-2 border-charcoal shadow-sm overflow-hidden"
@@ -358,48 +403,37 @@ export default function GroupLibrary({ groupId, members }: GroupLibraryProps) {
                             <UserAvatar user={owner} size="xs" className="w-full h-full" />
                           </div>
                         ))}
+                        {game.owners.length > 3 && (
+                          <div className="w-6 h-6 rounded-full bg-white/10 border-2 border-charcoal flex items-center justify-center text-[8px] font-black text-white/50">
+                            +{game.owners.length - 3}
+                          </div>
+                        )}
                       </div>
-                      <span className="text-[10px] font-black text-white/20 uppercase tracking-widest">
-                        {game.owners.length} {game.owners.length === 1 ? 'Owner' : 'Owners'}
-                      </span>
                     </div>
-                  </div>
-
-                  {/* Right Side - Community Rating */}
-                  <div className="flex flex-col items-center gap-1 min-w-[70px] shrink-0">
-                    <D20Die value={game.communityRating || 18} theme="emerald" size="md" />
-                    <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">Community</span>
                   </div>
                 </div>
                 
-                <div className="relative p-6 pt-0 space-y-3">
+                {/* Action Buttons: Visible only on hover or more subtle? */}
+                <div className="relative p-6 pt-0 mt-2 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300">
                   <div className="grid grid-cols-2 gap-3">
                     <button 
                       onClick={() => handleLogPlay(game.gameId, game.title)}
-                      className="bg-gold-accent text-charcoal py-3 rounded-xl font-black text-xs shadow-lg hover:shadow-gold-accent/20 transition-all flex items-center justify-center gap-2 active:scale-95"
+                      className="bg-gold-accent text-charcoal py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:shadow-gold-accent/20 transition-all flex items-center justify-center gap-2 active:scale-95"
                     >
-                      <Dices className="w-4 h-4" /> Log Session
+                      <Dices className="w-3.5 h-3.5" /> Log
                     </button>
 
                     <button 
                       onClick={() => handleRequestToPlay(game)}
                       disabled={requestingIds.has(game.gameId)}
                       className={cn(
-                        "py-3 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 active:scale-95 border",
+                        "py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 active:scale-95 border",
                         requestingIds.has(game.gameId)
                           ? "bg-emerald-accent/10 border-emerald-accent/30 text-emerald-accent"
                           : "bg-white/5 border-white/10 text-white/40 hover:border-emerald-accent/30 hover:text-emerald-accent"
                       )}
                     >
-                      {requestingIds.has(game.gameId) ? (
-                        <>
-                          <CheckCircle2 className="w-4 h-4" /> Requested
-                        </>
-                      ) : (
-                        <>
-                          <Megaphone className="w-4 h-4" /> Request
-                        </>
-                      )}
+                      {requestingIds.has(game.gameId) ? "Requested" : <><Megaphone className="w-3.5 h-3.5" /> Request</>}
                     </button>
                   </div>
                 </div>

@@ -49,6 +49,7 @@ export default function ModerateArt() {
           await updateDoc(doc(db, 'games', gameId), {
             coverImage: imageUrl,
             hasHighResArt: true,
+            customImageApproved: true,
             updatedAt: serverTimestamp()
           });
 

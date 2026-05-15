@@ -61,7 +61,7 @@ const BringGameModal: React.FC<BringGameModalProps> = ({ isOpen, onClose, eventI
       }
     };
 
-    const timeout = setTimeout(performSearch, 300);
+    const timeout = setTimeout(performSearch, 500);
     return () => clearTimeout(timeout);
   }, [searchTerm]);
 

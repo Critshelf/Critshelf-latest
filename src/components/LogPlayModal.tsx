@@ -259,7 +259,7 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
       }
     };
 
-    const debounceTimer = setTimeout(searchGames, 300);
+    const debounceTimer = setTimeout(searchGames, 500);
     return () => clearTimeout(debounceTimer);
   }, [searchQuery]);
 
@@ -543,7 +543,7 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
                           className="w-full flex items-center gap-4 p-4 hover:bg-emerald-accent/10 transition-all text-left border-b border-white/5 last:border-0 group"
                         >
                           <img 
-                            src={game.coverImage || game.coverArt || undefined} 
+                            src={(game.coverImage || game.coverArt) || null} 
                             className="w-10 h-10 rounded-lg object-cover border border-white/10" 
                             referrerPolicy="no-referrer"
                           />

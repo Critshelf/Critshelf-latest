@@ -29,6 +29,7 @@ import { doc, getDoc, collection, query, getDocs, limit, where, setDoc, updateDo
 import { Game } from '../components/GameCard';
 import { cn, formatPlayTime } from '../lib/utils';
 import { AnimatePresence } from 'motion/react';
+import { searchWikidata, importWikidataGameToFirestore, fetchWikidataExpansions } from '../services/wikidataService';
 import { MOCK_GAMES, VIBE_OPTIONS } from '../constants';
 import LogPlayModal from '../components/LogPlayModal';
 import ReportErrorModal from '../components/ReportErrorModal';
@@ -361,6 +362,7 @@ export default function GamePage() {
       await updateDoc(doc(db, 'games', game.id), {
         coverImage: url,
         hasHighResArt: true,
+        customImageApproved: true,
         updatedAt: serverTimestamp()
       });
       await updateDoc(doc(db, 'PendingArt', artId), {
@@ -368,7 +370,7 @@ export default function GamePage() {
         updatedAt: serverTimestamp()
       });
       setPendingArtSubmissions(prev => prev.filter(a => a.id !== artId));
-      setGame(prev => prev ? { ...prev, coverImage: url, hasHighResArt: true } : null);
+      setGame(prev => prev ? { ...prev, coverImage: url, hasHighResArt: true, customImageApproved: true } : null);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, 'games');
     } finally {
@@ -401,32 +403,48 @@ export default function GamePage() {
 
     const docRef = doc(db, 'games', id);
     
-    // 1. Game Document Listener
-    unsubscribeGame = onSnapshot(docRef, async (docSnap) => {
-      if (docSnap.exists()) {
-        const gameData = { id: docSnap.id, ...docSnap.data() } as Game;
-        setGame(gameData);
-        
-        // Fetch base game if it's an expansion
-        if (gameData.baseGameId) {
-          try {
-            const baseRef = doc(db, 'games', gameData.baseGameId);
-            const baseSnap = await getDoc(baseRef);
-            if (baseSnap.exists()) {
-              setBaseGame({ id: baseSnap.id, ...baseSnap.data() } as Game);
+    // 1. Game Document Fetch (One-time)
+    const fetchGame = async () => {
+      try {
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const gameData = { id: docSnap.id, ...docSnap.data() } as Game;
+          setGame(gameData);
+          
+          // Fetch base game if it's an expansion
+          if (gameData.baseGameId) {
+            try {
+              const baseRef = doc(db, 'games', gameData.baseGameId);
+              const baseSnap = await getDoc(baseRef);
+              if (baseSnap.exists()) {
+                setBaseGame({ id: baseSnap.id, ...baseSnap.data() } as Game);
+              }
+            } catch (err) {
+              console.error("Base game fetch error:", err);
             }
-          } catch (err) {
-            console.error("Base game fetch error:", err);
+          }
+        } else {
+          // JIT Import Logic: If the ID doesn't exist, check if it's a Wikidata QID
+          if (id.startsWith('Q') && !id.startsWith('wikidata_')) {
+            try {
+              console.log(`🔍 JIT Import triggered for ${id}`);
+              const savedId = await importWikidataGameToFirestore(id);
+              navigate(`/game/${savedId}`, { replace: true });
+            } catch (err) {
+              console.error("JIT Import failed:", err);
+              setGame(null);
+            }
+          } else {
+            setGame(null);
           }
         }
-      } else {
-        setGame(null);
+      } catch (error) {
+        console.error("Game fetch error:", error);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
-    }, (error) => {
-      console.error("Game snapshot error:", error);
-      setLoading(false);
-    });
+    };
+    fetchGame();
 
     // 2. Community Recent Reviews Feed - Fetch Once (or refresh on post)
     const fetchRecentReviews = async () => {
@@ -463,31 +481,42 @@ export default function GamePage() {
     fetchRecentReviews();
 
     // 3. Fetch Expansions Once (or when id changes)
-    const fetchExpansions = async () => {
+    const fetchExpansions = async (gameData?: Game) => {
       setLoadingExpansions(true);
       try {
         const expQ = query(collection(db, 'games'), where('baseGameId', '==', id), limit(24));
         const snap = await getDocs(expQ);
-        setDbExpansions(snap.docs.map(d => ({ id: d.id, ...d.data() } as Game)));
+        const localExpansions = snap.docs.map(d => ({ id: d.id, ...d.data() } as Game));
+        
+        let allExpansions = [...localExpansions];
+        const targetGame = gameData || game;
+        const wikidataId = targetGame?.wikidataId || (id?.startsWith('wikidata_') ? id.replace('wikidata_', '') : null);
+        
+        if (wikidataId) {
+          const remoteExpansions = await fetchWikidataExpansions(wikidataId);
+          const localTitles = new Set(localExpansions.map(e => e.title.toLowerCase()));
+          const uniqueRemote = remoteExpansions.filter(re => !localTitles.has(re.title.toLowerCase()));
+          allExpansions = [...allExpansions, ...uniqueRemote];
+        }
+
+        setDbExpansions(allExpansions);
       } catch (err) {
         console.error("Expansions fetch error:", err);
       } finally {
         setLoadingExpansions(false);
       }
     };
-    fetchExpansions();
+    
+    if (game) fetchExpansions(game);
+    else fetchExpansions();
 
-    return () => {
-      if (unsubscribeGame) unsubscribeGame();
-      if (unsubscribeRecentReviews) unsubscribeRecentReviews();
-    };
+    return () => {};
   }, [id]);
 
   // Separate effect for reviews and DC calculation - Fetch Once
   useEffect(() => {
     if (!id || !game) return;
     
-    // DC and Ratings rely on ALL reviews for that game (or base game)
     const targetGameId = game.baseGameId || id;
     const fetchStats = async () => {
       try {
@@ -529,31 +558,29 @@ export default function GamePage() {
       return;
     }
 
-    let unsubscribeUserReview: (() => void) | null = null;
-    let unsubscribeUser: (() => void) | null = null;
+    const fetchUserData = async () => {
+      try {
+        const userReviewQ = query(collection(db, 'reviews'), where('gameId', '==', id), where('userId', '==', user.uid), limit(1));
+        const snap = await getDocs(userReviewQ);
+        if (!snap.empty) {
+          const d = snap.docs[0];
+          const data = d.data();
+          setUserReview({ id: d.id, score: data.score, difficultyRating: data.difficultyRating, text: data.text });
+        } else {
+          setUserReview(null);
+        }
 
-    const userReviewQ = query(collection(db, 'reviews'), where('gameId', '==', id), where('userId', '==', user.uid), limit(1));
-    unsubscribeUserReview = onSnapshot(userReviewQ, (snap) => {
-      if (!snap.empty) {
-        const d = snap.docs[0];
-        const data = d.data();
-        setUserReview({ id: d.id, score: data.score, difficultyRating: data.difficultyRating, text: data.text });
-      } else {
-        setUserReview(null);
+        const userSnap = await getDoc(doc(db, 'users', user.uid));
+        if (userSnap.exists()) {
+          const userData = userSnap.data();
+          setUserFavorites(userData.favorites || []);
+        }
+      } catch (error) {
+        console.error("User data fetch error:", error);
       }
-    });
-
-    unsubscribeUser = onSnapshot(doc(db, 'users', user.uid), (snap) => {
-      if (snap.exists()) {
-        const userData = snap.data();
-        setUserFavorites(userData.favorites || []);
-      }
-    });
-
-    return () => {
-      if (unsubscribeUserReview) unsubscribeUserReview();
-      if (unsubscribeUser) unsubscribeUser();
     };
+    fetchUserData();
+
   }, [id, user?.uid]);
 
   // Separate effect for admin features
@@ -563,12 +590,16 @@ export default function GamePage() {
       return;
     }
 
-    const artQ = query(collection(db, 'PendingArt'), where('gameId', '==', id), where('status', '==', 'pending'));
-    const unsubscribe = onSnapshot(artQ, (snap) => {
-      setPendingArtSubmissions(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    return () => unsubscribe();
+    const fetchPendingArt = async () => {
+      const artQ = query(collection(db, 'PendingArt'), where('gameId', '==', id), where('status', '==', 'pending'));
+      try {
+        const snap = await getDocs(artQ);
+        setPendingArtSubmissions(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      } catch (error) {
+        console.error("Pending art fetch error:", error);
+      }
+    };
+    fetchPendingArt();
   }, [id, profile?.role]);
 
 
@@ -617,11 +648,11 @@ export default function GamePage() {
         {/* Vibe Blur Background */}
         <div className="absolute inset-0">
           <img 
-            src={game.bannerImage || game.coverImage || undefined} 
+            src={(game.bannerImage || game.coverImage || game.thumbnail) || null} 
             alt="" 
             className={cn(
               "w-full h-full object-cover scale-110 transiton-all duration-700",
-              game.hasHighResArt 
+              game.customImageApproved 
                 ? "opacity-100 filter-none brightness-100 grayscale-0" 
                 : (!game.bannerImage ? "blur-2xl opacity-30 grayscale brightness-75" : "opacity-40 grayscale brightness-75")
             )}
@@ -633,8 +664,8 @@ export default function GamePage() {
         {/* Gradient Overlay */}
         <div className={cn(
           "absolute inset-0 transition-opacity duration-500",
-          game.hasHighResArt 
-            ? "bg-gradient-to-r from-charcoal/80 via-charcoal/20 to-transparent" 
+          game.customImageApproved 
+            ? "bg-gradient-to-r from-charcoal/60 via-charcoal/20 to-transparent" 
             : "bg-gradient-to-r from-charcoal via-charcoal/60 to-transparent"
         )} />
         
@@ -668,34 +699,66 @@ export default function GamePage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <p className="text-emerald-accent font-black uppercase tracking-widest text-sm mb-2">
-              {game.publishers?.[0] || game.publisher || 'Independent Publisher'}
-            </p>
-            {game.isApproved === false && (
-              <div className="flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-500 text-[10px] font-black uppercase tracking-[0.2em] shadow-lg mb-4 w-fit">
-                <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                Unverified Listing
-              </div>
-            )}
-            <div className="flex items-center gap-4 mb-6">
-              <GameTitleWithDC 
-                game={game} 
-                shieldSize="md" 
-                titleClassName="text-5xl md:text-7xl font-black text-white tracking-tight max-w-3xl"
-                shouldTruncate={false}
-              />
-              {game.editions && game.editions.length > 0 && (
-                <button
-                  onClick={() => setShowEditionsModal(true)}
-                  className="bg-white/5 backdrop-blur-md text-emerald-accent px-4 py-2 rounded-xl hover:bg-white/10 transition-all z-40 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest border border-emerald-accent/20 h-fit mt-auto mb-2"
-                >
-                  <Layers className="w-4 h-4" />
-                  View Alternate Editions
-                </button>
-              )}
-            </div>
-            
-            <div className="flex items-center gap-3 md:gap-4 overflow-visible">
+            <div className="flex flex-col md:flex-row items-center md:items-end gap-8 mb-10">
+              {/* Box Art Poster */}
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="w-48 md:w-64 aspect-[3/4] rounded-3xl overflow-hidden shadow-2xl border border-white/10 shrink-0 bg-charcoal/40 backdrop-blur-md group relative mx-auto md:mx-0"
+              >
+                <img 
+                  src={(game.coverImage || game.thumbnail) || null} 
+                  alt={game.title}
+                  className={cn(
+                    "w-full h-full object-cover transition-transform duration-700 group-hover:scale-110",
+                    !game.customImageApproved && "grayscale brightness-75 blur-[2px]"
+                  )}
+                  referrerPolicy="no-referrer"
+                />
+                {!game.customImageApproved && (
+                  <div className="absolute inset-0 flex items-center justify-center p-6 text-center bg-black/40">
+                    <span className="text-[10px] font-black text-white/60 uppercase tracking-widest leading-relaxed">
+                      Legacy Art<br/>Approving High-Res...
+                    </span>
+                  </div>
+                )}
+              </motion.div>
+
+              <div className="flex-1 text-center md:text-left">
+                <p className="text-emerald-accent font-black uppercase tracking-widest text-sm mb-2">
+                  {game.publishers?.[0] || game.publisher || 'Independent Publisher'}
+                </p>
+                {game.needsVerification && (
+                  <div className="flex items-center gap-2 px-4 py-2 bg-rose-500 text-white rounded-xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg mb-4 w-fit mx-auto md:mx-0 animate-pulse">
+                    <Flag className="w-4 h-4 fill-current" />
+                    Awaiting Critical Verification
+                  </div>
+                )}
+                {game.isApproved === false && (
+                  <div className="flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-500 text-[10px] font-black uppercase tracking-[0.2em] shadow-lg mb-4 w-fit mx-auto md:mx-0">
+                    <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                    Unverified Listing
+                  </div>
+                )}
+                <div className="flex items-center gap-4 mb-6 justify-center md:justify-start">
+                  <GameTitleWithDC 
+                    game={game} 
+                    shieldSize="md" 
+                    titleClassName="text-5xl md:text-7xl font-black text-white tracking-tight max-w-3xl"
+                    shouldTruncate={false}
+                  />
+                  {game.editions && game.editions.length > 0 && (
+                    <button
+                      onClick={() => setShowEditionsModal(true)}
+                      className="bg-white/5 backdrop-blur-md text-emerald-accent px-4 py-2 rounded-xl hover:bg-white/10 transition-all z-40 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest border border-emerald-accent/20 h-fit mt-auto mb-2"
+                    >
+                      <Layers className="w-4 h-4" />
+                      View Alternate Editions
+                    </button>
+                  )}
+                </div>
+                
+                <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 md:gap-4 overflow-visible">
               <button 
                 onClick={() => setIsLogModalOpen(true)}
                 className="bg-gold-accent text-charcoal px-6 md:px-8 py-4 rounded-2xl font-black shadow-lg hover:shadow-gold-accent/20 transition-all flex items-center gap-3 active:scale-95 text-xs md:text-base whitespace-nowrap"
@@ -708,7 +771,12 @@ export default function GamePage() {
               <CollectionStatusDropdown 
                 gameId={game.id}
                 gameTitle={game.title}
-                gameCover={game.coverImage}
+                gameCover={game.coverImage || ''}
+                categories={game.categories}
+                minPlayers={game.minPlayers}
+                maxPlayers={game.maxPlayers}
+                playTime={game.playTime}
+                isExpansion={game.isExpansion}
               />
 
               <div className="flex items-center gap-2 pr-2">
@@ -730,11 +798,13 @@ export default function GamePage() {
                 </button>
               </div>
             </div>
-          </motion.div>
-        </div>
+            </div>
+          </div>
+        </motion.div>
       </div>
+    </div>
 
-      <div className="max-w-4xl mx-auto px-6 -mt-8 relative z-10">
+    <div className="max-w-4xl mx-auto px-6 -mt-8 relative z-10">
         {/* Admin Moderation Queue */}
         {profile?.role === 'admin' && pendingArtSubmissions.length > 0 && (
           <motion.div 
@@ -752,7 +822,7 @@ export default function GamePage() {
                 <div key={art.id} className="bg-charcoal/40 rounded-2xl p-4 border border-white/5 flex flex-col gap-4">
                   <div className="aspect-square rounded-xl overflow-hidden border border-white/10">
                     <img 
-                      src={art.proposedImageUrl || undefined} 
+                      src={art.proposedImageUrl || null} 
                       alt="Proposed Art"
                       className="w-full h-full object-cover" 
                       referrerPolicy="no-referrer"
@@ -936,18 +1006,23 @@ export default function GamePage() {
         </div>
 
         {/* Expansions Section */}
-        {(dbExpansions.length > 0 || (game.expansions && game.expansions.length > 0)) && (
-          <div className="mt-16">
-            <div className="mb-8 overflow-hidden">
-              <div className="flex items-center gap-3 mb-2">
-                <Plus className="w-5 h-5 text-emerald-accent" />
-                <h2 className="text-2xl font-black text-white tracking-tight">Expansions</h2>
-              </div>
-              <div className="h-px w-full bg-emerald-accent/20" />
+        <div className="mt-16">
+          <div className="mb-8 overflow-hidden">
+            <div className="flex items-center gap-3 mb-2">
+              <Plus className="w-5 h-5 text-emerald-accent" />
+              <h2 className="text-2xl font-black text-white tracking-tight">Expansions</h2>
             </div>
-            
+            <div className="h-px w-full bg-emerald-accent/20" />
+          </div>
+          
+          {loadingExpansions ? (
+            <div className="flex items-center gap-3 text-white/40 italic py-8">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Searching for expansions...
+            </div>
+          ) : dbExpansions.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
-              {(dbExpansions.length > 0 ? dbExpansions : (game.expansions || [])).map((expansion: any) => (
+              {dbExpansions.map((expansion: any) => (
                 <motion.div
                   key={expansion.id}
                   whileHover={{ y: -4 }}
@@ -955,22 +1030,26 @@ export default function GamePage() {
                 >
                   <div 
                     onClick={() => navigate(`/game/${expansion.id}`)}
-                    className="aspect-[3/4] rounded-3xl overflow-hidden border border-white/10 relative cursor-pointer shadow-xl group-hover:shadow-emerald-accent/10 transition-all duration-300"
+                    className="aspect-[3/4] rounded-3xl overflow-hidden border border-white/10 relative cursor-pointer shadow-xl group-hover:shadow-emerald-accent/20 transition-all duration-300"
                   >
                     <img 
-                      src={expansion.coverImage || expansion.boxArtUrl || undefined} 
+                      src={(expansion.coverImage || expansion.thumbnail) || null} 
                       alt={expansion.title} 
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                      className={cn(
+                        "w-full h-full object-cover group-hover:scale-110 transition-transform duration-700",
+                        expansion.isWikidataItem && "brightness-75"
+                      )}
                       referrerPolicy="no-referrer"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
-                      <span className="text-[10px] font-black text-emerald-accent uppercase tracking-widest">
-                        View Details
+                    <div className="absolute inset-0 bg-gradient-to-t from-charcoal via-transparent to-transparent opacity-60 group-hover:opacity-80 transition-opacity" />
+                    <div className="absolute inset-x-0 bottom-0 p-4 flex flex-col justify-end">
+                      <span className="text-[10px] font-black text-emerald-accent uppercase tracking-widest translate-y-2 group-hover:translate-y-0 transition-transform">
+                        {expansion.isWikidataItem ? 'Import on View' : 'View Details'}
                       </span>
                     </div>
                   </div>
                   
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     <h4 
                       onClick={() => navigate(`/game/${expansion.id}`)}
                       className="text-xs font-black text-white leading-tight line-clamp-2 uppercase tracking-tight group-hover:text-emerald-accent transition-colors cursor-pointer"
@@ -981,7 +1060,12 @@ export default function GamePage() {
                     <CollectionStatusDropdown 
                       gameId={expansion.id}
                       gameTitle={expansion.title}
-                      gameCover={expansion.coverImage || expansion.boxArtUrl}
+                      gameCover={expansion.coverImage || expansion.thumbnail || ''}
+                      categories={expansion.categories}
+                      minPlayers={expansion.minPlayers}
+                      maxPlayers={expansion.maxPlayers}
+                      playTime={expansion.playTime}
+                      isExpansion={expansion.isExpansion}
                       size="sm"
                       dropdownPosition="bottom"
                     />
@@ -989,8 +1073,12 @@ export default function GamePage() {
                 </motion.div>
               ))}
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="bg-white/5 rounded-3xl p-10 border border-white/10 text-center">
+              <p className="text-gray-500 italic font-medium">No expansions currently listed.</p>
+            </div>
+          )}
+        </div>
 
         {/* Reviews Section */}
         <div className="mt-12">
@@ -1363,7 +1451,7 @@ export default function GamePage() {
                   >
                     <div className="w-24 h-24 shrink-0 rounded-xl overflow-hidden border border-white/10 bg-black/20">
                       <img 
-                        src={edition.boxArtUrl || undefined} 
+                        src={edition.boxArtUrl || null} 
                         alt={edition.title} 
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                         referrerPolicy="no-referrer"
@@ -1438,7 +1526,7 @@ export default function GamePage() {
                     className="w-full flex items-center gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-emerald-accent/30 transition-all group text-left"
                   >
                     <img 
-                      src={fav.gameCover || undefined} 
+                      src={fav.gameCover || null} 
                       alt={fav.gameTitle} 
                       className="w-16 h-16 rounded-xl object-cover border border-white/10"
                       referrerPolicy="no-referrer"

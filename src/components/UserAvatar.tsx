@@ -21,7 +21,7 @@ const UserAvatar: React.FC<UserAvatarProps> = ({ user, className, size = 'md', u
   const seed = user?.avatarSeed || user?.uid || 'default';
   
   const dicebearUrl = `https://api.dicebear.com/9.x/shapes/svg?seed=${seed}`;
-  const avatarUrl = (avatarPreference === 'google' && user?.photoURL) 
+  const avatarUrl = (avatarPreference === 'google' && user?.photoURL && user.photoURL !== "") 
     ? user.photoURL 
     : dicebearUrl;
 

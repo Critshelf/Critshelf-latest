@@ -100,6 +100,7 @@ export default function Profile() {
   const [editLocation, setEditLocation] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Game[]>([]);
   const [gamesCount, setGamesCount] = useState<number | '-'>('-');
   const [groupsCount, setGroupsCount] = useState<number | '-'>('-');
@@ -107,6 +108,47 @@ export default function Profile() {
   const [searching, setSearching] = useState(false);
   const [updatingTitle, setUpdatingTitle] = useState(false);
   const navigate = useNavigate();
+
+  // Debounce search query
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setDebouncedSearchQuery('');
+      setSearchResults([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Execute database search
+  useEffect(() => {
+    const performSearch = async () => {
+      if (!debouncedSearchQuery.trim()) return;
+      
+      setSearching(true);
+      try {
+        const queryTerm = debouncedSearchQuery.toLowerCase();
+        const q = query(
+          collection(db, 'games'),
+          where('name_lowercase', '>=', queryTerm),
+          where('name_lowercase', '<=', queryTerm + '\uf8ff'),
+          orderBy('name_lowercase'),
+          limit(10)
+        );
+        const snapshot = await getDocs(q);
+        const results = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
+        setSearchResults(results);
+      } catch (error) {
+        console.error("Search failed:", error);
+      } finally {
+        setSearching(false);
+      }
+    };
+
+    performSearch();
+  }, [debouncedSearchQuery]);
 
   // Auth States
   const [isSignUp, setIsSignUp] = useState(false);
@@ -270,28 +312,6 @@ export default function Profile() {
       }
     } catch (error) {
       console.error("Error fetching favorites:", error);
-    }
-  };
-
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!searchQuery.trim()) return;
-    
-    setSearching(true);
-    try {
-      const q = query(
-        collection(db, 'games'),
-        where('title', '>=', searchQuery),
-        where('title', '<=', searchQuery + '\uf8ff'),
-        limit(5)
-      );
-      const snapshot = await getDocs(q);
-      const results = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
-      setSearchResults(results);
-    } catch (error) {
-      console.error("Search failed:", error);
-    } finally {
-      setSearching(false);
     }
   };
 
@@ -1172,7 +1192,7 @@ export default function Profile() {
                   </button>
                 </div>
 
-                <form onSubmit={handleSearch} className="relative mb-8">
+                <div className="relative mb-8">
                   <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-white/20" />
                   <input 
                     type="text"
@@ -1181,7 +1201,12 @@ export default function Profile() {
                     placeholder="Search for a game..."
                     className="w-full bg-charcoal border border-white/10 rounded-2xl py-4 pl-14 pr-6 text-white font-bold focus:outline-none focus:border-emerald-accent/50 transition-all"
                   />
-                </form>
+                  {(searching || (searchQuery !== debouncedSearchQuery && searchQuery.trim())) && (
+                    <div className="absolute right-5 top-1/2 -translate-y-1/2">
+                      <Loader2 className="w-4 h-4 text-emerald-accent animate-spin" />
+                    </div>
+                  )}
+                </div>
 
                 <div className="space-y-4">
                   {searching ? (

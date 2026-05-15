@@ -14,6 +14,7 @@ import SocialHub from './pages/SocialHubView';
 import Auth from './pages/Auth';
 import ModerateArt from './pages/ModerateArt';
 import ModerateGame from './pages/ModerateGame';
+import AdminTools from './pages/AdminTools';
 import SettingsMenu from './pages/SettingsMenu';
 import AccountSettings from './pages/AccountSettings';
 import PrivacySecurity from './pages/PrivacySecurity';
@@ -53,6 +54,7 @@ function AppContent() {
             <Route path="/activity-log" element={<ActivityLog />} />
             <Route path="/admin/moderate-art" element={<ModerateArt />} />
             <Route path="/admin/moderate-game" element={<ModerateGame />} />
+            <Route path="/admin/tools" element={<AdminTools />} />
             <Route path="/friend-reviews" element={<FriendReviews />} />
             <Route path="/all-plays" element={<AllPlays />} />
             <Route path="/settings" element={<SettingsMenu />} />

@@ -9,26 +9,23 @@ import { cn, formatPlayTime } from '../lib/utils';
 export interface Game {
   id: string;
   title: string;
-  coverImage: string;
+  coverImage?: string;
+  thumbnail?: string;
   bannerImage?: string;
-  bannerStyles?: {
-    filter: string;
-    opacity: number;
-    transform: string;
-  };
   playTime?: string | number | null;
   minPlayers?: number;
   maxPlayers?: number;
   playerCount?: string;
   publisher?: string;
+  publishers?: string[];
   ageRange?: string;
   description?: string;
   trending?: boolean;
   hasHighResArt?: boolean;
+  customImageApproved?: boolean;
   rating?: number;
   bggId?: string;
   publishingYear?: number | string;
-  publishers?: string[];
   designers?: string[];
   artists?: string[];
   genres?: string[];
@@ -36,6 +33,13 @@ export interface Game {
   baseGameId?: string;
   isExpansion?: boolean;
   isWikidataItem?: boolean;
+  isApproved?: boolean;
+  needsVerification?: boolean;
+  bannerStyles?: {
+    filter: string;
+    opacity: number;
+    transform: string;
+  };
   expansions?: {
     id: string;
     title: string;
@@ -82,151 +86,104 @@ const GameCard: React.FC<GameCardProps> = ({
     >
       <Link 
         to={`/game/${game.id}`} 
-        className="flex flex-col flex-1 w-full min-h-[12rem] relative"
+        className="flex flex-col flex-1 w-full relative"
         onClick={onClick ? (e) => e.preventDefault() : undefined}
       >
         {/* Vibe Blur Background */}
         <div className="absolute inset-0 overflow-hidden">
           <img
-            src={game.bannerImage || game.coverImage || undefined}
+            src={(game.bannerImage || game.coverImage || game.thumbnail) || null}
             alt=""
             className={cn(
-              "w-full h-full object-cover transition-transform duration-700 group-hover:scale-125",
-              game.hasHighResArt 
-                ? "opacity-100 filter-none brightness-100 grayscale-0" 
-                : (!game.bannerImage ? "blur-[8px] opacity-40 grayscale brightness-75" : "opacity-50 grayscale brightness-75")
+              "w-full h-full object-cover transition-transform duration-700 group-hover:scale-110",
+              game.customImageApproved 
+                ? "opacity-100 brightness-[0.7] grayscale-0" 
+                : "opacity-40 blur-[4px] grayscale brightness-50"
             )}
             style={game.bannerImage ? game.bannerStyles : undefined}
             referrerPolicy="no-referrer"
             loading="lazy"
           />
+          <div className="absolute inset-0 bg-gradient-to-t from-charcoal via-charcoal/60 to-transparent" />
         </div>
-        
-        {/* Gradient Overlay */}
-        <div className={cn(
-          "absolute inset-0 transition-opacity duration-500",
-          game.hasHighResArt 
-            ? "bg-gradient-to-r from-charcoal/80 via-charcoal/40 to-transparent" 
-            : "bg-gradient-to-r from-charcoal via-charcoal/90 to-transparent"
-        )} />
         
         {/* Content */}
         <div className={cn(
-          "relative flex items-center justify-between gap-2 h-full flex-1",
-          compact ? "p-4" : "p-6"
+          "relative flex flex-col justify-end p-6 min-h-[220px] h-full",
+          compact && "p-4 min-h-[180px]"
         )}>
-          {/* Rating Display */}
-          <div className={cn(
-            "flex flex-col items-center gap-2 shrink-0 self-center",
-            compact ? "min-w-[50px]" : "min-w-[70px]"
-          )}>
-            {/* Primary Display: Personal > Group > Community */}
-            {displayPersonal && displayPersonal !== '-' ? (
-              <div className="flex flex-col items-center">
-                <D20Die 
-                  value={displayPersonal} 
-                  theme="gold" 
-                  size={compact ? "xs" : "sm"} 
-                />
-                <span className="text-[7px] font-black text-gold-accent uppercase tracking-widest mt-0.5">
-                  You
-                </span>
-              </div>
-            ) : displayGroup && displayGroup !== '-' ? (
-              <div className="flex flex-col items-center">
-                <D20Die 
-                  value={displayGroup} 
-                  theme="silver" 
-                  size={compact ? "xs" : "sm"} 
-                />
-                <span className="text-[6px] font-black text-white/50 uppercase tracking-tighter mt-0.5 max-w-[50px] truncate text-center">
-                  {activeGroupName || 'Group'}
-                </span>
-              </div>
-            ) : null}
+          {/* Top Badges */}
+          <div className="absolute top-4 left-4 right-4 flex justify-between items-start z-20 pointer-events-none">
+            <div className="flex flex-col gap-2">
+              {game.trending && (
+                <div className="bg-emerald-accent text-charcoal text-[7px] font-black px-2 py-1 rounded-lg uppercase tracking-widest shadow-lg flex items-center gap-1 w-fit">
+                  <TrendingUp className="w-2.5 h-2.5" /> Trending
+                </div>
+              )}
+              {game.isApproved === false && (
+                <div className="bg-amber-500 text-white text-[7px] font-black px-2 py-1 rounded-lg uppercase tracking-widest shadow-lg flex items-center gap-1 w-fit">
+                  <div className="w-1 h-1 rounded-full bg-white animate-pulse" /> Unverified
+                </div>
+              )}
+              {game.isExpansion && (
+                <div className="bg-indigo-500 text-white text-[7px] font-black px-2 py-1 rounded-lg uppercase tracking-widest shadow-lg flex items-center gap-1 w-fit">
+                  Expansion
+                </div>
+              )}
+            </div>
 
-            {/* Community Rating Sub-display */}
-            <div className="flex flex-col items-center">
-              <D20Die 
-                value={communityRating || '-'} 
-                theme={communityRating ? "emerald" : "outline"} 
-                size={compact ? (displayPersonal || displayGroup ? "xs" : "sm") : "md"} 
-              />
-              <span className="text-[8px] font-black text-white/30 uppercase tracking-widest mt-0.5">
-                {communityRating ? 'Rating' : 'Unrated'}
+            {/* Rating Die in corner */}
+            <div className="flex flex-col items-end gap-2">
+              {displayPersonal && displayPersonal !== '-' && (
+                <div className="flex flex-col items-center">
+                  <D20Die value={displayPersonal} theme="gold" size="xs" />
+                  <span className="text-[6px] font-black text-gold-accent uppercase tracking-widest mt-0.5">You</span>
+                </div>
+              )}
+              {communityRating && (
+                <div className="flex flex-col items-center opacity-80 group-hover:opacity-100 transition-opacity">
+                  <D20Die value={communityRating} theme="emerald" size="xs" />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Main Info */}
+          <div className="mt-auto">
+            {game.categories && game.categories.length > 0 && (
+              <span className="text-[10px] font-black text-emerald-accent uppercase tracking-[0.2em] mb-2 block">
+                {game.categories[0]}
               </span>
-            </div>
-          </div>
-
-          {/* Center Content */}
-          <div className="flex flex-col justify-center items-center text-center flex-1 min-w-0 px-2 h-full">
-            <div className="flex-1 flex flex-col justify-center w-full">
-              <GameTitleWithDC 
-                game={game} 
-                shieldSize="sm" 
-                shouldTruncate={true}
-                containerClassName={cn("justify-center w-full", compact ? "mb-1" : "mb-3")}
-                titleClassName={cn(
-                  "text-white group-hover:text-emerald-accent transition-colors",
-                  compact ? "text-sm sm:text-base line-clamp-2" : "text-xl md:text-2xl"
-                )}
-              />
-            </div>
-            
-            {/* Stats Row */}
-            {!compact && (
-              <div className="max-w-full flex items-center gap-2 bg-white/5 backdrop-blur-md px-3 py-2 rounded-full border border-white/10 overflow-hidden mt-auto">
-                {game.categories && game.categories.length > 0 && (
-                  <>
-                    <span className="text-[9px] font-black text-emerald-accent uppercase tracking-widest truncate">
-                      {game.categories[0]}
-                    </span>
-                    <div className="w-1 h-1 rounded-full bg-white/20 shrink-0" />
-                  </>
-                )}
-                <div className="flex items-center gap-1.5 text-white/60 text-[9px] font-black uppercase tracking-widest shrink-0">
-                  <Users className="w-3 h-3 text-white/40" />
-                  <span>{game.playerCount || '2-4'}</span>
-                </div>
-                <div className="w-1 h-1 rounded-full bg-white/20 shrink-0" />
-                <div className="flex items-center gap-1.5 text-white/60 text-[9px] font-black uppercase tracking-widest shrink-0">
-                  <Clock className="w-3 h-3 text-white/40" />
-                  <span>{formatPlayTime(game.playTime)}</span>
-                </div>
-              </div>
             )}
-          </div>
+            
+            <GameTitleWithDC 
+              game={game} 
+              shieldSize="sm" 
+              shouldTruncate={true}
+              containerClassName="mb-3"
+              titleClassName={cn(
+                "text-white group-hover:text-emerald-accent transition-colors",
+                compact ? "text-base sm:text-lg" : "text-xl md:text-2xl"
+              )}
+            />
 
-          {/* Right Side Empty spacer to maintain centering */}
-          <div className={cn(
-            "shrink-0",
-            compact ? "w-[50px]" : "w-[70px]"
-          )} />
+            {/* Stats Row */}
+            <div className="flex items-center gap-4 text-white/40 group-hover:text-white/60 transition-colors">
+              <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest">
+                <Users className="w-3.5 h-3.5 opacity-50" />
+                <span>{game.playerCount || (game.minPlayers ? `${game.minPlayers}-${game.maxPlayers}` : '2-4')}</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest">
+                <Clock className="w-3.5 h-3.5 opacity-50" />
+                <span>{formatPlayTime(game.playTime)}</span>
+              </div>
+            </div>
+          </div>
         </div>
-
-        {/* DC Shield Badge (REMOVED FROM HERE) */}
-
-        {/* Trending Badge */}
-        {game.trending && (
-          <div className="absolute top-4 left-4 bg-emerald-accent text-charcoal text-[8px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-lg z-20 flex items-center gap-1">
-            <TrendingUp className="w-3 h-3" /> Trending
-          </div>
-        )}
-
-        {/* Unverified Badge */}
-        {game.isApproved === false && (
-          <div className={cn(
-            "absolute top-4 bg-amber-500 text-white text-[8px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-lg z-20 flex items-center gap-1",
-            game.trending ? "left-24" : "left-4"
-          )}>
-            <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-            Unverified
-          </div>
-        )}
         
-        {/* Hover Arrow */}
-        <div className="absolute right-6 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 translate-x-4 group-hover:translate-x-0 transition-all duration-300">
-          <div className="bg-emerald-accent text-charcoal p-2 rounded-xl shadow-lg">
+        {/* Hover Arrow Overlay */}
+        <div className="absolute right-6 bottom-6 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300">
+          <div className="bg-emerald-accent text-charcoal p-2.5 rounded-xl shadow-[0_0_20px_rgba(45,212,191,0.4)]">
             <ArrowRight className="w-4 h-4" />
           </div>
         </div>

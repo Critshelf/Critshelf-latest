@@ -77,6 +77,9 @@ export default function BGGImport({ isOpen, onClose }: BGGImportProps) {
               bggId: bggId,
               isApproved: true, // Auto-approve BGG imports
               status: 'published',
+              // Add placeholders to satisfy validation if rules get tighter
+              coverImage: row.image || 'https://images.unsplash.com/photo-1610819013583-67021be397e7?auto=format&fit=crop&q=80&w=400',
+              playTime: '30-60 min',
               updatedAt: serverTimestamp()
             }, { merge: true });
             opCount++;
@@ -87,7 +90,14 @@ export default function BGGImport({ isOpen, onClose }: BGGImportProps) {
               userId: user.uid,
               gameId: gameId,
               gameTitle: objectname,
+              gameTitleLowercase: objectname.toLowerCase(),
+              gameCover: row.image || 'https://images.unsplash.com/photo-1610819013583-67021be397e7?auto=format&fit=crop&q=80&w=400',
               shelf: shelf,
+              categories: [], // Placeholder for future data
+              minPlayers: null,
+              maxPlayers: null,
+              playTime: null,
+              isExpansion: false,
               addedAt: serverTimestamp()
             }, { merge: true });
             opCount++;
@@ -101,6 +111,7 @@ export default function BGGImport({ isOpen, onClose }: BGGImportProps) {
                 userName: user.displayName || 'Gamer',
                 userAvatar: user.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.uid}`,
                 score: bggRating,
+                text: 'Imported from BGG', // REQUIRED by rules
                 createdAt: serverTimestamp()
               }, { merge: true });
               opCount++;

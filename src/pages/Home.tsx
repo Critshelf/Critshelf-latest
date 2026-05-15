@@ -51,7 +51,7 @@ import GameCard, { Game } from '../components/GameCard';
 import { useUser } from '../contexts/UserContext';
 import ActivityItem from '../components/ActivityItem';
 // import logo from '../assets/logo.png';
-const logo = '/logo.png?v=2'; // Adding version parameter to force refresh of updated asset
+const logo = '/logo.png?v=3'; // Adding version parameter to force refresh of updated asset
 
 interface RotationGame extends Game {
   playCount: number;
@@ -105,8 +105,9 @@ export default function Home() {
       limit(500)
     );
 
-    const unsubscribePlays = onSnapshot(qPlays, async (playsSnap) => {
+    const fetchRotation = async () => {
       try {
+        const playsSnap = await getDocs(qPlays);
         const playCounts: Record<string, number> = {};
         playsSnap.docs.forEach(d => {
           const data = d.data();
@@ -125,53 +126,32 @@ export default function Home() {
 
         const topIds = sortedGameIds.map(([id]) => id);
         
-        // Clean up previous individual rotation listeners
-        unsubscribeRotation.forEach(un => un());
-        unsubscribeRotation = [];
-
-        // Set up onSnapshot for each game in the top rotation
-        topIds.forEach((id, idx) => {
+        // Fetch each game in the top rotation once
+        const gamePromises = topIds.map(async (id, idx) => {
           const count = sortedGameIds[idx][1];
-          const u = onSnapshot(doc(db, 'games', id), (gSnap) => {
-            if (gSnap.exists()) {
-              const gData = gSnap.data();
-              if (gData.isExpansion) return; // Skip expansions in home rotation
-
-              setRotationGames(prev => {
-                const updated = [...prev];
-                const gameWithCount = { id: gSnap.id, ...gSnap.data(), playCount: count } as RotationGame;
-                
-                const existingIdx = updated.findIndex(g => g.id === id);
-                if (existingIdx > -1) {
-                  updated[existingIdx] = gameWithCount;
-                } else {
-                  updated.push(gameWithCount);
-                  updated.sort((a, b) => b.playCount - a.playCount);
-                }
-                return updated;
-              });
-            }
-          });
-          unsubscribeRotation.push(u);
+          const gSnap = await getDoc(doc(db, 'games', id));
+          if (gSnap.exists()) {
+            const gData = gSnap.data();
+            if (gData.isExpansion) return null;
+            return { id: gSnap.id, ...gData, playCount: count } as RotationGame;
+          }
+          return null;
         });
+
+        const gamesResults = await Promise.all(gamePromises);
+        setRotationGames(gamesResults.filter(Boolean) as RotationGame[]);
       } catch (error) {
         console.error("Error in Rotation Aggregation:", error);
       } finally {
         setLoadingRotation(false);
       }
-    }, (error) => {
-      console.error("Plays Snapshot Error:", error);
-      setLoadingRotation(false);
-    });
-
-    return () => {
-      unsubscribePlays();
-      unsubscribeRotation.forEach(un => un());
     };
+
+    fetchRotation();
   }, [user?.uid]);
 
   useEffect(() => {
-    // 3. Friends Reviews (Real-time, depends on following list)
+    // 3. Friends Reviews (One-time fetch, depends on following list)
     const following = (profile as any)?.following || [];
     if (!user || following.length === 0) {
       setFriendReviews([]);
@@ -179,23 +159,26 @@ export default function Home() {
       return;
     }
 
-    const qFriends = query(
-      collection(db, 'activities'),
-      where('type', '==', 'review_added'),
-      where('userId', 'in', following.slice(0, 10)),
-      orderBy('timestamp', 'desc'),
-      limit(3)
-    );
-    
-    const unsubscribeFriends = onSnapshot(qFriends, (snap) => {
-      setFriendReviews(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setLoadingReviews(false);
-    }, (error) => {
-      console.error("Friends Reviews Snapshot Error:", error);
-      setLoadingReviews(false);
-    });
+    const fetchFriendsReviews = async () => {
+      const qFriends = query(
+        collection(db, 'activities'),
+        where('type', '==', 'review_added'),
+        where('userId', 'in', following.slice(0, 10)),
+        orderBy('timestamp', 'desc'),
+        limit(3)
+      );
+      
+      try {
+        const snap = await getDocs(qFriends);
+        setFriendReviews(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      } catch (error) {
+        console.error("Friends Reviews Fetch Error:", error);
+      } finally {
+        setLoadingReviews(false);
+      }
+    };
 
-    return () => unsubscribeFriends();
+    fetchFriendsReviews();
   }, [user?.uid, (profile as any)?.following?.join(',')]);
 
 
@@ -492,7 +475,7 @@ export default function Home() {
                         <div className="flex items-center gap-4">
                           <div className="w-12 h-16 rounded-xl overflow-hidden border border-white/10 shadow-lg flex-shrink-0">
                             <img 
-                              src={activity.metadata.gameCover || undefined} 
+                              src={activity.metadata.gameCover || null} 
                               alt={activity.metadata.gameTitle}
                               className="w-full h-full object-cover transition-transform group-hover:scale-110"
                               referrerPolicy="no-referrer"

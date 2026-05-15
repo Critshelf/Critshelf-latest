@@ -11,6 +11,11 @@ interface CollectionStatusDropdownProps {
   gameId: string;
   gameTitle: string;
   gameCover: string;
+  categories?: string[];
+  minPlayers?: number;
+  maxPlayers?: number;
+  playTime?: string | number | null;
+  isExpansion?: boolean;
   size?: 'sm' | 'md';
   dropdownPosition?: 'top' | 'bottom';
 }
@@ -18,7 +23,12 @@ interface CollectionStatusDropdownProps {
 export default function CollectionStatusDropdown({ 
   gameId, 
   gameTitle, 
-  gameCover, 
+  gameCover,
+  categories = [],
+  minPlayers,
+  maxPlayers,
+  playTime,
+  isExpansion = false,
   size = 'md',
   dropdownPosition = 'top'
 }: CollectionStatusDropdownProps) {
@@ -61,7 +71,13 @@ export default function CollectionStatusDropdown({
         userId: user.uid,
         gameId: gameId,
         gameTitle: gameTitle,
+        gameTitleLowercase: gameTitle.toLowerCase(),
         gameCover: gameCover,
+        categories: categories || [],
+        minPlayers: minPlayers || null,
+        maxPlayers: maxPlayers || null,
+        playTime: playTime || null,
+        isExpansion: isExpansion,
         shelf: shelfId,
         addedAt: serverTimestamp(),
       });

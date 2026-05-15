@@ -262,16 +262,12 @@ export default function GroupDetail() {
     if (!id || !user) return;
     
     // Setup listeners for feed and events (once per group visit)
-    const unsubEvents = fetchEvents(id);
-    const unsubRequests = fetchRequests(id);
-    const unsubPlays = fetchPlays(id);
+    fetchEvents(id);
+    fetchRequests(id);
+    fetchPlays(id);
     fetchFollowing();
 
-    return () => {
-      unsubEvents();
-      unsubRequests();
-      unsubPlays();
-    };
+    return () => {};
   }, [id, user]);
 
   const fetchGroupData = async (groupId: string) => {
@@ -328,7 +324,7 @@ export default function GroupDetail() {
     }
   };
 
-  const fetchEvents = (groupId: string) => {
+  const fetchEvents = async (groupId: string) => {
     const now = new Date();
     const q = query(
       collection(db, 'groupEvents'),
@@ -338,17 +334,16 @@ export default function GroupDetail() {
       limit(5)
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    try {
+      const snapshot = await getDocs(q);
       const eventList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'event' } as GameNightEvent & { type: 'event' }));
       setEvents(eventList);
-    }, (error) => {
+    } catch (error) {
       handleFirestoreError(error, OperationType.LIST, 'groupEvents');
-    });
-
-    return unsubscribe;
+    }
   };
 
-  const fetchRequests = (groupId: string) => {
+  const fetchRequests = async (groupId: string) => {
     const q = query(
       collection(db, 'groupRequests'),
       where('groupId', '==', groupId),
@@ -356,7 +351,8 @@ export default function GroupDetail() {
       limit(10)
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    try {
+      const snapshot = await getDocs(q);
       const requestList = snapshot.docs
         .map(doc => ({ id: doc.id, ...doc.data(), type: 'request' } as GroupRequest))
         .filter(r => r.status === 'pending');
@@ -380,14 +376,12 @@ export default function GroupDetail() {
       }
       
       setRequests(requestList);
-    }, (error) => {
+    } catch (error) {
       handleFirestoreError(error, OperationType.LIST, 'groupRequests');
-    });
-
-    return unsubscribe;
+    }
   };
 
-  const fetchPlays = (groupId: string) => {
+  const fetchPlays = async (groupId: string) => {
     const q = query(
       collection(db, 'plays'),
       where('groupId', '==', groupId),
@@ -395,14 +389,13 @@ export default function GroupDetail() {
       limit(10)
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    try {
+      const snapshot = await getDocs(q);
       const playList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'play' } as PlaySession));
       setPlays(playList);
-    }, (error) => {
+    } catch (error) {
       handleFirestoreError(error, OperationType.LIST, 'plays');
-    });
-
-    return unsubscribe;
+    }
   };
 
   const fetchFollowing = async () => {

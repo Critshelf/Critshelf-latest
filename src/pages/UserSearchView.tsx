@@ -93,7 +93,7 @@ export default function UserSearchView() {
       }
     };
 
-    const debounceTimer = setTimeout(performSearch, 300);
+    const debounceTimer = setTimeout(performSearch, 500);
     return () => clearTimeout(debounceTimer);
   }, [searchQuery, user]);
 

@@ -3,7 +3,7 @@ import { db } from '../lib/firebase';
 import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
 import { Game } from '../components/GameCard';
 
-const RECENT_GAMES_CACHE_KEY = 'cachedRecentGames';
+const RECENT_GAMES_CACHE_KEY = 'cachedRecentGames_v4';
 const CACHE_TTL = 72 * 60 * 60 * 1000; // 72 hours
 
 export function useRecentGames() {

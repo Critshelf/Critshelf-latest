@@ -145,57 +145,41 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           setLoading(false);
         });
 
-        // Setup real-time groups and group ratings listener
-        const qGroups = query(collection(db, 'groups'), where('memberIds', 'array-contains', currentUser.uid));
-        unsubscribeGroups = onSnapshot(qGroups, (groupsSnap) => {
-          const currentGroupIds = new Set(groupsSnap.docs.map(d => d.id));
-          
-          // 1. Cleanup listeners for groups we're no longer in
-          for (const [gid, unsub] of groupListeners.entries()) {
-            if (!currentGroupIds.has(gid)) {
-              unsub();
-              groupListeners.delete(gid);
-            }
-          }
-
-          // 2. Add listeners for new groups
-          groupsSnap.docs.forEach(groupDoc => {
-            const groupId = groupDoc.id;
-            const groupName = groupDoc.data().name;
-
-            if (!groupListeners.has(groupId)) {
-              const subUn = onSnapshot(collection(db, 'groups', groupId, 'GroupGames'), (gamesSnap) => {
-                setGroupRatings(prev => {
-                  const next = { ...prev };
-                  gamesSnap.docs.forEach(gameDoc => {
-                    next[gameDoc.id] = {
-                      gameId: gameDoc.id,
-                      rating: gameDoc.data().average_d20,
-                      groupName: groupName
-                    };
-                  });
-                  return next;
-                });
-              }, (error) => {
-                if (error.code !== 'resource-exhausted') {
-                  console.error(`GroupGames Snapshot Error for ${groupId}:`, error);
-                }
+        // One-time fetch of groups and group ratings
+        const fetchGroupsAndRatings = async () => {
+          try {
+            const qGroups = query(collection(db, 'groups'), where('memberIds', 'array-contains', currentUser.uid));
+            const groupsSnap = await getDocs(qGroups);
+            
+            const ratingsMap: Record<string, GroupRating> = {};
+            const ratingPromises = groupsSnap.docs.map(async (groupDoc) => {
+              const groupId = groupDoc.id;
+              const groupName = groupDoc.data().name;
+              
+              const gamesSnap = await getDocs(collection(db, 'groups', groupId, 'GroupGames'));
+              gamesSnap.docs.forEach(gameDoc => {
+                ratingsMap[gameDoc.id] = {
+                  gameId: gameDoc.id,
+                  rating: gameDoc.data().average_d20,
+                  groupName: groupName
+                };
               });
-              groupListeners.set(groupId, subUn);
+            });
+
+            await Promise.all(ratingPromises);
+            setGroupRatings(ratingsMap);
+          } catch (error: any) {
+            if (error.code !== 'resource-exhausted') {
+              console.error("Groups Fetch Error:", error);
             }
-          });
-        }, (error) => {
-          if (error.code === 'resource-exhausted') {
-            console.error("Groups Snapshot Error (Quota Exceeded)");
           }
-        });
+        };
+
+        fetchGroupsAndRatings();
       } else {
         setProfile(null);
         setGroupRatings({});
         if (unsubscribeProfile) unsubscribeProfile();
-        if (unsubscribeGroups) unsubscribeGroups();
-        groupListeners.forEach(un => un());
-        groupListeners.clear();
         setLoading(false);
       }
     });
@@ -203,9 +187,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     return () => {
       unsubscribeAuth();
       if (unsubscribeProfile) unsubscribeProfile();
-      if (unsubscribeGroups) unsubscribeGroups();
-      groupListeners.forEach(un => un());
-      groupListeners.clear();
     };
   }, []);
 

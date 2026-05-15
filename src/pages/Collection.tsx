@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
-import { collection, query, where, onSnapshot, orderBy, getDocs, doc, getDoc, limit, startAfter } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, getDocs, doc, getDoc, limit, startAfter, getCountFromServer } from 'firebase/firestore';
 import { cn } from '../lib/utils';
 import { useUser } from '../contexts/UserContext';
 import GameSearchAndFilter from '../components/GameSearchAndFilter';
@@ -37,8 +37,9 @@ const SHELVES = [
 
 export default function Collection() {
   const { user, profile, groupRatings } = useUser();
-  const [activeShelf, setActiveShelf] = useState('all');
+  const [activeShelf, setActiveShelf] = useState('owned');
   const [items, setItems] = useState<CollectionItem[]>([]);
+  const [totalGamesCount, setTotalGamesCount] = useState(0);
   const [gamesData, setGamesData] = useState<Record<string, Game>>({});
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -50,20 +51,25 @@ export default function Collection() {
 
   // Filter States
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [activePlayerCount, setActivePlayerCount] = useState<number | null>(null);
   const [activePlayTime, setActivePlayTime] = useState<string | null>(null);
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [isImportOpen, setIsImportOpen] = useState(false);
 
+  // Debounce search effect
   useEffect(() => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
-    const path = 'userCollections';
+  // Query Builder Function
+  const buildBaseQuery = () => {
+    if (!user) return null;
     let q = query(
-      collection(db, path),
+      collection(db, 'userCollections'),
       where('userId', '==', user.uid)
     );
 
@@ -71,62 +77,105 @@ export default function Collection() {
       q = query(q, where('shelf', '==', activeShelf));
     }
 
-    q = query(q, orderBy('addedAt', 'desc'), limit(PAGE_SIZE));
+    // Support for server-side filtering (requires denormalized data)
+    if (debouncedSearch) {
+      const queryStr = debouncedSearch.toLowerCase();
+      q = query(q, 
+        where('gameTitleLowercase', '>=', queryStr),
+        where('gameTitleLowercase', '<=', queryStr + '\uf8ff')
+      );
+    }
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const collectionItems = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as CollectionItem[];
-      setItems(collectionItems);
-      setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
-      setHasMore(snapshot.docs.length === PAGE_SIZE);
+    if (selectedGenres.length > 0) {
+      q = query(q, where('categories', 'array-contains-any', selectedGenres));
+    }
+
+    if (activePlayerCount) {
+      // NOTE: Filtering by player count range server-side is tricky with inequality on one field 
+      // and equality on others. For now we focus on categories and title as requested.
+    }
+    
+    return q;
+  };
+
+  useEffect(() => {
+    if (!user) {
       setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, path);
-    });
+      setTotalGamesCount(0);
+      return;
+    }
 
-    return () => unsubscribe();
-  }, [user, activeShelf]);
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const baseQ = buildBaseQuery();
+        if (!baseQ) return;
+
+        // 1. Fetch Total Count for this specific query
+        const countSnap = await getCountFromServer(baseQ);
+        setTotalGamesCount(countSnap.data().count);
+
+        // 2. Fetch First Page
+        const fetchQ = query(baseQ, orderBy('addedAt', 'desc'), limit(PAGE_SIZE));
+        // Note: If using multiple wheres with inequality (search), Firestore might require index.
+        // Also if search is active, we might need to order by gameTitleLowercase first.
+        
+        const snapshot = await getDocs(fetchQ);
+        
+        const collectionItems = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as CollectionItem[];
+        
+        setItems(collectionItems);
+        setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
+        setHasMore(snapshot.docs.length === PAGE_SIZE);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.LIST, 'userCollections');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [user?.uid, activeShelf, debouncedSearch, JSON.stringify(selectedGenres), activePlayerCount, activePlayTime]);
 
   const fetchMoreItems = async () => {
     if (!user || !lastDoc || loadingMore) return;
     setLoadingMore(true);
 
-    const path = 'userCollections';
     try {
-      let q = query(
-        collection(db, path),
-        where('userId', '==', user.uid)
-      );
+      const baseQ = buildBaseQuery();
+      if (!baseQ) return;
 
-      if (activeShelf !== 'all') {
-        q = query(q, where('shelf', '==', activeShelf));
-      }
-
-      q = query(q, 
+      const fetchQ = query(
+        baseQ, 
         orderBy('addedAt', 'desc'),
         startAfter(lastDoc),
         limit(PAGE_SIZE)
       );
 
-      const snapshot = await getDocs(q);
+      const snapshot = await getDocs(fetchQ);
       const collectionItems = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as CollectionItem[];
 
-      setItems(prev => [...prev, ...collectionItems]);
-      setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
-      setHasMore(snapshot.docs.length === PAGE_SIZE);
+      if (snapshot.docs.length > 0) {
+        setItems(prev => [...prev, ...collectionItems]);
+        setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
+        setHasMore(snapshot.docs.length === PAGE_SIZE);
+      } else {
+        setHasMore(false);
+      }
     } catch (error) {
-      handleFirestoreError(error, OperationType.LIST, path);
+      handleFirestoreError(error, OperationType.LIST, 'userCollections');
     } finally {
       setLoadingMore(false);
     }
   };
 
-  // Real-time hydration of game data for filtering and display
+  // One-time hydration of game data for filtering and display
   const itemIdsKey = useMemo(() => items.map(i => i.gameId).sort().join(','), [items]);
 
   useEffect(() => {
@@ -136,33 +185,45 @@ export default function Collection() {
     }
 
     const allIds = Array.from(new Set(items.map(item => item.gameId)));
+    // Filter out IDs we already have data for to avoid redundant fetches
+    const missingIds = allIds.filter(id => !gamesData[id]);
+    
+    if (missingIds.length === 0) {
+      setLoadingMetadata(false);
+      return;
+    }
+
     const chunks = [];
-    for (let i = 0; i < allIds.length; i += 30) {
-      chunks.push(allIds.slice(i, i + 30));
+    for (let i = 0; i < missingIds.length; i += 30) {
+      chunks.push(missingIds.slice(i, i + 30));
     }
 
     setLoadingMetadata(true);
-    const unsubscribes: (() => void)[] = [];
-
-    chunks.forEach(chunk => {
-      const q = query(collection(db, 'games'), where('__name__', 'in', chunk));
-      const unsub = onSnapshot(q, (snap) => {
-        setGamesData(prev => {
-          const updated = { ...prev };
-          snap.docs.forEach(d => {
-            updated[d.id] = { id: d.id, ...d.data() } as Game;
-          });
-          return updated;
+    const fetchMetadata = async () => {
+      try {
+        const promises = chunks.map(async (chunk) => {
+          const q = query(collection(db, 'games'), where('__name__', 'in', chunk));
+          const snap = await getDocs(q);
+          return snap.docs.map(d => ({ id: d.id, ...d.data() } as Game));
         });
-        setLoadingMetadata(false);
-      }, (error) => {
-        console.error("Error in real-time hydration:", error);
-        setLoadingMetadata(false);
-      });
-      unsubscribes.push(unsub);
-    });
 
-    return () => unsubscribes.forEach(un => un());
+        const results = await Promise.all(promises);
+        const flatResults = results.flat();
+        
+        setGamesData(prev => {
+          const next = { ...prev };
+          flatResults.forEach(game => {
+            next[game.id] = game;
+          });
+          return next;
+        });
+      } catch (error) {
+        console.error("Error in metadata hydration:", error);
+      } finally {
+        setLoadingMetadata(false);
+      }
+    };
+    fetchMetadata();
   }, [itemIdsKey]);
 
   const filteredItems = useMemo(() => {
@@ -254,8 +315,8 @@ export default function Collection() {
                 <span className="text-[10px] font-black uppercase tracking-widest">Import BGG</span>
               </button>
             </div>
-            <p className="text-white/40 font-bold text-sm uppercase tracking-widest">
-              {items.length} Games in your vault
+            <p className="text-white/40 font-bold text-sm uppercase tracking-widest text-center md:text-left">
+              {totalGamesCount} Games in your vault
             </p>
           </div>
 
@@ -295,7 +356,7 @@ export default function Collection() {
             selectedGenres={selectedGenres}
             onGenresChange={setSelectedGenres}
             availableGenres={BOARD_GAME_CATEGORIES}
-            totalResults={filteredItems.length}
+            totalResults={totalGamesCount}
             resultsLabel="Collection Matches"
             placeholder="Search your collection..."
           />

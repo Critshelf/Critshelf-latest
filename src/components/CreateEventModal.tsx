@@ -70,7 +70,7 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({ isOpen, onClose, gr
         setIsSearching(false);
       }
     };
-    const timeout = setTimeout(search, 300);
+    const timeout = setTimeout(search, 500);
     return () => clearTimeout(timeout);
   }, [searchTerm]);
 

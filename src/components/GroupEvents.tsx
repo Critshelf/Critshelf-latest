@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Calendar, MapPin, Users, Plus, Clock, Trash2, X, Shield, History } from 'lucide-react';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
-import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, deleteDoc, getDoc } from 'firebase/firestore';
+import { collection, query, where, orderBy, doc, updateDoc, deleteDoc, getDoc, getDocs } from 'firebase/firestore';
 import { cn } from '../lib/utils';
 import CreateEventModal from './CreateEventModal';
 import EventDetailsModal from './EventDetailsModal';
@@ -35,19 +35,22 @@ const GroupEvents: React.FC<GroupEventsProps> = ({ groupId, groupOwnerId }) => {
       orderBy('dateTime', 'asc')
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const eventList = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as GroupEvent));
-      setEvents(eventList);
-      setLoading(false);
-    }, (error) => {
-      console.error("Error fetching events:", error);
-      setLoading(false);
-    });
+    const fetchEvents = async () => {
+      try {
+        const snapshot = await getDocs(q);
+        const eventList = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        } as GroupEvent));
+        setEvents(eventList);
+      } catch (error) {
+        console.error("Error fetching events:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    return () => unsubscribe();
+    fetchEvents();
   }, [groupId, user]);
 
   const handleRSVP = async (eventId: string, currentAttendees: any[], status: string) => {

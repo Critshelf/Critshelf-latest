@@ -8,7 +8,7 @@ import GameSearchAndFilter from '../components/GameSearchAndFilter';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { collection, getDocs, query, limit, doc, orderBy, startAfter, getCountFromServer, where, onSnapshot } from 'firebase/firestore';
 import { useUser } from '../contexts/UserContext';
-import { searchWikidata, fetchAndSaveWikidataGame } from '../services/wikidataService';
+import { searchWikidata } from '../services/wikidataService';
 import { BOARD_GAME_CATEGORIES } from '../constants';
 
 export default function Browse() {
@@ -28,6 +28,8 @@ export default function Browse() {
   const [wikidataLoading, setWikidataLoading] = useState(false);
   const [jitLoadingId, setJitLoadingId] = useState<string | null>(null);
 
+  const [quotaExceeded, setQuotaExceeded] = useState(false);
+
   const navigate = useNavigate();
   const [activePlayerCount, setActivePlayerCount] = useState<number | null>(null);
   const [activePlayTime, setActivePlayTime] = useState<string | null>(null);
@@ -37,7 +39,7 @@ export default function Browse() {
 
   // Debounce search term
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(searchTerm), 300);
+    const timer = setTimeout(() => setDebouncedSearch(searchTerm), 500);
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
@@ -49,7 +51,11 @@ export default function Browse() {
       try {
         const snapshot = await getCountFromServer(collection(db, 'games'));
         setTotalCount(snapshot.data().count);
-      } catch (error) {
+        setQuotaExceeded(false);
+      } catch (error: any) {
+        if (error.code === 'resource-exhausted') {
+          setQuotaExceeded(true);
+        }
         console.error("Error fetching count:", error);
       }
     };
@@ -86,6 +92,7 @@ export default function Browse() {
 
   useEffect(() => {
     setLoading(true);
+    setQuotaExceeded(false);
     let unsubscribe: (() => void) | undefined;
 
     const startSearch = async (level: number) => {
@@ -94,30 +101,28 @@ export default function Browse() {
         const q = buildBaseQuery(level);
         const limitedQ = query(q, limit(PAGE_SIZE));
 
-        unsubscribe = onSnapshot(limitedQ, (snapshot) => {
-          const gameList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
-          
-          setGames(gameList);
-          setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
-          setHasMore(snapshot.docs.length === PAGE_SIZE);
-          setLoading(false);
-        }, (error) => {
-          if (error.code === 'resource-exhausted') {
-            console.error("Firestore quota exceeded in Browse.");
-          }
-          setLoading(false);
-        });
-      } catch (err) {
-        console.error("Critical search error:", err);
+        const snapshot = await getDocs(limitedQ);
+        const gameList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
+        
+        setGames(gameList);
+        setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
+        setHasMore(snapshot.docs.length === PAGE_SIZE);
+        setLoading(false);
+        setQuotaExceeded(false);
+      } catch (error: any) {
+        if (error.code === 'resource-exhausted') {
+          console.error("Firestore quota exceeded in Browse.");
+          setQuotaExceeded(true);
+        } else {
+          console.error("Critical search error:", error);
+        }
         setLoading(false);
       }
     };
 
     startSearch(1);
 
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
+    return () => {};
   }, [debouncedSearch, activePlayerCount, JSON.stringify(selectedGenres)]);
 
   const fetchMoreGames = async () => {
@@ -141,7 +146,11 @@ export default function Browse() {
       } else {
         setHasMore(false);
       }
+      setQuotaExceeded(false);
     } catch (error: any) {
+      if (error.code === 'resource-exhausted') {
+        setQuotaExceeded(true);
+      }
       console.warn("fetchMoreGames failed:", error.message);
       setHasMore(false);
     } finally {
@@ -175,9 +184,25 @@ export default function Browse() {
   }, [debouncedSearch]);
 
   const filteredGames = useMemo(() => {
-    // Deduplicate Firestore and Wikidata results
-    const fsTitles = new Set(games.map(g => g.title.toLowerCase()));
-    const uniqueWikidata = wikidataResults.filter(wg => !fsTitles.has(wg.title.toLowerCase()));
+    // Deduplicate Firestore and Wikidata results by ID first, then by Title
+    const seenIds = new Set(games.map(g => g.id));
+    const seenTitles = new Set(games.map(g => g.title.toLowerCase()));
+    
+    // Add Firestore results to sets already
+    // Filter Wikidata results against seen IDs and Titles
+    const uniqueWikidata = wikidataResults.filter(wg => {
+      const isNewId = !seenIds.has(wg.id);
+      const isNewTitle = !seenTitles.has(wg.title.toLowerCase());
+      
+      // If we keep it, update seen sets to prevent internal Wikidata duplicates
+      if (isNewId && isNewTitle) {
+        seenIds.add(wg.id);
+        seenTitles.add(wg.title.toLowerCase());
+        return true;
+      }
+      return false;
+    });
+
     const allGames = [...games, ...uniqueWikidata];
 
     return allGames.filter(game => {
@@ -234,21 +259,8 @@ export default function Browse() {
     );
   };
 
-  const handleGameClick = async (game: Game) => {
-    if (game.isWikidataItem) {
-      setJitLoadingId(game.id);
-      try {
-        const savedId = await fetchAndSaveWikidataGame(game.id);
-        navigate(`/game/${savedId}`);
-      } catch (error) {
-        console.error("JIT Save navigation failed:", error);
-        alert("Failed to fetch game details from Wikidata. Please try again.");
-      } finally {
-        setJitLoadingId(null);
-      }
-    } else {
-      navigate(`/game/${game.id}`);
-    }
+  const handleGameClick = (game: Game) => {
+    navigate(`/game/${game.id}`);
   };
 
   return (
@@ -282,6 +294,16 @@ export default function Browse() {
           onAddManualClick={() => setIsAddModalOpen(true)}
           isLoading={loading || wikidataLoading}
         />
+
+        {quotaExceeded && (
+          <div className="mt-8 p-6 bg-rose-500/10 border border-rose-500/20 rounded-[2rem] text-rose-500 flex flex-col items-center gap-4 text-center">
+            <Globe className="w-10 h-10 animate-bounce" />
+            <div>
+              <h3 className="font-black text-lg uppercase tracking-tight">Database Quota Exceeded</h3>
+              <p className="text-sm font-bold opacity-70">We've reached our database limit for the day. Please check back tomorrow or try a different search.</p>
+            </div>
+          </div>
+        )}
 
         {/* Results Grid */}
         {loading ? (
