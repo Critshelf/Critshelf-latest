@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
-import { collection, getDocs, writeBatch, doc, getDoc, deleteDoc, updateDoc, query, where, orderBy, startAfter, limit, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, writeBatch, doc, getDoc, deleteDoc, updateDoc, query, where, orderBy, startAfter, limit, serverTimestamp, getCountFromServer } from 'firebase/firestore';
 import { useUser } from '../contexts/UserContext';
 import { cn } from '../lib/utils';
 import { Shield, CheckCircle2, Loader2, AlertTriangle, Trash2, Search, Eraser, AlertCircle, Database, Check, RefreshCw, Clock as ClockIcon } from 'lucide-react';
@@ -18,36 +18,32 @@ export default function AdminTools() {
     setProgress(0);
 
     try {
-      // 1. Fetch ALL games in the Games collection
       const gamesRef = collection(db, 'games');
-      const snapshot = await getDocs(gamesRef);
-      const allDocs = snapshot.docs;
-      
-      // 2. Filter client-side for games that are not strictly true
-      const gamesToVerify = allDocs.filter(d => {
-        const data = d.data();
-        return data.isApproved !== true;
-      });
+      const qTotal = query(gamesRef, where('isApproved', '!=', true));
+      const totalSnap = await getCountFromServer(qTotal);
+      const totalToVerify = totalSnap.data().count;
 
-      if (gamesToVerify.length === 0) {
+      if (totalToVerify === 0) {
         setStatus({ type: 'success', message: 'All games in the vault are already verified!' });
         setLoading(false);
         return;
       }
 
-      console.log(`Audited ${allDocs.length} games. Found ${gamesToVerify.length} requiring verification.`);
-      
-      // 3. Batch processing (500 limit per batch)
-      const BATCH_SIZE = 500;
       let processed = 0;
+      let lastDoc = null;
 
-      for (let i = 0; i < gamesToVerify.length; i += BATCH_SIZE) {
+      while (processed < totalToVerify) {
+        let q = query(gamesRef, where('isApproved', '!=', true), limit(500));
+        if (lastDoc) {
+          q = query(gamesRef, where('isApproved', '!=', true), startAfter(lastDoc), limit(500));
+        }
+
+        const snapshot = await getDocs(q);
+        if (snapshot.empty) break;
+
         const batch = writeBatch(db);
-        const chunk = gamesToVerify.slice(i, i + BATCH_SIZE);
-
-        chunk.forEach(gameDoc => {
+        snapshot.docs.forEach(gameDoc => {
           const data = gameDoc.data();
-          // 4. Set isApproved: true, name_lowercase, and sync status
           batch.update(gameDoc.ref, { 
             isApproved: true,
             needsVerification: false,
@@ -57,12 +53,12 @@ export default function AdminTools() {
         });
 
         await batch.commit();
-        processed += chunk.length;
-        setProgress((processed / gamesToVerify.length) * 100);
+        processed += snapshot.docs.length;
+        lastDoc = snapshot.docs[snapshot.docs.length - 1];
+        setProgress((processed / totalToVerify) * 100);
       }
 
-      setStatus({ type: 'success', message: `Vault Secured! Successfully verified ${gamesToVerify.length} games.` });
-      // Clear local cache for the admin to see results immediately
+      setStatus({ type: 'success', message: `Vault Secured! Successfully verified ${processed} games.` });
       localStorage.removeItem('cachedRecentGames_v4');
     } catch (error: any) {
       console.error("Bulk verification error:", error);
@@ -81,6 +77,8 @@ export default function AdminTools() {
   const [auditProgress, setAuditProgress] = useState(0);
   const [flaggedGames, setFlaggedGames] = useState<any[]>([]);
   const [fetchingFlagged, setFetchingFlagged] = useState(false);
+  const [hasMoreFlagged, setHasMoreFlagged] = useState(true);
+  const [lastFlaggedDoc, setLastFlaggedDoc] = useState<any>(null);
 
   // Metadata Hydration States
   const [hydrationLoading, setHydrationLoading] = useState(false);
@@ -88,18 +86,78 @@ export default function AdminTools() {
   const [lastVisibleDoc, setLastVisibleDoc] = useState<any>(null);
   const [hydratedCount, setHydratedCount] = useState(0);
 
+  // Stats
+  const [totalGamesCount, setTotalGamesCount] = useState<number | null>(null);
+
+  // Initialize bookmark from localStorage
+  useEffect(() => {
+    const initBookmark = async () => {
+      const bookmarkId = localStorage.getItem('hydrationBookmark');
+      if (bookmarkId) {
+        try {
+          const docRef = doc(db, 'games', bookmarkId);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            setLastVisibleDoc(docSnap);
+            setHydrationStatus('Bookmark loaded. Ready to continue.');
+          } else {
+            localStorage.removeItem('hydrationBookmark');
+            setHydrationStatus('Previous bookmark missing. Starting fresh.');
+          }
+        } catch (err) {
+          console.error("Bookmark recovery failed:", err);
+        }
+      }
+    };
+    initBookmark();
+  }, []);
+
   useEffect(() => {
     if (profile?.role === 'admin') {
-      fetchFlaggedGames();
+      fetchFlaggedGames(true);
+      fetchStats();
     }
-  }, [profile]);
+  }, [profile?.uid, profile?.role]);
 
-  const fetchFlaggedGames = async () => {
+  const fetchStats = async () => {
+    try {
+      const snap = await getCountFromServer(collection(db, 'games'));
+      setTotalGamesCount(snap.data().count);
+    } catch (err) {
+      console.warn("Stats fetch failed");
+    }
+  };
+
+  const fetchFlaggedGames = async (reset = false) => {
     setFetchingFlagged(true);
     try {
-      const q = query(collection(db, 'games'), where('flaggedForDeletion', '==', true));
+      const gamesRef = collection(db, 'games');
+      let q = query(
+        gamesRef, 
+        where('flaggedForDeletion', '==', true),
+        limit(20)
+      );
+
+      if (!reset && lastFlaggedDoc) {
+        q = query(
+          gamesRef,
+          where('flaggedForDeletion', '==', true),
+          startAfter(lastFlaggedDoc),
+          limit(20)
+        );
+      }
+
       const snap = await getDocs(q);
-      setFlaggedGames(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const newGames = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      if (reset) {
+        setFlaggedGames(newGames);
+      } else {
+        setFlaggedGames(prev => [...prev, ...newGames]);
+      }
+
+      setLastFlaggedDoc(snap.docs[snap.docs.length - 1]);
+      setHasMoreFlagged(snap.docs.length === 20);
     } catch (err) {
       console.error("Failed to fetch flagged games:", err);
     } finally {
@@ -120,17 +178,25 @@ export default function AdminTools() {
     ];
 
     try {
-      const snapshot = await getDocs(collection(db, 'games'));
-      const docs = snapshot.docs;
-      const BATCH_SIZE = 500;
-      let flaggedCount = 0;
+      const gamesRef = collection(db, 'games');
+      const totalSnap = await getCountFromServer(gamesRef);
+      const totalDocs = totalSnap.data().count;
+
       let processed = 0;
+      let flaggedCount = 0;
+      let lastDoc = null;
 
-      for (let i = 0; i < docs.length; i += BATCH_SIZE) {
+      while (processed < totalDocs) {
+        let q = query(gamesRef, orderBy('title'), limit(500));
+        if (lastDoc) {
+          q = query(gamesRef, orderBy('title'), startAfter(lastDoc), limit(500));
+        }
+
+        const snapshot = await getDocs(q);
+        if (snapshot.empty) break;
+
         const batch = writeBatch(db);
-        const chunk = docs.slice(i, i + BATCH_SIZE);
-
-        chunk.forEach(gameDoc => {
+        snapshot.docs.forEach(gameDoc => {
           const data = gameDoc.data();
           const title = (data.title || '').toLowerCase();
           const desc = (data.description || '').toLowerCase();
@@ -138,7 +204,6 @@ export default function AdminTools() {
           
           let flagReason = "";
           
-          // Check keywords
           const matchedKeyword = FORBIDDEN_KEYWORDS.find(kw => 
             title.includes(kw) || desc.includes(kw) || categories.some((c: string) => c.includes(kw))
           );
@@ -160,12 +225,13 @@ export default function AdminTools() {
         });
 
         await batch.commit();
-        processed += chunk.length;
-        setAuditProgress((processed / docs.length) * 100);
+        processed += snapshot.docs.length;
+        lastDoc = snapshot.docs[snapshot.docs.length - 1];
+        setAuditProgress((processed / totalDocs) * 100);
       }
 
       setStatus({ type: 'success', message: `Audit complete. Flagged ${flaggedCount} potential non-board game items.` });
-      fetchFlaggedGames();
+      fetchFlaggedGames(true);
     } catch (error: any) {
       console.error("Audit error:", error);
       setStatus({ type: 'error', message: error.message || 'Audit failed.' });
@@ -271,9 +337,10 @@ export default function AdminTools() {
 
       const lastDoc = snapshot.docs[snapshot.docs.length - 1];
       setLastVisibleDoc(lastDoc);
+      localStorage.setItem('hydrationBookmark', lastDoc.id);
 
       const batch = writeBatch(db);
-      let countInBatch = 0;
+      let countAffected = 0;
       let currentIndex = 0;
 
       for (const gameDoc of snapshot.docs) {
@@ -284,15 +351,17 @@ export default function AdminTools() {
         const needsHydration = !data.description || data.description.includes('No description available') || !data.categories || data.categories.length === 0 || !data.minPlayers;
         const wikidataId = data.wikidataId;
 
+        // Start with basic updates (stamp every doc in the batch as hydrated)
+        const updates: any = {
+          isHydrated: true,
+          updatedAt: serverTimestamp()
+        };
+
         if (needsHydration && wikidataId) {
           setHydrationStatus(`Hydrating [${currentIndex}/50]: ${data.title}...`);
           
           const wikidataResult = await fetchWikidataDetails(wikidataId);
           if (wikidataResult) {
-            const updates: any = {
-              updatedAt: serverTimestamp()
-            };
-
             if (wikidataResult.year) updates.publishingYear = parseInt(wikidataResult.year.value);
             if (wikidataResult.publishers?.value) updates.publishers = wikidataResult.publishers.value.split('|');
             if (wikidataResult.designers?.value) updates.designers = wikidataResult.designers.value.split('|');
@@ -310,9 +379,7 @@ export default function AdminTools() {
             }
 
             if (description) updates.description = description;
-
-            batch.update(gameDoc.ref, updates);
-            countInBatch++;
+            countAffected++;
           }
 
           // Mandatory 1 second rate limit
@@ -320,15 +387,14 @@ export default function AdminTools() {
         } else {
           setHydrationStatus(`Skipping [${currentIndex}/50]: ${data.title} (Already Hydrated)`);
         }
+
+        // Apply updates (stamping isHydrated for all processed docs)
+        batch.update(gameDoc.ref, updates);
       }
 
-      if (countInBatch > 0) {
-        await batch.commit();
-        setHydratedCount(prev => prev + countInBatch);
-        setHydrationStatus(`Batch Complete! Hydrated ${countInBatch} games.`);
-      } else {
-        setHydrationStatus('Batch Complete! No games in this set needed hydration.');
-      }
+      await batch.commit();
+      setHydratedCount(prev => prev + currentIndex);
+      setHydrationStatus(`Batch Complete! Processed 50 docs, Hydrated ${countAffected} items.`);
 
     } catch (error: any) {
       console.error("Hydration batch error:", error);
@@ -348,18 +414,23 @@ export default function AdminTools() {
 
     try {
       const gamesRef = collection(db, 'games');
-      const snapshot = await getDocs(gamesRef);
-      const docs = snapshot.docs;
-      
-      console.log(`Auditing ${docs.length} games for search metadata...`);
-      const BATCH_SIZE = 500;
+      const totalSnap = await getCountFromServer(gamesRef);
+      const totalDocs = totalSnap.data().count;
+
       let processed = 0;
+      let lastDoc = null;
 
-      for (let i = 0; i < docs.length; i += BATCH_SIZE) {
+      while (processed < totalDocs) {
+        let q = query(gamesRef, orderBy('title'), limit(500));
+        if (lastDoc) {
+          q = query(gamesRef, orderBy('title'), startAfter(lastDoc), limit(500));
+        }
+
+        const snapshot = await getDocs(q);
+        if (snapshot.empty) break;
+
         const batch = writeBatch(db);
-        const chunk = docs.slice(i, i + BATCH_SIZE);
-
-        chunk.forEach(gameDoc => {
+        snapshot.docs.forEach(gameDoc => {
           const data = gameDoc.data();
           if (!data.name_lowercase) {
             batch.update(gameDoc.ref, {
@@ -370,11 +441,12 @@ export default function AdminTools() {
         });
 
         await batch.commit();
-        processed += chunk.length;
-        setGlobalSyncProgress((processed / docs.length) * 100);
+        processed += snapshot.docs.length;
+        lastDoc = snapshot.docs[snapshot.docs.length - 1];
+        setGlobalSyncProgress((processed / totalDocs) * 100);
       }
 
-      setStatus({ type: 'success', message: `Global search metadata standardized for ${docs.length} games!` });
+      setStatus({ type: 'success', message: `Global search metadata standardized for ${processed} games!` });
     } catch (error: any) {
       console.error("Global sync error:", error);
       setStatus({ type: 'error', message: error.message || 'Failed to sync global search metadata.' });
@@ -391,19 +463,23 @@ export default function AdminTools() {
 
     try {
       const collRef = collection(db, 'userCollections');
-      const snapshot = await getDocs(collRef);
-      const docs = snapshot.docs;
-      
-      console.log(`Found ${docs.length} collection items. Starting metadata sync...`);
-      
-      const BATCH_SIZE = 400;
+      const totalSnap = await getCountFromServer(collRef);
+      const totalDocs = totalSnap.data().count;
+
       let processed = 0;
+      let lastDoc = null;
 
-      for (let i = 0; i < docs.length; i += BATCH_SIZE) {
+      while (processed < totalDocs) {
+        let q = query(collRef, limit(100)); // Smaller batch because of individual getDocs inside
+        if (lastDoc) {
+          q = query(collRef, startAfter(lastDoc), limit(100));
+        }
+
+        const snapshot = await getDocs(q);
+        if (snapshot.empty) break;
+
         const batch = writeBatch(db);
-        const chunk = docs.slice(i, i + BATCH_SIZE);
-
-        for (const itemDoc of chunk) {
+        for (const itemDoc of snapshot.docs) {
           const itemData = itemDoc.data();
           const gameId = itemData.gameId;
           
@@ -423,12 +499,12 @@ export default function AdminTools() {
         }
 
         await batch.commit();
-        processed += chunk.length;
-        setSyncProgress((processed / docs.length) * 100);
-        console.log(`Sync batch committed: ${processed}/${docs.length}`);
+        processed += snapshot.docs.length;
+        lastDoc = snapshot.docs[snapshot.docs.length - 1];
+        setSyncProgress((processed / totalDocs) * 100);
       }
 
-      setSyncStatus({ type: 'success', message: `Successfully synced metadata for ${docs.length} items!` });
+      setSyncStatus({ type: 'success', message: `Successfully synced metadata for ${processed} items!` });
       localStorage.removeItem('cachedRecentGames_v4');
     } catch (error: any) {
       console.error("Sync error:", error);
@@ -461,7 +537,9 @@ export default function AdminTools() {
           </div>
           <div>
             <h1 className="text-4xl font-black text-white tracking-tight">Admin Tools</h1>
-            <p className="text-white/40 font-bold uppercase tracking-widest text-xs">Internal Database Operations</p>
+            <p className="text-white/40 font-bold uppercase tracking-widest text-xs">
+              {totalGamesCount !== null ? `${totalGamesCount.toLocaleString()} Games in Database` : 'Internal Database Operations'}
+            </p>
           </div>
         </div>
 
@@ -736,6 +814,14 @@ export default function AdminTools() {
                       </div>
                     ))
                   )}
+                  {hasMoreFlagged && !fetchingFlagged && (
+                    <button
+                      onClick={() => fetchFlaggedGames(false)}
+                      className="w-full py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black text-white/40 uppercase tracking-[0.2em] hover:bg-white/10 hover:text-white transition-all mt-4"
+                    >
+                      Load More Results
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -765,28 +851,43 @@ export default function AdminTools() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className="block text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">Total Hydrated</span>
+                  <span className="block text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">Total Processed</span>
                   <span className="text-2xl font-black text-emerald-accent">{hydratedCount}</span>
                 </div>
               </div>
 
-              <button
-                onClick={processNextHydrationBatch}
-                disabled={hydrationLoading}
-                className="w-full flex items-center justify-center gap-3 bg-emerald-accent text-charcoal font-black py-6 rounded-2xl hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 group shadow-xl shadow-emerald-accent/20"
-              >
-                {hydrationLoading ? (
-                  <>
-                    <Loader2 className="w-6 h-6 animate-spin" />
-                    <span>Hydrating Batch...</span>
-                  </>
-                ) : (
-                  <>
-                    <Database className="w-6 h-6" />
-                    <span>Process Next 50 Games</span>
-                  </>
-                )}
-              </button>
+              <div className="flex flex-col gap-4">
+                <button
+                  onClick={processNextHydrationBatch}
+                  disabled={hydrationLoading}
+                  className="w-full flex items-center justify-center gap-3 bg-emerald-accent text-charcoal font-black py-6 rounded-2xl hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 group shadow-xl shadow-emerald-accent/20"
+                >
+                  {hydrationLoading ? (
+                    <>
+                      <Loader2 className="w-6 h-6 animate-spin" />
+                      <span>Hydrating Batch...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Database className="w-6 h-6" />
+                      <span>Process Next 50 Games</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => {
+                    localStorage.removeItem('hydrationBookmark');
+                    setLastVisibleDoc(null);
+                    setHydratedCount(0);
+                    setHydrationStatus('Progress Reset. Starting from beginning.');
+                  }}
+                  disabled={hydrationLoading}
+                  className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] hover:text-white transition-colors py-2 mx-auto"
+                >
+                  Reset Progress
+                </button>
+              </div>
             </div>
           </div>
 
