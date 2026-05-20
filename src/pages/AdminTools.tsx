@@ -323,12 +323,13 @@ export default function AdminTools() {
 
     try {
       const gamesRef = collection(db, 'games');
-      let q = query(gamesRef, orderBy('title'), limit(50));
-      if (lastVisibleDoc) {
-        q = query(gamesRef, orderBy('title'), startAfter(lastVisibleDoc), limit(50));
-      }
+      const q = lastVisibleDoc
+        ? query(gamesRef, orderBy('title'), startAfter(lastVisibleDoc), limit(50))
+        : query(gamesRef, orderBy('title'), limit(50));
 
       const snapshot = await getDocs(q);
+      console.log("Documents fetched from Firestore: ", snapshot.docs.length);
+
       if (snapshot.empty) {
         setHydrationStatus('No more games to process.');
         setHydrationLoading(false);
