@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
+import Footer from './components/Footer';
 import Home from './pages/Home';
 import Browse from './pages/Browse';
 import Profile from './pages/Profile';
@@ -36,9 +37,9 @@ function AppContent() {
 
   return (
     <Router>
-      <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
+      <div className="min-h-screen bg-charcoal font-sans text-white flex flex-col">
         <Navbar />
-        <main className="pb-32">
+        <main className="flex-1">
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/browse" element={<Browse />} />
@@ -63,6 +64,7 @@ function AppContent() {
             <Route path="/settings/preferences" element={<MyPreferences />} />
           </Routes>
         </main>
+        <Footer />
       </div>
     </Router>
   );

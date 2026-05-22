@@ -275,19 +275,9 @@ export default function Home() {
                       personalRating={profile?.ratings?.[rotationGames[rotationIndex].id]}
                       groupRating={groupRatings[rotationGames[rotationIndex].id]?.rating}
                       groupName={groupRatings[rotationGames[rotationIndex].id]?.groupName}
+                      isRecentPlay={true}
+                      playCount={rotationGames[rotationIndex].playCount}
                     />
-                    
-                    {/* Play Count Badge - High Visibility Emerald */}
-                    <div className="absolute top-4 right-4 bg-emerald-accent/90 backdrop-blur-md px-4 py-2 rounded-xl shadow-2xl z-20 border border-emerald-accent/30 pointer-events-none transition-transform">
-                      <div className="flex flex-col items-center">
-                        <span className="text-[14px] font-black text-white leading-none">
-                          {rotationGames[rotationIndex].playCount}
-                        </span>
-                        <span className="text-[8px] font-black text-white/80 uppercase tracking-widest">
-                          {rotationGames[rotationIndex].playCount === 1 ? 'Play' : 'Plays'}
-                        </span>
-                      </div>
-                    </div>
                   </motion.div>
                 </AnimatePresence>
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
-import { Users, Clock, TrendingUp, ArrowRight } from 'lucide-react';
+import { Users, Clock, TrendingUp, ArrowRight, Activity } from 'lucide-react';
 import D20Die from './D20Die';
 import GameTitleWithDC from './GameTitleWithDC';
 import { cn, formatPlayTime } from '../lib/utils';
@@ -61,6 +61,8 @@ interface GameCardProps {
   personalRating?: number | string;
   groupRating?: number | string;
   groupName?: string;
+  isRecentPlay?: boolean;
+  playCount?: number;
   onClick?: (e: React.MouseEvent) => void;
 }
 
@@ -70,13 +72,19 @@ const GameCard: React.FC<GameCardProps> = ({
   personalRating,
   groupRating,
   groupName,
+  isRecentPlay,
+  playCount,
   onClick
 }) => {
+  const [imgError, setImgError] = useState(false);
+
   // Social Rating Logic - strictly based on game data or props if available
   const communityRating = game.rating;
   const displayPersonal = personalRating || (game as any).personalRating;
   const displayGroup = groupRating || (game as any).groupRating;
   const activeGroupName = groupName || (game as any).groupName;
+
+  const resolvedImage = game.coverImage;
 
   return (
     <motion.div
@@ -90,10 +98,10 @@ const GameCard: React.FC<GameCardProps> = ({
         onClick={onClick ? (e) => e.preventDefault() : undefined}
       >
         {/* Background Image */}
-        <div className="absolute inset-0 overflow-hidden bg-charcoal">
-          {(game.bannerImage || game.coverImage || game.thumbnail) ? (
+        <div className="absolute inset-0 overflow-hidden bg-charcoal flex items-center justify-center">
+          {(!imgError && resolvedImage) ? (
             <img
-              src={game.bannerImage || game.coverImage || game.thumbnail}
+              src={resolvedImage}
               alt={game.title}
               className={cn(
                 "w-full h-full object-cover transition-transform duration-700 group-hover:scale-110",
@@ -103,23 +111,41 @@ const GameCard: React.FC<GameCardProps> = ({
               )}
               referrerPolicy="no-referrer"
               loading="lazy"
+              onError={(e) => { 
+                // Only hide if it truly errors so we don't aggressively replace valid ones
+                e.currentTarget.style.display = 'none'; 
+                setImgError(true);
+              }}
             />
           ) : (
-            <div className="w-full h-full bg-white/5 flex items-center justify-center">
-              <span className="text-white/20 font-black tracking-widest uppercase text-xs">No Art</span>
+            <div className="w-full h-full bg-white/5 flex items-center justify-center relative">
+              <span className="text-white/20 font-black tracking-widest uppercase text-xs z-10">No Art Available</span>
             </div>
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-charcoal via-charcoal/60 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/80 to-transparent z-10 pointer-events-none" />
         </div>
         
         {/* Content */}
         <div className={cn(
-          "relative flex flex-col justify-end p-6 min-h-[220px] h-full",
+          "relative flex flex-col justify-end p-6 min-h-[220px] h-full z-20",
           compact && "p-4 min-h-[180px]"
         )}>
+          {isRecentPlay && playCount !== undefined && (
+            <div className="absolute top-2 left-2 bg-emerald-accent/20 border border-emerald-accent text-emerald-accent text-[9px] font-black px-2 py-1 rounded-lg uppercase tracking-widest flex items-center gap-1.5 w-fit shadow-[0_0_15px_rgba(45,212,191,0.2)] backdrop-blur-md z-30 pointer-events-auto">
+              <Activity className="w-3 h-3" />
+              {playCount} {playCount === 1 ? 'Play' : 'Plays'}
+            </div>
+          )}
+
           {/* Top Badges */}
           <div className="absolute top-4 left-4 right-4 flex justify-between items-start z-20 pointer-events-none">
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2 pointer-events-auto">
+              {!isRecentPlay && playCount !== undefined && (
+                <div className="bg-emerald-accent/20 border border-emerald-accent text-emerald-accent text-[9px] font-black px-2 py-1 rounded-lg uppercase tracking-widest flex items-center gap-1.5 w-fit shadow-[0_0_15px_rgba(45,212,191,0.2)] backdrop-blur-md">
+                  <Activity className="w-3 h-3" />
+                  {playCount} {playCount === 1 ? 'Play' : 'Plays'}
+                </div>
+              )}
               {game.trending && (
                 <div className="bg-emerald-accent text-charcoal text-[7px] font-black px-2 py-1 rounded-lg uppercase tracking-widest shadow-lg flex items-center gap-1 w-fit">
                   <TrendingUp className="w-2.5 h-2.5" /> Trending
@@ -138,19 +164,22 @@ const GameCard: React.FC<GameCardProps> = ({
             </div>
 
             {/* Rating Die in corner */}
-            <div className="flex flex-col items-end gap-2">
-              {displayPersonal && displayPersonal !== '-' && (
-                <div className="flex flex-col items-center">
-                  <D20Die value={displayPersonal} theme="gold" size="xs" />
-                  <span className="text-[6px] font-black text-gold-accent uppercase tracking-widest mt-0.5">You</span>
-                </div>
-              )}
-              {communityRating && (
-                <div className="flex flex-col items-center opacity-80 group-hover:opacity-100 transition-opacity">
-                  <D20Die value={communityRating} theme="emerald" size="xs" />
-                </div>
-              )}
-            </div>
+            {(displayPersonal && displayPersonal !== '-' || communityRating) ? (
+              <div className="flex flex-col items-end gap-2 bg-black/60 backdrop-blur-md px-2 py-2 rounded-xl shadow-xl border border-white/10 pointer-events-auto transition-transform hover:scale-105">
+                {displayPersonal && displayPersonal !== '-' && (
+                  <div className="flex flex-col items-center">
+                    <span className="text-[8px] font-black text-gold-accent uppercase tracking-widest mb-1">You</span>
+                    <D20Die value={displayPersonal} theme="gold" size="sm" />
+                  </div>
+                )}
+                {communityRating && (
+                  <div className="flex flex-col items-center">
+                    <span className="text-[8px] font-black text-emerald-accent uppercase tracking-widest mb-1">Avg</span>
+                    <D20Die value={communityRating} theme="emerald" size="sm" />
+                  </div>
+                )}
+              </div>
+            ) : null}
           </div>
 
           {/* Main Info */}
@@ -165,7 +194,7 @@ const GameCard: React.FC<GameCardProps> = ({
               game={game} 
               shieldSize="sm" 
               shouldTruncate={true}
-              containerClassName="mb-3"
+              containerClassName="mb-1"
               titleClassName={cn(
                 "text-white group-hover:text-emerald-accent transition-colors",
                 compact ? "text-base sm:text-lg" : "text-xl md:text-2xl"

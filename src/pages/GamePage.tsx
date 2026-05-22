@@ -644,9 +644,9 @@ export default function GamePage() {
   return (
     <div className="min-h-screen bg-charcoal pb-32 md:pt-24">
       {/* Hero Banner */}
-      <div className="relative h-[400px] md:h-[500px] bg-charcoal">
+      <div className="relative min-h-[450px] md:min-h-[500px] bg-charcoal flex items-end pt-24 pb-8 md:pb-12">
         {/* Vibe Blur Background */}
-        <div className="absolute inset-0">
+        <div className="absolute inset-0 overflow-hidden">
           <img 
             src={(game.bannerImage || game.coverImage || game.thumbnail) || null} 
             alt="" 
@@ -660,7 +660,7 @@ export default function GamePage() {
         </div>
         
         {/* Gradient Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-charcoal via-charcoal/60 to-transparent transition-opacity duration-500" />
+        <div className="absolute inset-0 bg-gradient-to-t from-charcoal via-charcoal/80 to-transparent transition-opacity duration-500" />
         
         <button 
           onClick={() => navigate(-1)}
@@ -687,7 +687,7 @@ export default function GamePage() {
           </button>
         </div>
 
-        <div className="absolute bottom-12 left-6 right-6 max-w-7xl mx-auto z-30">
+        <div className="relative w-full px-6 max-w-7xl mx-auto z-30">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -697,12 +697,12 @@ export default function GamePage() {
               <motion.div 
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="w-48 md:w-64 aspect-[3/4] rounded-3xl overflow-hidden shadow-2xl border border-white/10 shrink-0 bg-charcoal/40 backdrop-blur-md group relative mx-auto md:mx-0"
+                className="h-64 md:h-96 aspect-[3/4] rounded-3xl overflow-hidden shadow-2xl border border-white/10 shrink-0 bg-charcoal/40 backdrop-blur-md group relative mx-auto md:mx-0"
               >
                 <img 
                   src={(game.coverImage || game.thumbnail) || null} 
                   alt={game.title}
-                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                  className="w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-110"
                   referrerPolicy="no-referrer"
                 />
               </motion.div>
