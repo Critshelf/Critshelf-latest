@@ -523,7 +523,7 @@ export default function GamePage() {
         const allReviewsQ = query(
           collection(db, 'reviews'), 
           where('gameId', '==', targetGameId),
-          limit(100) 
+          limit(50) 
         );
         const allReviewsSnap = await getDocs(allReviewsQ);
         const allReviewsData = allReviewsSnap.docs.map(d => d.data());
@@ -591,7 +591,7 @@ export default function GamePage() {
     }
 
     const fetchPendingArt = async () => {
-      const artQ = query(collection(db, 'PendingArt'), where('gameId', '==', id), where('status', '==', 'pending'));
+      const artQ = query(collection(db, 'PendingArt'), where('gameId', '==', id), where('status', '==', 'pending'), limit(20));
       try {
         const snap = await getDocs(artQ);
         setPendingArtSubmissions(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -651,10 +651,8 @@ export default function GamePage() {
             src={(game.bannerImage || game.coverImage || game.thumbnail) || null} 
             alt="" 
             className={cn(
-              "w-full h-full object-cover scale-110 transiton-all duration-700",
-              game.customImageApproved 
-                ? "opacity-100 filter-none brightness-100 grayscale-0" 
-                : (!game.bannerImage ? "blur-2xl opacity-30 grayscale brightness-75" : "opacity-40 grayscale brightness-75")
+              "w-full h-full object-cover scale-110 transition-all duration-700",
+              !game.bannerImage ? "blur-2xl opacity-30" : "opacity-40"
             )}
             style={game.bannerImage ? game.bannerStyles : undefined}
             referrerPolicy="no-referrer"
@@ -662,12 +660,7 @@ export default function GamePage() {
         </div>
         
         {/* Gradient Overlay */}
-        <div className={cn(
-          "absolute inset-0 transition-opacity duration-500",
-          game.customImageApproved 
-            ? "bg-gradient-to-r from-charcoal/60 via-charcoal/20 to-transparent" 
-            : "bg-gradient-to-r from-charcoal via-charcoal/60 to-transparent"
-        )} />
+        <div className="absolute inset-0 bg-gradient-to-t from-charcoal via-charcoal/60 to-transparent transition-opacity duration-500" />
         
         <button 
           onClick={() => navigate(-1)}
@@ -709,19 +702,9 @@ export default function GamePage() {
                 <img 
                   src={(game.coverImage || game.thumbnail) || null} 
                   alt={game.title}
-                  className={cn(
-                    "w-full h-full object-cover transition-transform duration-700 group-hover:scale-110",
-                    !game.customImageApproved && "grayscale brightness-75 blur-[2px]"
-                  )}
+                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                   referrerPolicy="no-referrer"
                 />
-                {!game.customImageApproved && (
-                  <div className="absolute inset-0 flex items-center justify-center p-6 text-center bg-black/40">
-                    <span className="text-[10px] font-black text-white/60 uppercase tracking-widest leading-relaxed">
-                      Legacy Art<br/>Approving High-Res...
-                    </span>
-                  </div>
-                )}
               </motion.div>
 
               <div className="flex-1 text-center md:text-left">

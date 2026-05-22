@@ -8,9 +8,11 @@ import { sendNotification } from '../services/notificationService';
 
 export default function ModerateArt() {
   const [searchParams] = useSearchParams();
-  const { profile } = useUser();
+  const { profile, loading: userLoading } = useUser();
   const [status, setStatus] = useState<'loading' | 'success' | 'error' | 'unauthorized'>('loading');
   const [message, setMessage] = useState('');
+  const [game, setGame] = useState<any>(null);
+  const [isFetching, setIsFetching] = useState(true);
 
   const gameId = searchParams.get('gameId');
   const action = searchParams.get('action');
@@ -19,10 +21,13 @@ export default function ModerateArt() {
 
   useEffect(() => {
     const handleModeration = async () => {
+      if (userLoading) return; // Wait for auth
+      
       // 1. Basic Validation
       if (!gameId || !action || !adminToken) {
         setStatus('error');
         setMessage('Missing required parameters.');
+        setIsFetching(false);
         return;
       }
 
@@ -30,6 +35,7 @@ export default function ModerateArt() {
       if (adminToken !== import.meta.env.VITE_ADMIN_SECRET_TOKEN) {
         setStatus('unauthorized');
         setMessage('Invalid Admin Token.');
+        setIsFetching(false);
         return;
       }
 
@@ -37,19 +43,31 @@ export default function ModerateArt() {
       if (!profile || profile.role !== 'admin') {
         setStatus('unauthorized');
         setMessage('You must be an admin to perform this action. Please log in with an admin account.');
+        setIsFetching(false);
         return;
       }
 
       try {
-        const gameSnap = await getDoc(doc(db, 'games', gameId));
+        const gameRef = doc(db, 'games', gameId);
+        const gameSnap = await getDoc(gameRef);
+        
+        if (!gameSnap.exists()) {
+          setStatus('error');
+          setMessage('Game not found.');
+          setIsFetching(false);
+          return;
+        }
+        
         const gameData = gameSnap.data();
+        setGame(gameData);
+        setIsFetching(false);
 
         if (action === 'approve') {
           // 1. Update game document
-          await updateDoc(doc(db, 'games', gameId), {
+          await updateDoc(gameRef, {
             coverImage: imageUrl,
             hasHighResArt: true,
-            customImageApproved: true,
+             customImageApproved: true,
             updatedAt: serverTimestamp()
           });
 
@@ -127,10 +145,26 @@ export default function ModerateArt() {
       }
     };
 
-    if (profile !== undefined) { // Wait for profile to load
-      handleModeration();
-    }
-  }, [gameId, action, adminToken, imageUrl, profile]);
+    handleModeration();
+  }, [gameId, action, adminToken, imageUrl, profile, userLoading]);
+
+  if (userLoading || (isFetching && status === 'loading')) {
+    return (
+      <div className="min-h-screen bg-charcoal flex flex-col items-center justify-center p-6 text-white">
+        <Loader2 className="w-16 h-16 text-emerald-accent animate-spin mb-6" />
+        <p className="text-xl font-bold">Loading game data...</p>
+      </div>
+    );
+  }
+
+  if (!game && status === 'error' && message === 'Game not found.') {
+    return (
+      <div className="min-h-screen bg-charcoal flex flex-col items-center justify-center p-6 text-white">
+        <XCircle className="w-16 h-16 text-red-500 mb-6" />
+        <p className="text-xl font-bold">Game not found.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-charcoal flex items-center justify-center p-6 pt-24 text-white">
@@ -139,6 +173,7 @@ export default function ModerateArt() {
           <>
             <Loader2 className="w-16 h-16 text-emerald-accent animate-spin mx-auto mb-6" />
             <h1 className="text-2xl font-black mb-2">Processing Action</h1>
+            {game && <p className="text-white/60 mb-2">Approving: {game.title}</p>}
             <p className="text-white/40 font-bold uppercase tracking-widest text-xs">Communicating with CritShelf Library...</p>
           </>
         )}
@@ -149,6 +184,7 @@ export default function ModerateArt() {
               <CheckCircle2 className="w-10 h-10 text-emerald-accent" />
             </div>
             <h1 className="text-3xl font-black mb-4">Action Confirmed</h1>
+            {game && <p className="text-emerald-accent font-bold mb-4">{game.title}</p>}
             <p className="text-white/60 mb-8 font-medium leading-relaxed">{message}</p>
             <button 
               onClick={() => window.close()}

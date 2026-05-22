@@ -89,21 +89,26 @@ const GameCard: React.FC<GameCardProps> = ({
         className="flex flex-col flex-1 w-full relative"
         onClick={onClick ? (e) => e.preventDefault() : undefined}
       >
-        {/* Vibe Blur Background */}
-        <div className="absolute inset-0 overflow-hidden">
-          <img
-            src={(game.bannerImage || game.coverImage || game.thumbnail) || null}
-            alt=""
-            className={cn(
-              "w-full h-full object-cover transition-transform duration-700 group-hover:scale-110",
-              game.customImageApproved 
-                ? "opacity-100 brightness-[0.7] grayscale-0" 
-                : "opacity-40 blur-[4px] grayscale brightness-50"
-            )}
-            style={game.bannerImage ? game.bannerStyles : undefined}
-            referrerPolicy="no-referrer"
-            loading="lazy"
-          />
+        {/* Background Image */}
+        <div className="absolute inset-0 overflow-hidden bg-charcoal">
+          {(game.bannerImage || game.coverImage || game.thumbnail) ? (
+            <img
+              src={game.bannerImage || game.coverImage || game.thumbnail}
+              alt={game.title}
+              className={cn(
+                "w-full h-full object-cover transition-transform duration-700 group-hover:scale-110",
+                game.customImageApproved
+                  ? "opacity-100 filter-none brightness-100 grayscale-0"
+                  : "opacity-40 blur-md grayscale brightness-50"
+              )}
+              referrerPolicy="no-referrer"
+              loading="lazy"
+            />
+          ) : (
+            <div className="w-full h-full bg-white/5 flex items-center justify-center">
+              <span className="text-white/20 font-black tracking-widest uppercase text-xs">No Art</span>
+            </div>
+          )}
           <div className="absolute inset-0 bg-gradient-to-t from-charcoal via-charcoal/60 to-transparent" />
         </div>
         

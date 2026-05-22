@@ -98,11 +98,12 @@ export default function Home() {
     const oneYearAgo = new Date();
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
     
+    // REDUCED TO 50 TO PREVENT READ LEAKS
     const qPlays = query(
       collection(db, 'plays'),
       where('userId', '==', user.uid),
       where('playDate', '>=', oneYearAgo),
-      limit(500)
+      limit(50)
     );
 
     const fetchRotation = async () => {
