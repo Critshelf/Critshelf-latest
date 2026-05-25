@@ -142,37 +142,25 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
   const [isAddGuestOpen, setIsAddGuestOpen] = useState(false);
   const [guestNameInput, setGuestNameInput] = useState('');
 
-  const mockFriends: UserProfile[] = [
-    { uid: 'f1', displayName: 'Alex Rivera', photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Alex' },
-    { uid: 'f2', displayName: 'Jordan Smith', photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Jordan' },
-    { uid: 'f3', displayName: 'Taylor Wong', photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Taylor' },
-    { uid: 'f4', displayName: 'Casey Jones', photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Casey' },
-  ];
-
-  const displayFriends = friends.length > 0 ? friends : mockFriends;
-
   useEffect(() => {
-    if (user) {
-      fetchFriends(user.uid);
+    if (user && profile) {
+      fetchFriends();
       fetchGroups(user.uid);
     }
-  }, [user]);
+  }, [user, profile]);
 
-  const fetchFriends = async (userId: string) => {
+  const fetchFriends = async () => {
     try {
-      const q = query(collection(db, 'friendships'), where('userIds', 'array-contains', userId));
-      const snapshot = await getDocs(q);
-      const friendIds = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return data.userIds.find((id: string) => id !== userId);
-      });
+      const followingIds = (profile as any)?.following || [];
+      if (followingIds.length === 0) {
+        setFriends([]);
+        return;
+      }
 
-      const friendProfiles = await Promise.all(
-        friendIds.map(async (id) => {
-          const userDoc = await getDoc(doc(db, 'users', id));
-          return { uid: id, ...userDoc.data() } as UserProfile;
-        })
-      );
+      const q = query(collection(db, 'users'), where('uid', 'in', followingIds.slice(0, 30)));
+      const snapshot = await getDocs(q);
+      const friendProfiles = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
+      
       setFriends(friendProfiles);
     } catch (error) {
       console.error("Error fetching friends for logger:", error);
@@ -1067,42 +1055,48 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
                 <button onClick={() => setIsAddFriendOpen(false)} className="text-white/20 hover:text-white"><X className="w-5 h-5" /></button>
               </div>
               <div className="p-4 max-h-[400px] overflow-y-auto no-scrollbar">
-                <div className="grid grid-cols-1 gap-2">
-                  {displayFriends.map(friend => {
-                    const isAdded = gameMode === 'teams' 
-                      ? teams.some(t => t.players.some(p => p.userId === friend.uid))
-                      : players.some(p => p.userId === friend.uid);
-                    
-                    return (
-                      <button
-                        key={friend.uid}
-                        disabled={isAdded}
-                        onClick={() => addPlayerFromFriend(friend)}
-                        className={cn(
-                          "w-full flex items-center gap-4 p-4 rounded-2xl transition-all text-left group",
-                          isAdded ? "opacity-30 cursor-not-allowed" : "hover:bg-white/5 bg-white/[0.02]"
-                        )}
-                      >
-                        <UserAvatar 
-                          user={{ 
-                            photoURL: friend.photoURL, 
-                            avatarPreference: (friend as any).avatarPreference, 
-                            avatarSeed: (friend as any).avatarSeed,
-                            uid: friend.uid,
-                            displayName: friend.displayName 
-                          }} 
-                          size="md" 
-                          className="w-12 h-12 rounded-xl border border-white/10" 
-                        />
-                        <div className="flex-1">
-                          <p className="font-black text-white">{friend.displayName}</p>
-                          <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">CritShelf User</p>
-                        </div>
-                        {!isAdded && <Plus className="w-5 h-5 text-emerald-accent opacity-0 group-hover:opacity-100 transition-all" />}
-                      </button>
-                    );
-                  })}
-                </div>
+                {friends.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-white/40 italic font-medium">No friends added yet.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-2">
+                    {friends.map(friend => {
+                      const isAdded = gameMode === 'teams' 
+                        ? teams.some(t => t.players.some(p => p.userId === friend.uid))
+                        : players.some(p => p.userId === friend.uid);
+                      
+                      return (
+                        <button
+                          key={friend.uid}
+                          disabled={isAdded}
+                          onClick={() => addPlayerFromFriend(friend)}
+                          className={cn(
+                            "w-full flex items-center gap-4 p-4 rounded-2xl transition-all text-left group",
+                            isAdded ? "opacity-30 cursor-not-allowed" : "hover:bg-white/5 bg-white/[0.02]"
+                          )}
+                        >
+                          <UserAvatar 
+                            user={{ 
+                              photoURL: friend.photoURL, 
+                              avatarPreference: (friend as any).avatarPreference, 
+                              avatarSeed: (friend as any).avatarSeed,
+                              uid: friend.uid,
+                              displayName: friend.displayName 
+                            }} 
+                            size="md" 
+                            className="w-12 h-12 rounded-xl border border-white/10" 
+                          />
+                          <div className="flex-1">
+                            <p className="font-black text-white">{friend.displayName}</p>
+                            <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">CritShelf User</p>
+                          </div>
+                          {!isAdded && <Plus className="w-5 h-5 text-emerald-accent opacity-0 group-hover:opacity-100 transition-all" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </motion.div>
           </div>

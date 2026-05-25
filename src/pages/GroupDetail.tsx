@@ -423,18 +423,7 @@ export default function GroupDetail() {
     try {
       const promises: Promise<any>[] = [];
       for (const friendId of selectedFriends) {
-        const inviteRef = doc(collection(db, 'GroupInvites'));
-        promises.push(setDoc(inviteRef, {
-          groupId: group.id,
-          groupName: group.name,
-          fromUserId: user.uid,
-          fromUserName: user.displayName || 'Gamer',
-          toUserId: friendId,
-          status: 'pending',
-          createdAt: serverTimestamp()
-        }));
-
-        // Send In-App Notification
+        // Send In-App Notification directly to the user's personal notifications collection
         promises.push(sendNotification(
           friendId,
           'group_invite',
@@ -453,7 +442,7 @@ export default function GroupDetail() {
       setInviteSearch('');
       setInviteSearchResults([]);
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'GroupInvites');
+      handleFirestoreError(error, OperationType.CREATE, 'notifications');
     } finally {
       setIsInviting(false);
     }

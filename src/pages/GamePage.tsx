@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { 
   Users, 
@@ -25,7 +25,7 @@ import {
   Flag
 } from 'lucide-react';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
-import { doc, getDoc, collection, query, getDocs, limit, where, setDoc, updateDoc, serverTimestamp, addDoc, orderBy, startAt, endAt, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, collection, query, getDocs, limit, where, setDoc, updateDoc, serverTimestamp, addDoc, orderBy, startAt, endAt, onSnapshot, documentId } from 'firebase/firestore';
 import { Game } from '../components/GameCard';
 import { cn, formatPlayTime } from '../lib/utils';
 import { AnimatePresence } from 'motion/react';
@@ -83,6 +83,11 @@ export default function GamePage() {
   const { user, profile, refreshProfile } = useUser();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [id]);
+
   const [game, setGame] = useState<Game | null>(null);
   const [loading, setLoading] = useState(true);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -480,38 +485,70 @@ export default function GamePage() {
     };
     fetchRecentReviews();
 
-    // 3. Fetch Expansions Once (or when id changes)
-    const fetchExpansions = async (gameData?: Game) => {
+    return () => {};
+  }, [id]);
+
+  // Separate effect for querying expansions after the game is loaded
+  useEffect(() => {
+    if (!game) return;
+
+    let isMounted = true;
+    const fetchExpansions = async () => {
       setLoadingExpansions(true);
       try {
-        const expQ = query(collection(db, 'games'), where('baseGameId', '==', id), limit(24));
-        const snap = await getDocs(expQ);
-        const localExpansions = snap.docs.map(d => ({ id: d.id, ...d.data() } as Game));
-        
-        let allExpansions = [...localExpansions];
-        const targetGame = gameData || game;
-        const wikidataId = targetGame?.wikidataId || (id?.startsWith('wikidata_') ? id.replace('wikidata_', '') : null);
-        
+        const expansionsMap = new Map<string, Game>();
+        const fetchPromises: Promise<void>[] = [];
+
+        // Try using embedded expansions array first, since it is explicit
+        if (game.expansions && Array.isArray(game.expansions) && game.expansions.length > 0) {
+          const idsToFetch = game.expansions
+            .map((exp: any) => typeof exp === 'string' ? exp : exp?.id)
+            .filter(Boolean)
+            .slice(0, 10); // Hard quota limit to 10 reads
+
+          if (idsToFetch.length > 0) {
+            const arrayQ = query(collection(db, 'games'), where(documentId(), 'in', idsToFetch), limit(10));
+            fetchPromises.push(getDocs(arrayQ).then(snap => {
+              snap.docs.forEach(d => expansionsMap.set(d.id, { id: d.id, ...d.data() } as Game));
+            }));
+          }
+        } else {
+          // Fallback to checking baseGameId relation if no explicit array exists. Hard quota limit 10
+          const expQBase = query(collection(db, 'games'), where('baseGameId', '==', game.id), limit(10));
+          fetchPromises.push(getDocs(expQBase).then(snap => {
+            snap.docs.forEach(d => expansionsMap.set(d.id, { id: d.id, ...d.data() } as Game));
+          }));
+        }
+
+        // Await any firestore queries that were actually triggered
+        if (fetchPromises.length > 0) {
+          await Promise.all(fetchPromises);
+        }
+
+        let allExpansions = Array.from(expansionsMap.values());
+
+        // Fill remaining blanks from Wikidata if applicable
+        const wikidataId = game.wikidataId || (game.id.startsWith('wikidata_') ? game.id.replace('wikidata_', '') : null);
         if (wikidataId) {
           const remoteExpansions = await fetchWikidataExpansions(wikidataId);
-          const localTitles = new Set(localExpansions.map(e => e.title.toLowerCase()));
+          const localTitles = new Set(allExpansions.map(e => e.title.toLowerCase()));
           const uniqueRemote = remoteExpansions.filter(re => !localTitles.has(re.title.toLowerCase()));
           allExpansions = [...allExpansions, ...uniqueRemote];
         }
 
-        setDbExpansions(allExpansions);
+        const validExpansions = allExpansions.filter(expansion => expansion.id !== game.id && expansion.id !== game.wikidataId);
+
+        if (isMounted) setDbExpansions(validExpansions);
       } catch (err) {
         console.error("Expansions fetch error:", err);
       } finally {
-        setLoadingExpansions(false);
+        if (isMounted) setLoadingExpansions(false);
       }
     };
-    
-    if (game) fetchExpansions(game);
-    else fetchExpansions();
+    fetchExpansions();
 
-    return () => {};
-  }, [id]);
+    return () => { isMounted = false; };
+  }, [game?.id, game?.wikidataId, game?.expansions]);
 
   // Separate effect for reviews and DC calculation - Fetch Once
   useEffect(() => {
@@ -1011,9 +1048,9 @@ export default function GamePage() {
                   whileHover={{ y: -4 }}
                   className="flex flex-col gap-3 group"
                 >
-                  <div 
-                    onClick={() => navigate(`/game/${expansion.id}`)}
-                    className="aspect-[3/4] rounded-3xl overflow-hidden border border-white/10 relative cursor-pointer shadow-xl group-hover:shadow-emerald-accent/20 transition-all duration-300"
+                  <Link 
+                    to={`/game/${expansion.id}`}
+                    className="aspect-[3/4] rounded-3xl overflow-hidden border border-white/10 relative cursor-pointer shadow-xl group-hover:shadow-emerald-accent/20 transition-all duration-300 block"
                   >
                     <img 
                       src={(expansion.coverImage || expansion.thumbnail) || null} 
@@ -1030,15 +1067,17 @@ export default function GamePage() {
                         {expansion.isWikidataItem ? 'Import on View' : 'View Details'}
                       </span>
                     </div>
-                  </div>
+                  </Link>
                   
                   <div className="space-y-2">
-                    <h4 
-                      onClick={() => navigate(`/game/${expansion.id}`)}
-                      className="text-xs font-black text-white leading-tight line-clamp-2 uppercase tracking-tight group-hover:text-emerald-accent transition-colors cursor-pointer"
+                    <Link 
+                      to={`/game/${expansion.id}`}
+                      className="block"
                     >
-                      {expansion.title}
-                    </h4>
+                      <h4 className="text-xs font-black text-white leading-tight line-clamp-2 uppercase tracking-tight group-hover:text-emerald-accent transition-colors">
+                        {expansion.title}
+                      </h4>
+                    </Link>
                     
                     <CollectionStatusDropdown 
                       gameId={expansion.id}

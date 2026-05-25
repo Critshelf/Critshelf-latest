@@ -118,7 +118,16 @@ const DiscoverGroupsModal: React.FC<DiscoverGroupsModalProps> = ({ isOpen, onClo
         return;
       }
 
-      const { groupId, groupName } = codeSnap.data();
+      const codeData = codeSnap.data();
+      
+      // Check expiration if it exists, converting Firestore Timestamp properly
+      if (codeData.expiresAt && codeData.expiresAt.toMillis() < Date.now()) {
+        setJoinCodeError('Invalid or expired join code.');
+        setIsJoiningWithCode(false);
+        return;
+      }
+
+      const { groupId, groupName } = codeData;
 
       // Step 2: Fetch actual group data
       const groupRef = doc(db, 'groups', groupId);

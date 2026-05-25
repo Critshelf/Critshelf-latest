@@ -158,19 +158,6 @@ export async function importWikidataGameToFirestore(qid: string): Promise<string
     const description = result.description ? result.description.value : "No description available from Wikidata.";
     const genres = result.genres?.value ? result.genres.value.split('|') : [];
     
-    // Explicit Video Game Keyword Sanitization
-    const videoGameKeywords = [
-      "platformer", "multiplayer online", "PC", "console", "PlayStation", "Xbox", 
-      "Nintendo", "mobile game", "iOS", "Android", "video game", "RTS", "MOBA", 
-      "first-person shooter", "indie game", "steam", "epic games"
-    ];
-    const combinedContent = `${title} ${description} ${genres.join(' ')}`.toLowerCase();
-    
-    if (videoGameKeywords.some(kw => combinedContent.includes(kw.toLowerCase()))) {
-      console.warn(`🛑 JIT Import blocked for ${title} due to video game keywords.`);
-      throw new Error("Game rejected: Highly likely a video game.");
-    }
-
     const isExpansion = !!result.parentGame;
     const minPlayers = result.minPlayers ? parseInt(result.minPlayers.value) : 0;
     const maxPlayers = result.maxPlayers ? parseInt(result.maxPlayers.value) : 0;

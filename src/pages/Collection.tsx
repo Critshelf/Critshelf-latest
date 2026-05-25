@@ -8,7 +8,9 @@ import {
   Heart,
   CheckCircle2,
   Plus,
-  ChevronDown
+  ChevronDown,
+  Upload,
+  Share2
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
@@ -18,8 +20,8 @@ import { useUser } from '../contexts/UserContext';
 import GameSearchAndFilter from '../components/GameSearchAndFilter';
 import GameCard, { Game } from '../components/GameCard';
 import BGGImport from '../components/BGGImport';
+import { ShareCollection } from '../components/ShareCollection';
 import { BOARD_GAME_CATEGORIES } from '../constants';
-import { Upload } from 'lucide-react';
 
 interface CollectionItem {
   id: string;
@@ -56,6 +58,7 @@ export default function Collection() {
   const [activePlayTime, setActivePlayTime] = useState<string | null>(null);
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [showShare, setShowShare] = useState(false);
 
   // Debounce search effect
   useEffect(() => {
@@ -302,7 +305,7 @@ export default function Collection() {
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
           <div>
-            <div className="flex items-center gap-3 mb-2">
+            <div className="flex items-center gap-3 mb-2 flex-wrap">
               <div className="w-12 h-12 bg-emerald-accent rounded-2xl flex items-center justify-center shadow-lg">
                 <Library className="w-6 h-6 text-charcoal" />
               </div>
@@ -314,7 +317,31 @@ export default function Collection() {
                 <Upload className="w-4 h-4 text-charcoal" />
                 <span className="text-[10px] font-black uppercase tracking-widest">Import BGG</span>
               </button>
+              <button
+                onClick={() => setShowShare(!showShare)}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-xl transition-all shadow-lg active:scale-95 group",
+                  showShare ? "bg-slate-700 text-white" : "bg-white/10 text-white hover:bg-white/20"
+                )}
+              >
+                <Share2 className="w-4 h-4" />
+                <span className="text-[10px] font-black uppercase tracking-widest">Share</span>
+              </button>
             </div>
+            
+            <AnimatePresence>
+              {showShare && (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0, y: -20 }}
+                  animate={{ opacity: 1, height: 'auto', y: 0 }}
+                  exit={{ opacity: 0, height: 0, y: -20 }}
+                  className="mt-6 mb-4 overflow-hidden"
+                >
+                  <ShareCollection userId={user.uid} />
+                </motion.div>
+              )}
+            </AnimatePresence>
+            
             <p className="text-white/40 font-bold text-sm uppercase tracking-widest text-center md:text-left">
               {totalGamesCount} Games in your vault
             </p>

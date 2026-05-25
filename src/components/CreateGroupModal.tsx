@@ -49,10 +49,14 @@ const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ isOpen, onClose, on
       await setDoc(doc(db, 'groups', groupId), groupData);
       
       // Create join code mapping for private/bypass join code lookup
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7);
+      
       await setDoc(doc(db, 'groupCodes', joinCode), {
         groupId,
         groupName: name.trim(),
-        isPrivate
+        isPrivate,
+        expiresAt
       });
       
       // Log Activity
