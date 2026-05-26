@@ -40,7 +40,9 @@ import {
   updateDoc,
   deleteDoc,
   serverTimestamp,
-  setDoc
+  setDoc,
+  arrayUnion,
+  writeBatch
 } from 'firebase/firestore';
 import { cn } from '../lib/utils';
 import GroupChat from '../components/GroupChat';
@@ -149,6 +151,8 @@ export default function GroupDetail() {
   const [requests, setRequests] = useState<GroupRequest[]>([]);
   const [plays, setPlays] = useState<PlaySession[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorState, setErrorState] = useState<'none' | 'permission'>('none');
+  const [isAcceptingInvite, setIsAcceptingInvite] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [following, setFollowing] = useState<Member[]>([]);
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
@@ -241,8 +245,12 @@ export default function GroupDetail() {
         navigate('/social?tab=groups');
       }
       setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'groups/' + id);
+    }, (error: any) => {
+      if (error?.code === 'permission-denied') {
+        setErrorState('permission');
+      } else {
+        handleFirestoreError(error, OperationType.GET, 'groups/' + id);
+      }
       setLoading(false);
     });
 
@@ -445,6 +453,40 @@ export default function GroupDetail() {
       handleFirestoreError(error, OperationType.CREATE, 'notifications');
     } finally {
       setIsInviting(false);
+    }
+  };
+
+  const acceptInvite = async () => {
+    if (!id || !user) return;
+    setIsAcceptingInvite(true);
+    try {
+      const groupRef = doc(db, 'groups', id);
+      
+      // Update group
+      await updateDoc(groupRef, {
+        members: arrayUnion({ userId: user.uid, role: 'member', joinedAt: new Date().toISOString() }),
+        memberIds: arrayUnion(user.uid)
+      });
+      
+      // Delete the notification from the user's inbox
+      const notificationsRef = collection(db, 'users', user.uid, 'notifications');
+      const q = query(notificationsRef, where('type', '==', 'group_invite'), where('groupId', '==', id));
+      const notifsSnap = await getDocs(q);
+      
+      if (!notifsSnap.empty) {
+        const batch = writeBatch(db);
+        notifsSnap.docs.forEach(docSnap => batch.delete(docSnap.ref));
+        await batch.commit();
+      }
+
+      setErrorState('none');
+      setLoading(true);
+      window.location.reload();
+    } catch (error) {
+      console.error("Failed to accept invite:", error);
+      alert("Failed to join group. You might need a valid invite.");
+    } finally {
+      setIsAcceptingInvite(false);
     }
   };
 
@@ -656,6 +698,39 @@ export default function GroupDetail() {
   };
 
   const isLeader = group?.members?.find(m => m.userId === user?.uid)?.role === 'leader';
+
+  if (errorState === 'permission' && !loading) {
+    return (
+      <div className="min-h-screen bg-charcoal flex items-center justify-center p-6">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-white/5 border border-white/10 rounded-3xl p-8 max-w-md w-full text-center shadow-2xl backdrop-blur-md"
+        >
+          <div className="w-20 h-20 bg-emerald-accent/20 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Users className="w-10 h-10 text-emerald-accent" />
+          </div>
+          <h2 className="text-2xl font-black text-white mb-2">Private Group</h2>
+          <p className="text-white/40 mb-8 font-medium">You need an invitation to view this group. If you were invited, you can join below.</p>
+          
+          <button
+            onClick={acceptInvite}
+            disabled={isAcceptingInvite}
+            className="w-full py-4 bg-emerald-accent text-charcoal rounded-xl font-black uppercase tracking-widest hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2"
+          >
+            {isAcceptingInvite ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Accept Invite'}
+          </button>
+          
+          <button 
+            onClick={() => navigate('/social?tab=groups')}
+            className="mt-4 w-full py-4 bg-white/5 text-white/60 rounded-xl font-bold hover:bg-white/10 transition-all"
+          >
+            Go Back
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
 
   if (loading || !group) {
     return (

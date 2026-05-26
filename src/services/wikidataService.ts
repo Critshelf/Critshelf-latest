@@ -185,7 +185,7 @@ export async function importWikidataGameToFirestore(qid: string): Promise<string
       categories: genres,
       publishingYear: result.pubDate ? parseInt(result.pubDate.value) : 0,
       status: 'published',
-      isVerified: false,
+      isVerified: true,
       needsVerification: needsVerification,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

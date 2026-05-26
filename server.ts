@@ -30,8 +30,7 @@ async function startServer() {
     try {
       const { gameId, gameTitle, imageUrl } = req.body;
 
-      const approveUrl = `${publicAppUrl}/admin/moderate-art?gameId=${gameId}&action=approve&adminToken=${adminToken}&imageUrl=${encodeURIComponent(imageUrl)}`;
-      const rejectUrl = `${publicAppUrl}/admin/moderate-art?gameId=${gameId}&action=reject&adminToken=${adminToken}`;
+      const reviewUrl = `${publicAppUrl}/game/${gameId}`;
 
       const embed = {
         title: "🖼️ New Box Art Submission",
@@ -42,7 +41,7 @@ async function startServer() {
           { name: "Game ID", value: gameId || "Unknown", inline: true },
           { 
             name: "Admin Actions", 
-            value: `[ ✅ APPROVE ](${approveUrl}) ㅤ|ㅤ [ ❌ REJECT ](${rejectUrl})`, 
+            value: `[ 🔍 REVIEW IN APP ](${reviewUrl})`, 
             inline: false 
           }
         ],

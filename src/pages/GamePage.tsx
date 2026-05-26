@@ -115,6 +115,7 @@ export default function GamePage() {
   const [loadingExpansions, setLoadingExpansions] = useState(false);
   const [pendingArtSubmissions, setPendingArtSubmissions] = useState<any[]>([]);
   const [isModerating, setIsModerating] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
 
   // Dynamic Vibe Calculation
   const topVibes = useMemo(() => {
@@ -685,11 +686,11 @@ export default function GamePage() {
         {/* Vibe Blur Background */}
         <div className="absolute inset-0 overflow-hidden">
           <img 
-            src={(game.bannerImage || game.coverImage || game.thumbnail) || null} 
+            src={game.customImageApproved ? game.coverImage : (game.bannerImage || game.coverImage || game.thumbnail || null)} 
             alt="" 
             className={cn(
               "w-full h-full object-cover scale-110 transition-all duration-700",
-              !game.bannerImage ? "blur-2xl opacity-30" : "opacity-40"
+              (!game.bannerImage && !(game.customImageApproved && game.coverImage)) ? "blur-2xl opacity-30" : "opacity-40"
             )}
             style={game.bannerImage ? game.bannerStyles : undefined}
             referrerPolicy="no-referrer"
@@ -715,7 +716,7 @@ export default function GamePage() {
           >
             <Share2 className="w-5 h-5" />
           </button>
-          {!game.isArtApproved && (
+          {(!game.customImageApproved || !game.coverImage || imageFailed) && (
             <button 
               onClick={() => setIsUpdateArtModalOpen(true)}
               className="bg-white/5 backdrop-blur-md text-white/40 px-4 py-2.5 rounded-xl hover:bg-white/10 transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest border border-white/10"
@@ -736,13 +737,18 @@ export default function GamePage() {
               <motion.div 
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="h-64 md:h-96 aspect-[3/4] rounded-3xl overflow-hidden shadow-2xl border border-white/10 shrink-0 bg-charcoal/40 backdrop-blur-md group relative mx-auto md:mx-0"
+                className="h-64 md:h-96 aspect-[3/4] rounded-3xl overflow-hidden shadow-2xl border border-white/10 shrink-0 bg-charcoal/40 backdrop-blur-md group relative mx-auto md:mx-0 flex items-center justify-center text-center p-4 bg-charcoal"
               >
                 <img 
-                  src={(game.coverImage || game.thumbnail) || null} 
+                  src={game.customImageApproved ? game.coverImage : (game.coverImage || game.thumbnail || null)} 
                   alt={game.title}
                   className="w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-110"
                   referrerPolicy="no-referrer"
+                  onError={(e) => { 
+                    e.currentTarget.style.display = 'none'; 
+                    setImageFailed(true);
+                    e.currentTarget.parentElement?.insertAdjacentHTML('beforeend', '<div class="text-white font-black text-xl">' + game.title + '</div>');
+                  }}
                 />
               </motion.div>
 
