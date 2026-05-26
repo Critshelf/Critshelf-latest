@@ -137,7 +137,7 @@ service cloud.firestore {
 
     function isValidNotification(data) {
       return data.keys().hasAll(['type', 'title', 'message', 'isRead', 'createdAt']) &&
-             data.type in ['moderation', 'social', 'library', 'groups'] &&
+             data.type in ['moderation', 'social', 'library', 'groups', 'group_invite'] &&
              data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
              data.message is string && data.message.size() > 0 && data.message.size() <= 1000 &&
              data.isRead is bool &&

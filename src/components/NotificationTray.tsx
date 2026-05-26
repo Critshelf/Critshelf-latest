@@ -51,8 +51,12 @@ export default function NotificationTray({ isOpen, onClose }: NotificationTrayPr
       })) as Notification[];
       setNotifications(msgs);
       setLoading(false);
-    }, (error) => {
-      console.error("Error listening to notifications:", error);
+    }, (error: any) => {
+      console.error("🔥 Firestore Notification Listener Error:", error);
+      if (error?.message?.includes("index")) {
+         console.error("🚨 Missing Firebase Index! Click below to create it:");
+         console.error(error.message);
+      }
       setLoading(false);
     });
 

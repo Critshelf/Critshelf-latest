@@ -715,13 +715,15 @@ export default function GamePage() {
           >
             <Share2 className="w-5 h-5" />
           </button>
-          <button 
-            onClick={() => setIsUpdateArtModalOpen(true)}
-            className="bg-white/5 backdrop-blur-md text-white/40 px-4 py-2.5 rounded-xl hover:bg-white/10 transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest border border-white/10"
-          >
-            <ImageIcon className="w-4 h-4" />
-            Update Art
-          </button>
+          {!game.isArtApproved && (
+            <button 
+              onClick={() => setIsUpdateArtModalOpen(true)}
+              className="bg-white/5 backdrop-blur-md text-white/40 px-4 py-2.5 rounded-xl hover:bg-white/10 transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest border border-white/10"
+            >
+              <ImageIcon className="w-4 h-4" />
+              Update Art
+            </button>
+          )}
         </div>
 
         <div className="relative w-full px-6 max-w-7xl mx-auto z-30">

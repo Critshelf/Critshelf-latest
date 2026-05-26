@@ -57,6 +57,11 @@ export async function sendNotification(
     targetId?: string;
   }
 ) {
+  if (!userId) {
+    console.error("🚨 CRITICAL: sendNotification called with null or undefined userId!");
+    throw new Error("sendNotification requires a valid userId");
+  }
+
   try {
     // 1. Fetch user's notification preferences
     const userDocRef = doc(db, 'users', userId);

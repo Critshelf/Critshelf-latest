@@ -261,25 +261,38 @@ export default function Home() {
               </div>
             ) : rotationGames.length > 0 ? (
               <div className="relative group">
-                <AnimatePresence mode="wait">
-                  <motion.div 
-                    key={rotationGames[rotationIndex].id}
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.3 }}
-                    className="relative"
-                  >
-                    <GameCard 
-                      game={rotationGames[rotationIndex]} 
-                      personalRating={profile?.ratings?.[rotationGames[rotationIndex].id]}
-                      groupRating={groupRatings[rotationGames[rotationIndex].id]?.rating}
-                      groupName={groupRatings[rotationGames[rotationIndex].id]?.groupName}
-                      isRecentPlay={true}
-                      playCount={rotationGames[rotationIndex].playCount}
-                    />
-                  </motion.div>
-                </AnimatePresence>
+                <div className="flex overflow-x-auto snap-x snap-mandatory gap-4 pb-4 w-full [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                  {rotationGames.map((game, idx) => (
+                    <div 
+                      key={game.id}
+                      className={cn(
+                        "min-w-[85vw] md:min-w-0 md:w-full shrink-0 snap-center",
+                        // Keep Desktop behavior functionally tied to rotationIndex
+                        idx !== rotationIndex ? "md:hidden" : "md:block"
+                      )}
+                    >
+                      <AnimatePresence mode="wait">
+                        <motion.div
+                          key={game.id}
+                          initial={{ opacity: 0, x: 20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -20 }}
+                          transition={{ duration: 0.3 }}
+                          className="relative"
+                        >
+                          <GameCard 
+                            game={game} 
+                            personalRating={profile?.ratings?.[game.id]}
+                            groupRating={groupRatings[game.id]?.rating}
+                            groupName={groupRatings[game.id]?.groupName}
+                            isRecentPlay={true}
+                            playCount={game.playCount}
+                          />
+                        </motion.div>
+                      </AnimatePresence>
+                    </div>
+                  ))}
+                </div>
 
                 {/* Carousel Paging Arrows */}
                 {rotationIndex > 0 && (
@@ -289,7 +302,7 @@ export default function Home() {
                       e.preventDefault();
                       setRotationIndex(prev => prev - 1);
                     }}
-                    className="absolute -left-6 top-1/2 -translate-y-1/2 z-30 w-12 h-12 bg-charcoal/80 backdrop-blur-md rounded-full border border-white/10 flex items-center justify-center text-white hover:bg-emerald-accent hover:text-charcoal transition-all shadow-2xl active:scale-95 group/btn"
+                    className="hidden md:flex absolute -left-6 top-1/2 -translate-y-1/2 z-30 w-12 h-12 bg-charcoal/80 backdrop-blur-md rounded-full border border-white/10 items-center justify-center text-white hover:bg-emerald-accent hover:text-charcoal transition-all shadow-2xl active:scale-95 group/btn"
                   >
                     <ChevronLeft className="w-6 h-6 group-hover/btn:-translate-x-1 transition-transform" />
                   </button>
@@ -302,7 +315,7 @@ export default function Home() {
                       e.preventDefault();
                       setRotationIndex(prev => prev + 1);
                     }}
-                    className="absolute -right-6 top-1/2 -translate-y-1/2 z-30 w-12 h-12 bg-charcoal/80 backdrop-blur-md rounded-full border border-white/10 flex items-center justify-center text-white hover:bg-emerald-accent hover:text-charcoal transition-all shadow-2xl active:scale-95 group/btn"
+                    className="hidden md:flex absolute -right-6 top-1/2 -translate-y-1/2 z-30 w-12 h-12 bg-charcoal/80 backdrop-blur-md rounded-full border border-white/10 items-center justify-center text-white hover:bg-emerald-accent hover:text-charcoal transition-all shadow-2xl active:scale-95 group/btn"
                   >
                     <ChevronRight className="w-6 h-6 group-hover/btn:translate-x-1 transition-transform" />
                   </button>
@@ -314,7 +327,7 @@ export default function Home() {
                     <div 
                       key={idx}
                       className={cn(
-                        "w-2 h-2 rounded-full transition-all duration-300",
+                        "w-2 h-2 rounded-full transition-all duration-300 md:block hidden",
                         idx === rotationIndex ? "bg-emerald-accent w-6" : "bg-white/10"
                       )}
                     />
