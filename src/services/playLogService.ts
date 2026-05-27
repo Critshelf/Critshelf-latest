@@ -9,7 +9,11 @@ import {
   where,
   getDocs,
   getDoc,
-  updateDoc
+  updateDoc,
+  writeBatch,
+  increment,
+  or,
+  and
 } from 'firebase/firestore';
 import { calculateBaseDC, calculateFinalDC } from '../lib/dcUtils';
 
@@ -23,6 +27,7 @@ export interface PlayLogPayload {
   userName: string;
   userAvatar: string;
   gameCover: string;
+  isArtApproved?: boolean;
   players: any[];
   location: string;
   date: string;
@@ -40,8 +45,11 @@ async function calculateAndStoreAttackClass(userId: string) {
     // 1. Get plays from the last 12 months
     const playsQuery = query(
       collection(db, 'plays'),
-      where('userId', '==', userId),
-      where('playDate', '>=', oneYearAgo)
+      and(
+        or(where('participantIds', 'array-contains', userId), where('userId', '==', userId)),
+        where('playDate', '>=', oneYearAgo)
+      ),
+      limit(200)
     );
     const playsSnap = await getDocs(playsQuery);
     
@@ -50,39 +58,16 @@ async function calculateAndStoreAttackClass(userId: string) {
       return;
     }
 
-    // 2. Get unique game IDs, normalizing expansions to their base games
-    const rawGameIds = Array.from(new Set(playsSnap.docs.map(d => d.data().gameId)));
-    const normalizedGameIdsMap = new Set<string>();
+    // 2. Extract unique game IDs directly from plays (cap at 20 to prevent quota death)
+    const rawGameIds = Array.from(new Set(playsSnap.docs.map(d => d.data().gameId))).slice(0, 20);
 
-    await Promise.all(rawGameIds.map(async (id) => {
-      const gDoc = await getDoc(doc(db, 'games', id));
-      if (gDoc.exists()) {
-        const data = gDoc.data();
-        const finalId = data.baseGameId || id;
-        normalizedGameIdsMap.add(finalId);
-      }
-    }));
-
-    const uniqueGameIds = Array.from(normalizedGameIdsMap);
-
-    // 3. For each unique game, get its DC_Final
-    const gameDCPromises = uniqueGameIds.map(async (gameId) => {
+    // 3. For each unique game, get a quick mock base DC (don't query reviews to save immense quota)
+    const gameDCPromises = rawGameIds.map(async (gameId) => {
       const gameDoc = await getDoc(doc(db, 'games', gameId));
       if (!gameDoc.exists()) return null;
       
       const gameData = { id: gameDoc.id, ...gameDoc.data() };
-      const baseDC = calculateBaseDC(gameData);
-
-      // Fetch reviews to get community DC
-      const reviewsQuery = query(collection(db, 'reviews'), where('gameId', '==', gameId));
-      const reviewsSnap = await getDocs(reviewsQuery);
-      const difficultyRatings = reviewsSnap.docs
-        .map(d => d.data().difficultyRating)
-        .filter(r => typeof r === 'number');
-
-      return difficultyRatings.length > 0 
-        ? calculateFinalDC(baseDC, difficultyRatings)
-        : baseDC;
+      return calculateBaseDC(gameData);
     });
 
     const gameDCs = (await Promise.all(gameDCPromises)).filter((dc): dc is number => dc !== null);
@@ -99,7 +84,7 @@ async function calculateAndStoreAttackClass(userId: string) {
     // 5. Store in user profile
     await updateDoc(doc(db, 'users', userId), { attackClass: finalAC });
   } catch (error) {
-    console.error("Error updating Attack Class:", error);
+    console.error("Firebase Query Error:", error);
   }
 }
 
@@ -125,12 +110,17 @@ export async function submitPlayLog(payload: PlayLogPayload) {
   } = payload;
 
   try {
-    // 1. Create the main game session record
+    // 1. Convert to writeBatch for atomic updates
     const sessionPath = 'plays';
     const isWinner = players.some(p => p.userId === userId && p.isWinner);
     const winnerIds = players.filter(p => p.isWinner).map(p => p.userId).filter(Boolean);
+    const participantIds = Array.from(new Set([userId, ...players.map(p => p.userId).filter(Boolean)]));
 
-    await addDoc(collection(db, sessionPath), {
+    const batch = writeBatch(db);
+
+    // Action A: Create the main play document with participantIds
+    const playDocRef = doc(collection(db, sessionPath));
+    batch.set(playDocRef, {
       userId,
       gameId,
       gameTitle,
@@ -138,29 +128,27 @@ export async function submitPlayLog(payload: PlayLogPayload) {
       playDate: new Date(date), // true Firestore Timestamp
       location,
       players,
+      participantIds, // Array of ALL participant IDs
       isWinner,
       winnerIds,
       rating,
       vibeTag,
       createdAt: serverTimestamp(),
       gameCover,
+      isArtApproved: payload.isArtApproved ?? false,
       includedExpansions: includedExpansions || []
     });
 
-    // 2. Create activity feed item
-    const activityPath = 'activities';
-    await addDoc(collection(db, activityPath), {
-      userId,
-      userName,
-      userAvatar,
-      type: 'play',
-      gameId,
-      gameTitle,
-      gameCover,
-      details: `${userName} logged a play of ${gameTitle}!`,
-      rating,
-      createdAt: serverTimestamp()
+    // Action B: Increment totalWins for every player marked as a "winner"
+    winnerIds.forEach(winnerId => {
+      const userRef = doc(db, 'users', winnerId);
+      batch.update(userRef, {
+        totalWins: increment(1)
+      });
     });
+
+    // Commit the batch
+    await batch.commit();
 
     // 3. Update Attack Class (Rolling 12-Month)
     // We do this after logging the play so the new play is included

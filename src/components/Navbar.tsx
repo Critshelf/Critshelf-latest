@@ -37,7 +37,16 @@ export default function Navbar() {
     const q = query(notificationsRef, where('isRead', '==', false));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setUnreadCount(snapshot.size);
+      const count = snapshot.size;
+      setUnreadCount(count);
+      
+      if ('setAppBadge' in navigator) {
+        if (count > 0) {
+          navigator.setAppBadge(count).catch((error: any) => console.error('App badge error', error));
+        } else {
+          navigator.clearAppBadge().catch((error: any) => console.error('App badge clear error', error));
+        }
+      }
     });
 
     return () => unsubscribe();

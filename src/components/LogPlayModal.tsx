@@ -65,7 +65,7 @@ interface LogPlayModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialGameId?: string;
-  initialGame?: { id: string; title: string; coverImage?: string };
+  initialGame?: { id: string; title: string; coverImage?: string; isArtApproved?: boolean };
   initialGroupId?: string;
 }
 
@@ -193,6 +193,7 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
           id: initialGame.id,
           title: initialGame.title,
           coverImage: initialGame.coverImage || 'https://picsum.photos/seed/game/400/400',
+          isArtApproved: initialGame.isArtApproved ?? false,
           playTime: '60 min',
           expansions: (initialGame as any).expansions || []
         });
@@ -382,6 +383,7 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
         gameId: selectedGame.id,
         gameTitle: selectedGame.title,
         gameCover: selectedGame.coverImage,
+        isArtApproved: selectedGame.isArtApproved,
         groupId: selectedGroupId || undefined,
         rating,
         vibeTag: vibeCheck || "🎲 Standard Game",
@@ -411,6 +413,7 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
             gameId: selectedGame.id,
             gameTitle: selectedGame.title,
             gameCover: selectedGame.coverImage,
+            isArtApproved: selectedGame.isArtApproved,
           }
         });
 

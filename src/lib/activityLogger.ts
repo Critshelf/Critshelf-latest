@@ -15,6 +15,7 @@ export interface ActivityMetadata {
   gameId?: string;
   gameTitle?: string;
   gameCover?: string;
+  isArtApproved?: boolean;
   eventId?: string;
   eventTitle?: string;
   pollId?: string;

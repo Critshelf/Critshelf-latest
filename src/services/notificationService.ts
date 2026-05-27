@@ -1,4 +1,4 @@
-import { db } from '../lib/firebase';
+import { db, messaging } from '../lib/firebase';
 import { 
   collection, 
   addDoc, 
@@ -10,8 +10,10 @@ import {
   orderBy, 
   onSnapshot,
   writeBatch,
-  getDocs
+  getDocs,
+  updateDoc
 } from 'firebase/firestore';
+import { getToken, onMessage } from 'firebase/messaging';
 
 export type NotificationType = 'moderation' | 'social' | 'library' | 'groups' | 'group_invite';
 
@@ -129,5 +131,52 @@ export async function markAsRead(userId: string, notificationId: string) {
     await writeBatch(db).update(notificationRef, { isRead: true }).commit();
   } catch (error) {
     console.error("Error marking notification as read:", error);
+  }
+}
+
+/**
+ * Request notification permissions and register Firebase Cloud Messaging token
+ */
+export async function setupPushNotifications(userId: string) {
+  console.warn("FCM setup: Remember to generate and set your VAPID key in the Firebase Console and update the placeholder below.");
+  
+  if (!('Notification' in window)) {
+    console.log('This browser does not support desktop notifications.');
+    return;
+  }
+
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission === 'granted') {
+      console.log('Notification permission granted.');
+      if (messaging) {
+        // Replace with your generated VAPID key
+        const token = await getToken(messaging, { vapidKey: 'BBCIYgwGbz8l64n1SMEZfOAnt-U7haTsWRSPlzlnXWa7CDmTyvf549-2ewJ-O-X09yuGpd1gXIOb-qtdPW2pVF0' });
+        
+        if (token) {
+          // Store token in Firestore for the user
+          const userDocRef = doc(db, 'users', userId);
+          await updateDoc(userDocRef, { fcmToken: token });
+          console.log('FCM Token stored for user.');
+          
+          // Foreground message handler
+          onMessage(messaging, (payload) => {
+            console.log('Message received in foreground: ', payload);
+            const notificationTitle = payload.notification?.title || 'New Notification';
+            const notificationOptions = {
+              body: payload.notification?.body,
+              icon: '/icon.png',
+            };
+            
+            // Note: If you want to show a native notification even in the foreground, you can do this:
+            // new Notification(notificationTitle, notificationOptions);
+          });
+        }
+      }
+    } else {
+      console.log('Unable to get permission to notify.');
+    }
+  } catch (error) {
+    console.error('An error occurred while setting up push notifications.', error);
   }
 }

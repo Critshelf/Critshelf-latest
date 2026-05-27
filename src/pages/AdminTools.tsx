@@ -59,7 +59,7 @@ export default function AdminTools() {
       }
 
       setStatus({ type: 'success', message: `Vault Secured! Successfully verified ${processed} games.` });
-      localStorage.removeItem('cachedRecentGames_v4');
+      localStorage.removeItem('cachedRecentGames_v5');
     } catch (error: any) {
       console.error("Bulk verification error:", error);
       setStatus({ type: 'error', message: error.message || 'Failed to complete bulk verification.' });
@@ -506,7 +506,7 @@ export default function AdminTools() {
       }
 
       setSyncStatus({ type: 'success', message: `Successfully synced metadata for ${processed} items!` });
-      localStorage.removeItem('cachedRecentGames_v4');
+      localStorage.removeItem('cachedRecentGames_v5');
     } catch (error: any) {
       console.error("Sync error:", error);
       setSyncStatus({ type: 'error', message: error.message || 'Failed to sync metadata.' });
@@ -666,7 +666,7 @@ export default function AdminTools() {
 
             <button
               onClick={() => {
-                localStorage.removeItem('cachedRecentGames_v4');
+                localStorage.removeItem('cachedRecentGames_v5');
                 window.location.reload();
               }}
               className="w-full flex items-center justify-center gap-3 bg-white/5 border border-white/10 text-white font-black py-6 rounded-2xl hover:bg-rose-500/10 hover:border-rose-500/30 hover:text-rose-500 transition-all group"

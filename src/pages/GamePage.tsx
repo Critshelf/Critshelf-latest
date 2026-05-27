@@ -218,6 +218,7 @@ export default function GamePage() {
           gameId: game.id,
           gameTitle: game.title,
           gameCover: game.coverImage,
+          isArtApproved: game.isArtApproved,
           score: personalScore,
           text: reviewText.trim()
         }
@@ -800,6 +801,7 @@ export default function GamePage() {
                 gameId={game.id}
                 gameTitle={game.title}
                 gameCover={game.coverImage || ''}
+                isArtApproved={game.isArtApproved}
                 categories={game.categories}
                 minPlayers={game.minPlayers}
                 maxPlayers={game.maxPlayers}
@@ -1091,6 +1093,7 @@ export default function GamePage() {
                       gameId={expansion.id}
                       gameTitle={expansion.title}
                       gameCover={expansion.coverImage || expansion.thumbnail || ''}
+                      isArtApproved={expansion.isArtApproved}
                       categories={expansion.categories}
                       minPlayers={expansion.minPlayers}
                       maxPlayers={expansion.maxPlayers}

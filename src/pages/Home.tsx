@@ -24,7 +24,9 @@ import {
   orderBy, 
   doc, 
   getDoc,
-  onSnapshot
+  onSnapshot,
+  or,
+  and
 } from 'firebase/firestore';
 import { cn } from '../lib/utils';
 import D20Die from '../components/D20Die';
@@ -99,10 +101,17 @@ export default function Home() {
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
     
     // REDUCED TO 50 TO PREVENT READ LEAKS
+    console.warn(
+      "Firestore index warning: If 'Heavy Rotation' (Home page) fails to load, ensure you have " +
+      "created a composite index for collection 'plays' with: participantIds (Array) and " +
+      "playDate (Ascending/Descending) in the Firebase console."
+    );
     const qPlays = query(
       collection(db, 'plays'),
-      where('userId', '==', user.uid),
-      where('playDate', '>=', oneYearAgo),
+      and(
+        or(where('participantIds', 'array-contains', user.uid), where('userId', '==', user.uid)),
+        where('playDate', '>=', oneYearAgo)
+      ),
       limit(50)
     );
 
@@ -110,9 +119,18 @@ export default function Home() {
       try {
         const playsSnap = await getDocs(qPlays);
         const playCounts: Record<string, number> = {};
+        const playMetadata: Record<string, any> = {};
+        
         playsSnap.docs.forEach(d => {
           const data = d.data();
           playCounts[data.gameId] = (playCounts[data.gameId] || 0) + 1;
+          if (!playMetadata[data.gameId]) {
+            playMetadata[data.gameId] = {
+              title: data.gameTitle || 'Unknown Game',
+              coverImage: data.gameCover || '',
+              isArtApproved: data.isArtApproved || false
+            };
+          }
         });
 
         const sortedGameIds = Object.entries(playCounts)
@@ -125,24 +143,15 @@ export default function Home() {
           return;
         }
 
-        const topIds = sortedGameIds.map(([id]) => id);
-        
-        // Fetch each game in the top rotation once
-        const gamePromises = topIds.map(async (id, idx) => {
-          const count = sortedGameIds[idx][1];
-          const gSnap = await getDoc(doc(db, 'games', id));
-          if (gSnap.exists()) {
-            const gData = gSnap.data();
-            if (gData.isExpansion) return null;
-            return { id: gSnap.id, ...gData, playCount: count } as RotationGame;
-          }
-          return null;
+        const gamesResults = sortedGameIds.map(([id, count]) => {
+          const meta = playMetadata[id];
+          if (!meta) return null;
+          return { id, ...meta, playCount: count } as RotationGame;
         });
 
-        const gamesResults = await Promise.all(gamePromises);
         setRotationGames(gamesResults.filter(Boolean) as RotationGame[]);
       } catch (error) {
-        console.error("Error in Rotation Aggregation:", error);
+        console.error("Firebase Query Error:", error);
       } finally {
         setLoadingRotation(false);
       }

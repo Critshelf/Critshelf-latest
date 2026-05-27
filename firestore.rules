@@ -203,7 +203,16 @@ service cloud.firestore {
                       isValidId(userId) &&
                       isValidUser(request.resource.data) &&
                       request.resource.data.keys().hasAll(['uid', 'role', 'createdAt']);
-      allow update: if (isOwner(userId) && isValidId(userId) && isValidUser(request.resource.data)) || isAdmin();
+      allow update: if (isOwner(userId) && isValidId(userId) && isValidUser(request.resource.data)) || 
+                    isAdmin() ||
+                    (
+                      isAuthenticated() && 
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['totalWins']) &&
+                      (
+                        (!('totalWins' in resource.data) && request.resource.data.totalWins == 1) || 
+                        (request.resource.data.totalWins == resource.data.totalWins + 1)
+                      )
+                    );
 
       match /notifications/{notificationId} {
         allow list, read: if isOwner(userId);

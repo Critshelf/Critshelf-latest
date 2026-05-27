@@ -11,6 +11,7 @@ interface CollectionStatusDropdownProps {
   gameId: string;
   gameTitle: string;
   gameCover: string;
+  isArtApproved?: boolean;
   categories?: string[];
   minPlayers?: number;
   maxPlayers?: number;
@@ -24,6 +25,7 @@ export default function CollectionStatusDropdown({
   gameId, 
   gameTitle, 
   gameCover,
+  isArtApproved = false,
   categories = [],
   minPlayers,
   maxPlayers,
@@ -73,6 +75,7 @@ export default function CollectionStatusDropdown({
         gameTitle: gameTitle,
         gameTitleLowercase: gameTitle.toLowerCase(),
         gameCover: gameCover,
+        isArtApproved: isArtApproved,
         categories: categories || [],
         minPlayers: minPlayers || null,
         maxPlayers: maxPlayers || null,
@@ -91,6 +94,7 @@ export default function CollectionStatusDropdown({
           gameId: gameId,
           gameTitle: gameTitle,
           gameCover: gameCover,
+          isArtApproved: isArtApproved,
           shelf: shelfId
         }
       });

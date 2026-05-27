@@ -10,7 +10,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, query, collection, where, getDocs, limit, onSnapshot } from 'firebase/firestore';
 import { auth, db, OperationType, handleFirestoreError } from '../lib/firebase';
-import { NotificationPreferences, DEFAULT_NOTIFICATION_PREFERENCES } from '../services/notificationService';
+import { NotificationPreferences, DEFAULT_NOTIFICATION_PREFERENCES, setupPushNotifications } from '../services/notificationService';
 
 export interface UserProfile {
   uid: string;
@@ -29,6 +29,7 @@ export interface UserProfile {
   favorites?: any[];
   following?: string[];
   attackClass?: number;
+  totalWins?: number;
   ratings?: Record<string, number>;
 }
 
@@ -102,6 +103,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           role: currentUser.email === 'coreykern2040@gmail.com' ? 'admin' : 'user',
           profileTitle: 'Master Strategist',
           notificationPreferences: DEFAULT_NOTIFICATION_PREFERENCES,
+          totalWins: 0,
           createdAt: new Date().toISOString()
         };
         await setDoc(userDocRef, initialData);
@@ -126,6 +128,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       if (currentUser) {
         // Setup real-time profile listener
         const userDocRef = doc(db, 'users', currentUser.uid);
+        
+        // Let's also set up push notifications
+        setupPushNotifications(currentUser.uid).catch(console.error);
+
         unsubscribeProfile = onSnapshot(userDocRef, (snap) => {
           if (snap.exists()) {
             const data = snap.data() as UserProfile;
@@ -216,6 +222,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         role: email === 'coreykern2040@gmail.com' ? 'admin' : 'user',
         profileTitle: 'Master Strategist',
         notificationPreferences: DEFAULT_NOTIFICATION_PREFERENCES,
+        totalWins: 0,
         createdAt: new Date().toISOString()
       };
       

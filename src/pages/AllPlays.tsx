@@ -10,13 +10,15 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, or } from 'firebase/firestore';
 import { cn } from '../lib/utils';
 import { useUser } from '../contexts/UserContext';
 
 interface GameSession {
   id: string;
   gameTitle: string;
+  gameCover?: string;
+  isArtApproved?: boolean;
   date: string;
   location: string;
   players: { name: string; score: number; isWinner: boolean }[];
@@ -38,17 +40,24 @@ export default function AllPlays() {
   }, [user, navigate]);
 
   const fetchSessions = async (userId: string) => {
-    const path = 'gameSessions';
+    const path = 'plays';
     try {
+      console.warn(
+        "Firestore index warning: If 'All Plays' fails to load, ensure you have created " +
+        "a composite index for collection 'plays' with: participantIds (Array) and " +
+        "createdAt (Descending) in the Firebase console."
+      );
       const q = query(
         collection(db, path), 
-        where('userId', '==', userId),
-        orderBy('createdAt', 'desc')
+        or(where('participantIds', 'array-contains', userId), where('userId', '==', userId)),
+        orderBy('createdAt', 'desc'),
+        limit(50)
       );
       const snapshot = await getDocs(q);
       const sessionList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as GameSession));
       setSessions(sessionList);
     } catch (error) {
+      console.error("Firebase Query Error:", error);
       handleFirestoreError(error, OperationType.LIST, path);
     } finally {
       setLoading(false);
@@ -101,6 +110,25 @@ export default function AllPlays() {
               
               <div className="relative">
                 <div className="flex flex-col md:flex-row justify-between gap-6 mb-8">
+                  <div className="flex gap-6 items-start">
+                    {session.gameCover && (
+                      <div className="w-20 h-24 shrink-0 rounded-xl overflow-hidden shadow-lg border border-white/5 relative">
+                        <img 
+                          src={session.gameCover} 
+                          alt={session.gameTitle}
+                          className={cn(
+                            "w-full h-full object-cover",
+                            session.isArtApproved ? "" : "blur-md opacity-50 grayscale"
+                          )}
+                          referrerPolicy="no-referrer"
+                        />
+                        {!session.isArtApproved && (
+                          <div className="absolute inset-0 flex items-center justify-center p-1 text-center bg-gray-900/60 font-black">
+                             <span className="text-[10px] uppercase leading-tight text-white/50 tracking-tighter break-all line-clamp-3">{session.gameTitle}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   <div>
                     <h2 className="text-2xl font-black text-white mb-2 tracking-tight">{session.gameTitle}</h2>
                     <div className="flex flex-wrap gap-4 text-sm font-bold text-white/30">
@@ -113,6 +141,7 @@ export default function AllPlays() {
                         </span>
                       )}
                     </div>
+                  </div>
                   </div>
                   
                   <div className="flex -space-x-3">

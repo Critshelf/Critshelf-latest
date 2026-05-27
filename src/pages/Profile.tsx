@@ -60,6 +60,7 @@ interface Favorite {
   gameId: string;
   gameTitle: string;
   gameCover: string;
+  isArtApproved?: boolean;
   rating: number | '-';
   isPersonal?: boolean;
 }
@@ -253,14 +254,17 @@ export default function Profile() {
       const groupsSnap = await getCountFromServer(groupsQ);
       setGroupsCount(groupsSnap.data().count);
 
-      // Wins Count (Where user logged the play AND and they marked themselves as winner)
-      const winsQ = query(
-        collection(db, 'plays'), 
-        where('userId', '==', userId),
-        where('isWinner', '==', true)
-      );
-      const winsSnap = await getCountFromServer(winsQ);
-      setWinsCount(winsSnap.data().count);
+      // Wins Count (Simply read static totalWins directly from user profile document)
+      let totalWinsCount = 0;
+      if (userId === user?.uid && profile) {
+        totalWinsCount = profile.totalWins || 0;
+      } else {
+        const userDoc = await getDoc(doc(db, 'users', userId));
+        if (userDoc.exists()) {
+          totalWinsCount = userDoc.data().totalWins || 0;
+        }
+      }
+      setWinsCount(totalWinsCount);
       
     } catch (error) {
       console.error("Error fetching profile stats:", error);
@@ -342,6 +346,7 @@ export default function Profile() {
       gameId: game.id,
       gameTitle: game.title,
       gameCover: game.coverImage,
+      isArtApproved: game.isArtApproved,
       rating: personalScore,
       isPersonal
     };
@@ -754,21 +759,28 @@ export default function Profile() {
                       <img 
                         src={favorite.gameCover || undefined} 
                         alt=""
-                        className="absolute inset-0 w-full h-full object-cover blur-2xl scale-125 transition-transform duration-700 group-hover:scale-150"
+                        className={cn(
+                          "absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-150",
+                          favorite.isArtApproved ? "opacity-100 filter-none" : "blur-2xl scale-125"
+                        )}
                         referrerPolicy="no-referrer"
                       />
-                      {/* Dark Overlay */}
-                      <div className="absolute inset-0 bg-gray-900/60 transition-colors group-hover:bg-gray-900/40" />
+                      {/* Dark Overlay only if not approved so it doesn't hide good art, or lighter if approved */}
+                      <div className={cn(
+                        "absolute inset-0 transition-colors",
+                        favorite.isArtApproved ? "bg-gradient-to-t from-gray-900/80 via-transparent to-transparent group-hover:bg-gray-900/20" : "bg-gray-900/60 group-hover:bg-gray-900/40"
+                      )} />
                     </div>
 
-                    {/* Foreground Content (Centered Title) */}
-                    <div className="relative z-10 flex flex-col items-center justify-center h-full p-6 text-center">
-                      <h3 className="text-sm md:text-base font-black text-white uppercase tracking-tighter leading-tight line-clamp-3 drop-shadow-lg max-w-[80%]">
-                        {favorite.gameTitle}
-                      </h3>
+                    {/* Foreground Content (Centered Title, only show if no art) */}
+                    <div className="relative z-10 flex flex-col items-center justify-center h-full p-6 text-center pointer-events-none">
+                      {!favorite.isArtApproved && (
+                        <h3 className="text-sm md:text-base font-black text-white uppercase tracking-tighter leading-tight line-clamp-3 drop-shadow-lg max-w-[80%]">
+                          {favorite.gameTitle}
+                        </h3>
+                      )}
                       
-                      {/* Corner Pinned D20 Rating */}
-                      <div className="absolute bottom-3 right-3 transform transition-transform group-hover:scale-110">
+                      <div className="absolute bottom-3 right-3 transform transition-transform group-hover:scale-110 pointer-events-auto">
                         <D20Die 
                           value={favorite.rating} 
                           theme={favorite.isPersonal ? 'gold' : 'outline'} 
