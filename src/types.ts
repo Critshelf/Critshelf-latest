@@ -8,6 +8,7 @@ export interface Game {
   bannerImage?: string;
   hasHighResArt?: boolean;
   customImageApproved?: boolean;
+  isArtApproved?: boolean;
   minPlayers?: number;
   maxPlayers?: number;
   playTime?: string;

@@ -34,7 +34,7 @@ export default function CollectionStatusDropdown({
   size = 'md',
   dropdownPosition = 'top'
 }: CollectionStatusDropdownProps) {
-  const { user, profile, refreshProfile } = useUser();
+  const { user, profile, refreshProfile, userGroupIds } = useUser();
   const [collectionStatus, setCollectionStatus] = useState<string | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [addingToShelf, setAddingToShelf] = useState<string | null>(null);
@@ -90,6 +90,7 @@ export default function CollectionStatusDropdown({
         userName: user.displayName || 'Anonymous',
         avatarSeed: profile?.avatarSeed || user.uid,
         type: 'game_added',
+        groupIds: userGroupIds,
         metadata: {
           gameId: gameId,
           gameTitle: gameTitle,

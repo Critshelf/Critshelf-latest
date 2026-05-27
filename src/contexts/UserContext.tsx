@@ -42,6 +42,7 @@ export interface GroupRating {
 interface UserContextType {
   user: FirebaseUser | null;
   profile: UserProfile | null;
+  userGroupIds: string[];
   groupRatings: Record<string, GroupRating>; // gameId -> { rating, groupName }
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
@@ -58,6 +59,7 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [userGroupIds, setUserGroupIds] = useState<string[]>([]);
   const [groupRatings, setGroupRatings] = useState<Record<string, GroupRating>>({});
   const [loading, setLoading] = useState(true);
 
@@ -156,6 +158,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           try {
             const qGroups = query(collection(db, 'groups'), where('memberIds', 'array-contains', currentUser.uid));
             const groupsSnap = await getDocs(qGroups);
+            
+            setUserGroupIds(groupsSnap.docs.map(doc => doc.id));
             
             const ratingsMap: Record<string, GroupRating> = {};
             const ratingPromises = groupsSnap.docs.map(async (groupDoc) => {
@@ -288,6 +292,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const value = React.useMemo(() => ({ 
     user, 
     profile, 
+    userGroupIds,
     groupRatings,
     loading, 
     signInWithGoogle, 
@@ -300,6 +305,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   }), [
     user, 
     profile, 
+    userGroupIds,
     groupRatings, 
     loading, 
     signInWithGoogle, 

@@ -80,7 +80,7 @@ const BOARD_GAME_VIBES = [
 ].sort();
 
 export default function GamePage() {
-  const { user, profile, refreshProfile } = useUser();
+  const { user, profile, refreshProfile, userGroupIds } = useUser();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   
@@ -214,6 +214,7 @@ export default function GamePage() {
         userName: user.displayName || 'Gamer',
         avatarSeed: (profile as any)?.avatarSeed || user.uid,
         type: 'review_added',
+        groupIds: userGroupIds,
         metadata: {
           gameId: game.id,
           gameTitle: game.title,
@@ -801,7 +802,7 @@ export default function GamePage() {
                 gameId={game.id}
                 gameTitle={game.title}
                 gameCover={game.coverImage || ''}
-                isArtApproved={game.isArtApproved}
+                isArtApproved={game.customImageApproved || game.isApproved}
                 categories={game.categories}
                 minPlayers={game.minPlayers}
                 maxPlayers={game.maxPlayers}
@@ -1093,7 +1094,7 @@ export default function GamePage() {
                       gameId={expansion.id}
                       gameTitle={expansion.title}
                       gameCover={expansion.coverImage || expansion.thumbnail || ''}
-                      isArtApproved={expansion.isArtApproved}
+                      isArtApproved={expansion.customImageApproved || expansion.isApproved}
                       categories={expansion.categories}
                       minPlayers={expansion.minPlayers}
                       maxPlayers={expansion.maxPlayers}

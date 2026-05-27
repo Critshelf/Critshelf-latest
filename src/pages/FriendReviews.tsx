@@ -21,7 +21,8 @@ import {
   orderBy, 
   startAfter,
   QueryDocumentSnapshot,
-  DocumentData
+  DocumentData,
+  documentId
 } from 'firebase/firestore';
 import { useUser } from '../contexts/UserContext';
 import UserAvatar from '../components/UserAvatar';
@@ -71,7 +72,32 @@ export default function FriendReviews() {
       }
 
       const snap = await getDocs(q);
-      const newReviews = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const newReviewsRaw = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      // Extract gameIds
+      const gameIds = newReviewsRaw.map((a: any) => a.metadata?.gameId).filter(Boolean);
+      const uniqueGameIds = Array.from(new Set(gameIds)).slice(0, 10);
+
+      const gamesMap = new Map();
+      if (uniqueGameIds.length > 0) {
+        const gamesQ = query(collection(db, "games"), where(documentId(), "in", uniqueGameIds));
+        const gamesSnap = await getDocs(gamesQ);
+        gamesSnap.docs.forEach((doc) => gamesMap.set(doc.id, doc.data()));
+      }
+
+      const newReviews = newReviewsRaw.map((a: any) => {
+        if (a.metadata?.gameId) {
+          const gameData = gamesMap.get(a.metadata.gameId) || {};
+          return {
+            ...a,
+            metadata: {
+              ...a.metadata,
+              ...gameData
+            }
+          };
+        }
+        return a;
+      });
 
       if (isLoadMore) {
         setReviews(prev => [...prev, ...newReviews]);
@@ -152,13 +178,21 @@ export default function FriendReviews() {
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6 mb-6">
                       <div className="flex items-center gap-6">
-                        <div className="w-16 h-20 rounded-2xl overflow-hidden border border-white/10 shadow-2xl shrink-0">
+                        <div className="w-16 h-20 rounded-2xl overflow-hidden border border-white/10 shadow-2xl shrink-0 relative">
                           <img 
-                            src={activity.metadata.gameCover || undefined} 
+                            src={activity.metadata.coverImage || activity.metadata.gameCover || undefined} 
                             alt={activity.metadata.gameTitle}
-                            className="w-full h-full object-cover transition-transform group-hover:scale-110"
+                            className={cn(
+                              "w-full h-full object-cover transition-transform group-hover:scale-110",
+                              (activity.metadata.customImageApproved || activity.metadata.isApproved) ? "" : "blur-md opacity-50 grayscale"
+                            )}
                             referrerPolicy="no-referrer"
                           />
+                          {!(activity.metadata.customImageApproved || activity.metadata.isApproved) && (
+                            <div className="absolute inset-0 flex items-center justify-center p-1 text-center bg-gray-900/60 font-black">
+                               <span className="text-[8px] uppercase leading-tight text-white/50 tracking-tighter break-all line-clamp-3">{activity.metadata.gameTitle}</span>
+                            </div>
+                          )}
                         </div>
                         <div>
                           <h2 className="text-2xl font-black text-white tracking-tight uppercase leading-none mb-2">

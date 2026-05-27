@@ -18,7 +18,8 @@ import {
   getDocs, 
   startAfter, 
   QueryDocumentSnapshot,
-  where
+  where,
+  documentId
 } from 'firebase/firestore';
 import ActivityItem from '../components/ActivityItem';
 import { ActivityType } from '../lib/activityLogger';
@@ -67,10 +68,40 @@ export default function ActivityLog() {
       }
 
       const snapshot = await getDocs(q);
-      const newActivities = snapshot.docs.map(doc => ({
+      const newActivitiesRaw = snapshot.docs.map((doc) => ({
         id: doc.id,
-        ...doc.data()
+        ...doc.data(),
       }));
+
+      // Fetch fresh game data to enrichment activities
+      const gameIds = newActivitiesRaw
+        .map((a: any) => a.metadata?.gameId)
+        .filter(Boolean);
+      const uniqueGameIds = Array.from(new Set(gameIds)).slice(0, 10);
+
+      const gamesMap = new Map();
+      if (uniqueGameIds.length > 0) {
+        const gamesQ = query(
+          collection(db, "games"),
+          where(documentId(), "in", uniqueGameIds),
+        );
+        const gamesSnap = await getDocs(gamesQ);
+        gamesSnap.docs.forEach((doc) => gamesMap.set(doc.id, doc.data()));
+      }
+
+      const newActivities = newActivitiesRaw.map((a: any) => {
+        if (a.metadata && a.metadata.gameId) {
+          const gameData = gamesMap.get(a.metadata.gameId) || {};
+          return {
+            ...a,
+            metadata: {
+              ...a.metadata,
+              ...gameData, // Apply fresh game data LAST to win property collisions (coverImage, isArtApproved)
+            },
+          };
+        }
+        return a;
+      });
 
       if (isNew) {
         setActivities(newActivities);

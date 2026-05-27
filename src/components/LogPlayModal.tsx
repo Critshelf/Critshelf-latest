@@ -80,7 +80,7 @@ const VIBE_OPTIONS = [
 type GameMode = 'ffa' | 'teams' | 'coop';
 
 export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGame, initialGroupId }: LogPlayModalProps) {
-  const { user, profile } = useUser();
+  const { user, profile, userGroupIds } = useUser();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
@@ -408,12 +408,15 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
           avatarSeed: profile?.avatarSeed || user.uid,
           type: 'play_logged',
           groupId: selectedGroupId || undefined,
+          groupIds: userGroupIds,
           groupName: groups.find(g => g.id === selectedGroupId)?.name,
           metadata: {
             gameId: selectedGame.id,
             gameTitle: selectedGame.title,
             gameCover: selectedGame.coverImage,
             isArtApproved: selectedGame.isArtApproved,
+            score: finalPlayers.find(p => p.userId === user.uid)?.score,
+            winners: finalPlayers.filter(p => p.isWinner).map(p => p.name)
           }
         });
 

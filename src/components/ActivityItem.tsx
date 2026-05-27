@@ -151,18 +151,18 @@ const ActivityItem: React.FC<ActivityItemProps> = ({ activity, compact = false }
         </div>
       </div>
 
-      {!compact && metadata.gameCover && (
+      {!compact && (metadata.coverImage || metadata.gameCover) && (
         <div className="shrink-0 w-12 h-16 rounded-lg overflow-hidden border border-white/5 shadow-2l group-hover:scale-105 transition-transform duration-300 relative">
           <img 
-            src={metadata.gameCover || null} 
+            src={metadata.coverImage || metadata.gameCover || null} 
             alt={metadata.gameTitle}
             className={cn(
               "w-full h-full object-cover transition-transform duration-300",
-              metadata.isArtApproved ? "" : "blur-md opacity-50 grayscale"
+              (metadata.customImageApproved || metadata.isApproved) ? "" : "blur-md opacity-50 grayscale"
             )}
             referrerPolicy="no-referrer"
           />
-          {!metadata.isArtApproved && (
+          {!(metadata.customImageApproved || metadata.isApproved) && (
             <div className="absolute inset-0 flex items-center justify-center p-1 text-center bg-gray-900/60 font-black">
                <span className="text-[6px] uppercase leading-tight text-white/50 tracking-tighter break-all line-clamp-3">{metadata.gameTitle}</span>
             </div>

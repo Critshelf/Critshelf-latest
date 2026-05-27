@@ -28,7 +28,8 @@ import {
   updateDoc, 
   arrayRemove,
   startAfter,
-  QueryDocumentSnapshot
+  QueryDocumentSnapshot,
+  documentId
 } from 'firebase/firestore';
 import { cn } from '../lib/utils';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -151,9 +152,32 @@ export default function SocialHubView() {
           };
         });
 
+        // Extract Game IDs to fetch fresh data
+        const activityGameIds = activitiesSnap.docs
+          .map(d => d.data().metadata?.gameId)
+          .filter(Boolean);
+        const uniqueGameIds = Array.from(new Set(activityGameIds)).slice(0, 10);
+        
+        const gamesMap = new Map();
+        if (uniqueGameIds.length > 0) {
+           const gamesQ = query(collection(db, 'games'), where(documentId(), 'in', uniqueGameIds));
+           const gamesSnap = await getDocs(gamesQ);
+           gamesSnap.docs.forEach(doc => gamesMap.set(doc.id, doc.data()));
+        }
+
         // Map Activities
         const activityItems: FeedItem[] = activitiesSnap.docs.map(d => {
           const data = d.data();
+          
+          let updatedMetadata = data.metadata || {};
+          if (updatedMetadata.gameId) {
+             const gameData = gamesMap.get(updatedMetadata.gameId) || {};
+             updatedMetadata = {
+               ...updatedMetadata,
+               ...gameData // Fresh game data overrides stale logged metadata LAST
+             };
+          }
+
           return {
             id: d.id,
             type: 'group_activity' as const,
@@ -161,7 +185,11 @@ export default function SocialHubView() {
             title: data.details || 'New activity',
             createdAt: (data.timestamp || data.createdAt)?.toDate() || new Date(),
             groupId: data.groupId,
-            activity: { id: d.id, ...data } // Pass full activity for ActivityItem
+            activity: { 
+              id: d.id, 
+              ...data,
+              metadata: updatedMetadata
+            } // Pass full activity for ActivityItem
           };
         });
 

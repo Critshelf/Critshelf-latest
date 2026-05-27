@@ -76,6 +76,7 @@ const GameCard: React.FC<GameCardProps> = ({
   playCount,
   onClick
 }) => {
+  console.log("4. GameCard received:", game.id, game.coverImage);
   const [imgError, setImgError] = useState(false);
 
   // Social Rating Logic - strictly based on game data or props if available
@@ -105,7 +106,7 @@ const GameCard: React.FC<GameCardProps> = ({
               alt={game.title}
               className={cn(
                 "w-full h-full object-cover transition-transform duration-700 group-hover:scale-110",
-                game.customImageApproved
+                (game.customImageApproved || game.isApproved)
                   ? "opacity-100 filter-none brightness-100 grayscale-0"
                   : "opacity-40 blur-md grayscale brightness-50"
               )}

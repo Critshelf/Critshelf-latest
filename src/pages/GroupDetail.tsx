@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Users, 
-  Plus, 
-  Calendar, 
-  MapPin, 
-  Clock, 
-  ArrowLeft, 
-  UserPlus, 
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { motion, AnimatePresence } from "motion/react";
+import {
+  Users,
+  Plus,
+  Calendar,
+  MapPin,
+  Clock,
+  ArrowLeft,
+  UserPlus,
   History,
   Check,
   X,
@@ -24,45 +24,47 @@ import {
   BarChart3,
   Pencil,
   LogOut,
-  UserMinus
-} from 'lucide-react';
-import { db, OperationType, handleFirestoreError } from '../lib/firebase';
-import { 
-  doc, 
-  getDoc, 
-  collection, 
-  query, 
-  where, 
-  getDocs, 
-  orderBy, 
-  limit, 
+  UserMinus,
+} from "lucide-react";
+import { db, OperationType, handleFirestoreError } from "../lib/firebase";
+import {
+  doc,
+  getDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  limit,
   onSnapshot,
   updateDoc,
   deleteDoc,
   serverTimestamp,
   setDoc,
   arrayUnion,
-  writeBatch
-} from 'firebase/firestore';
-import { cn } from '../lib/utils';
-import GroupChat from '../components/GroupChat';
-import GroupLibrary from '../components/GroupLibrary';
-import ACBadge from '../components/ACBadge';
-import GroupAvatar from '../components/GroupAvatar';
-import { useUser } from '../contexts/UserContext';
-import CreatePollModal from '../components/CreatePollModal';
-import ActivePollsModal from '../components/ActivePollsModal';
-import GroupEvents from '../components/GroupEvents';
-import CreateEventModal, { EventAttendee } from '../components/CreateEventModal';
-import EventDetailsModal from '../components/EventDetailsModal';
-import BringGameModal from '../components/BringGameModal';
-import EditGroupAvatarModal from '../components/EditGroupAvatarModal';
-import ManageGroupModal from '../components/ManageGroupModal';
-import EventCard, { GroupEvent } from '../components/EventCard';
-import { Poll } from '../components/PollCard';
-import { BarChart3 as PollIcon, Search, Mail } from 'lucide-react';
-import UserAvatar from '../components/UserAvatar';
-import { sendNotification } from '../services/notificationService';
+  writeBatch,
+} from "firebase/firestore";
+import { cn } from "../lib/utils";
+import GroupChat from "../components/GroupChat";
+import GroupLibrary from "../components/GroupLibrary";
+import ACBadge from "../components/ACBadge";
+import GroupAvatar from "../components/GroupAvatar";
+import { useUser } from "../contexts/UserContext";
+import CreatePollModal from "../components/CreatePollModal";
+import ActivePollsModal from "../components/ActivePollsModal";
+import GroupEvents from "../components/GroupEvents";
+import CreateEventModal, {
+  EventAttendee,
+} from "../components/CreateEventModal";
+import EventDetailsModal from "../components/EventDetailsModal";
+import BringGameModal from "../components/BringGameModal";
+import EditGroupAvatarModal from "../components/EditGroupAvatarModal";
+import ManageGroupModal from "../components/ManageGroupModal";
+import EventCard, { GroupEvent } from "../components/EventCard";
+import { Poll } from "../components/PollCard";
+import { BarChart3 as PollIcon, Search, Mail } from "lucide-react";
+import UserAvatar from "../components/UserAvatar";
+import { sendNotification } from "../services/notificationService";
 
 interface Group {
   id: string;
@@ -71,7 +73,7 @@ interface Group {
   bannerImage: string;
   avatar: string;
   avatarSeed?: string;
-  members: { userId: string; role: 'leader' | 'member' }[];
+  members: { userId: string; role: "leader" | "member" }[];
   memberIds: string[];
   joinCode?: string;
   isPrivate?: boolean;
@@ -82,7 +84,7 @@ interface Member {
   uid: string;
   displayName: string;
   photoURL: string;
-  avatarPreference?: 'google' | 'dicebear';
+  avatarPreference?: "google" | "dicebear";
   avatarSeed?: string;
 }
 
@@ -103,7 +105,7 @@ interface GameNightEvent {
     broughtByName: string;
   }[];
   createdAt: any;
-  type?: 'event';
+  type?: "event";
 }
 
 interface GroupRequest {
@@ -117,28 +119,16 @@ interface GroupRequest {
   gameCover: string;
   owners: { uid: string; displayName: string }[];
   createdAt: any;
-  status: 'pending' | 'accepted' | 'rejected' | 'scheduled';
-  type: 'request';
+  status: "pending" | "accepted" | "rejected" | "scheduled";
+  type: "request";
   eventId?: string;
   eventTitle?: string;
 }
 
-interface PlaySession {
-  id: string;
-  gameId: string;
-  gameTitle: string;
-  gameCover: string;
-  userId: string;
-  userName: string;
-  userAvatar: string;
-  groupId: string;
-  players: string[];
-  date: any;
-  createdAt: any;
-  type: 'play';
-}
-
-type FeedItem = (GameNightEvent & { type: 'event' }) | GroupRequest | PlaySession;
+type FeedItem =
+  | (GameNightEvent & { type: "event" })
+  | GroupRequest
+  | { type: "activity"; [key: string]: any };
 
 export default function GroupDetail() {
   const { user } = useUser();
@@ -149,18 +139,20 @@ export default function GroupDetail() {
   const [members, setMembers] = useState<Member[]>([]);
   const [events, setEvents] = useState<GameNightEvent[]>([]);
   const [requests, setRequests] = useState<GroupRequest[]>([]);
-  const [plays, setPlays] = useState<PlaySession[]>([]);
+  const [activities, setActivities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [errorState, setErrorState] = useState<'none' | 'permission'>('none');
+  const [errorState, setErrorState] = useState<"none" | "permission">("none");
   const [isAcceptingInvite, setIsAcceptingInvite] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [following, setFollowing] = useState<Member[]>([]);
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
   const [isInviting, setIsInviting] = useState(false);
-  const [inviteSearch, setInviteSearch] = useState('');
+  const [inviteSearch, setInviteSearch] = useState("");
   const [inviteSearchResults, setInviteSearchResults] = useState<any[]>([]);
   const [isSearchingUsers, setIsSearchingUsers] = useState(false);
-  const [activeTab, setActiveTab] = useState<'feed' | 'chat' | 'library' | 'events'>('feed');
+  const [activeTab, setActiveTab] = useState<
+    "feed" | "chat" | "library" | "events"
+  >("feed");
   const [activePollsCount, setActivePollsCount] = useState(0);
   const [isCreatePollOpen, setIsCreatePollOpen] = useState(false);
   const [isActivePollsOpen, setIsActivePollsOpen] = useState(false);
@@ -169,17 +161,25 @@ export default function GroupDetail() {
   const [isEditAvatarOpen, setIsEditAvatarOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<GroupEvent | null>(null);
   const [bringGameEventId, setBringGameEventId] = useState<string | null>(null);
-  const [prefilledEventData, setPrefilledEventData] = useState<{
-    title?: string;
-    dateTime?: string;
-    description?: string;
-    attendees?: EventAttendee[];
-    sourcePollId?: string;
-  } | undefined>(undefined);
+  const [prefilledEventData, setPrefilledEventData] = useState<
+    | {
+        title?: string;
+        dateTime?: string;
+        description?: string;
+        attendees?: EventAttendee[];
+        sourcePollId?: string;
+      }
+    | undefined
+  >(undefined);
 
   useEffect(() => {
-    const tab = searchParams.get('tab');
-    if (tab === 'chat' || tab === 'library' || tab === 'feed' || tab === 'events') {
+    const tab = searchParams.get("tab");
+    if (
+      tab === "chat" ||
+      tab === "library" ||
+      tab === "feed" ||
+      tab === "events"
+    ) {
       setActiveTab(tab as any);
     }
   }, [searchParams]);
@@ -188,9 +188,9 @@ export default function GroupDetail() {
     if (!id || !user) return;
     const now = new Date();
     const q = query(
-      collection(db, 'groupPolls'),
-      where('groupId', '==', id),
-      where('closeDate', '>', now)
+      collection(db, "groupPolls"),
+      where("groupId", "==", id),
+      where("closeDate", ">", now),
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -206,18 +206,18 @@ export default function GroupDetail() {
     // Convert poll votes to event attendees
     const optionVotes = poll.votes[optionIndex.toString()] || [];
     const attendees: EventAttendee[] = optionVotes
-      .filter(v => v.status !== 'no')
-      .map(v => ({
+      .filter((v) => v.status !== "no")
+      .map((v) => ({
         userId: v.userId,
         displayName: v.userName,
-        status: v.status === 'maybe' ? 'maybe' : 'going'
+        status: v.status === "maybe" ? "maybe" : "going",
       }));
 
-    if (!attendees.some(a => a.userId === poll.creatorId)) {
+    if (!attendees.some((a) => a.userId === poll.creatorId)) {
       attendees.push({
         userId: poll.creatorId,
         displayName: poll.creatorName,
-        status: 'going'
+        status: "going",
       });
     }
 
@@ -225,34 +225,38 @@ export default function GroupDetail() {
       title: poll.title,
       dateTime: poll.options[optionIndex],
       attendees,
-      sourcePollId: poll.id
+      sourcePollId: poll.id,
     });
-    
+
     setIsActivePollsOpen(false);
     setIsCreateEventOpen(true);
   };
 
   useEffect(() => {
     if (!id || !user) return;
-    
+
     // Use onSnapshot for real-time group data updates (members, info, etc.)
-    const unsubscribe = onSnapshot(doc(db, 'groups', id), (groupDoc) => {
-      if (groupDoc.exists()) {
-        const groupData = { id: groupDoc.id, ...groupDoc.data() } as Group;
-        setGroup(groupData);
-      } else {
-        console.warn("Group not found, redirecting...");
-        navigate('/social?tab=groups');
-      }
-      setLoading(false);
-    }, (error: any) => {
-      if (error?.code === 'permission-denied') {
-        setErrorState('permission');
-      } else {
-        handleFirestoreError(error, OperationType.GET, 'groups/' + id);
-      }
-      setLoading(false);
-    });
+    const unsubscribe = onSnapshot(
+      doc(db, "groups", id),
+      (groupDoc) => {
+        if (groupDoc.exists()) {
+          const groupData = { id: groupDoc.id, ...groupDoc.data() } as Group;
+          setGroup(groupData);
+        } else {
+          console.warn("Group not found, redirecting...");
+          navigate("/social?tab=groups");
+        }
+        setLoading(false);
+      },
+      (error: any) => {
+        if (error?.code === "permission-denied") {
+          setErrorState("permission");
+        } else {
+          handleFirestoreError(error, OperationType.GET, "groups/" + id);
+        }
+        setLoading(false);
+      },
+    );
 
     return () => unsubscribe();
   }, [id, user, navigate]);
@@ -260,35 +264,42 @@ export default function GroupDetail() {
   // Secondary fetches - only run when relevant data changes or initially
   useEffect(() => {
     if (!id || !group) return;
-    
+
     // Fetch members profile data whenever memberIds changes
-    const memberIds = group.memberIds || group.members.map((m: any) => typeof m === 'string' ? m : m.userId);
+    const memberIds =
+      group.memberIds ||
+      group.members.map((m: any) => (typeof m === "string" ? m : m.userId));
     fetchMembers(memberIds);
   }, [group?.memberIds, id]);
 
   useEffect(() => {
     if (!id || !user) return;
-    
+
     // Setup listeners for feed and events (once per group visit)
     fetchEvents(id);
     fetchRequests(id);
-    fetchPlays(id);
+    fetchActivities(id);
     fetchFollowing();
 
     return () => {};
   }, [id, user]);
 
   const fetchGroupData = async (groupId: string) => {
-    const path = 'groups';
+    const path = "groups";
     try {
       const groupDoc = await getDoc(doc(db, path, groupId));
       if (groupDoc.exists()) {
         const groupData = { id: groupDoc.id, ...groupDoc.data() } as Group;
         setGroup(groupData);
-        fetchMembers(groupData.memberIds || groupData.members.map((m: any) => typeof m === 'string' ? m : m.userId));
+        fetchMembers(
+          groupData.memberIds ||
+            groupData.members.map((m: any) =>
+              typeof m === "string" ? m : m.userId,
+            ),
+        );
         fetchEvents(groupId);
         fetchRequests(groupId);
-        fetchPlays(groupId);
+        fetchActivities(groupId);
         fetchFollowing();
       }
     } catch (error) {
@@ -298,7 +309,7 @@ export default function GroupDetail() {
 
   const fetchMembers = async (userIds: string[]) => {
     if (userIds.length === 0) return;
-    
+
     try {
       // Firestore 'in' query supports up to 30 values.
       // For larger groups, we'd need to chunk this.
@@ -309,20 +320,22 @@ export default function GroupDetail() {
 
       const allProfiles: Member[] = [];
       for (const chunk of chunks) {
-        const q = query(collection(db, 'users'), where('uid', 'in', chunk));
+        const q = query(collection(db, "users"), where("uid", "in", chunk));
         const snapshot = await getDocs(q);
-        const profiles = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as Member));
+        const profiles = snapshot.docs.map(
+          (doc) => ({ uid: doc.id, ...doc.data() }) as Member,
+        );
         allProfiles.push(...profiles);
       }
 
       // Handle missing profiles (e.g., mock users not in DB)
-      const finalProfiles = userIds.map(uid => {
-        const found = allProfiles.find(p => p.uid === uid);
+      const finalProfiles = userIds.map((uid) => {
+        const found = allProfiles.find((p) => p.uid === uid);
         if (found) return found;
-        return { 
-          uid, 
-          displayName: uid === 'natasha_id' ? 'Natasha' : 'Gamer', 
-          photoURL: `https://api.dicebear.com/7.x/avataaars/svg?seed=${uid}` 
+        return {
+          uid,
+          displayName: uid === "natasha_id" ? "Natasha" : "Gamer",
+          photoURL: `https://api.dicebear.com/7.x/avataaars/svg?seed=${uid}`,
         } as Member;
       });
 
@@ -335,87 +348,115 @@ export default function GroupDetail() {
   const fetchEvents = async (groupId: string) => {
     const now = new Date();
     const q = query(
-      collection(db, 'groupEvents'),
-      where('groupId', '==', groupId),
-      where('dateTime', '>=', now),
-      orderBy('dateTime', 'asc'),
-      limit(5)
+      collection(db, "groupEvents"),
+      where("groupId", "==", groupId),
+      where("dateTime", ">=", now),
+      orderBy("dateTime", "asc"),
+      limit(5),
     );
 
     try {
       const snapshot = await getDocs(q);
-      const eventList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'event' } as GameNightEvent & { type: 'event' }));
+      const eventList = snapshot.docs.map(
+        (doc) =>
+          ({ id: doc.id, ...doc.data(), type: "event" }) as GameNightEvent & {
+            type: "event";
+          },
+      );
       setEvents(eventList);
     } catch (error) {
-      handleFirestoreError(error, OperationType.LIST, 'groupEvents');
+      handleFirestoreError(error, OperationType.LIST, "groupEvents");
     }
   };
 
   const fetchRequests = async (groupId: string) => {
     const q = query(
-      collection(db, 'groupRequests'),
-      where('groupId', '==', groupId),
-      orderBy('createdAt', 'desc'),
-      limit(10)
+      collection(db, "groupRequests"),
+      where("groupId", "==", groupId),
+      orderBy("createdAt", "desc"),
+      limit(10),
     );
 
     try {
       const snapshot = await getDocs(q);
       const requestList = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data(), type: 'request' } as GroupRequest))
-        .filter(r => r.status === 'pending');
-      
+        .map(
+          (doc) =>
+            ({ id: doc.id, ...doc.data(), type: "request" }) as GroupRequest,
+        )
+        .filter((r) => r.status === "pending");
+
       // Add mock request for Friday Night Dice
-      if (groupId === 'friday_night_dice' && !requestList.some(r => r.id === 'mock_request')) {
+      if (
+        groupId === "friday_night_dice" &&
+        !requestList.some((r) => r.id === "mock_request")
+      ) {
         requestList.push({
-          id: 'mock_request',
-          groupId: 'friday_night_dice',
-          userId: 'natasha_id',
-          userName: 'Natasha',
-          userAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Natasha',
-          gameId: 'worker-removal-proto',
-          gameTitle: 'Worker Removal Prototype',
-          gameCover: 'https://images.unsplash.com/photo-1553481187-be93c21490a9?auto=format&fit=crop&q=80&w=400',
-          owners: [{ uid: 'corey_id', displayName: 'Corey' }],
+          id: "mock_request",
+          groupId: "friday_night_dice",
+          userId: "natasha_id",
+          userName: "Natasha",
+          userAvatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Natasha",
+          gameId: "worker-removal-proto",
+          gameTitle: "Worker Removal Prototype",
+          gameCover:
+            "https://images.unsplash.com/photo-1553481187-be93c21490a9?auto=format&fit=crop&q=80&w=400",
+          owners: [{ uid: "corey_id", displayName: "Corey" }],
           createdAt: { seconds: Date.now() / 1000 },
-          status: 'pending',
-          type: 'request'
+          status: "pending",
+          type: "request",
         });
       }
-      
+
       setRequests(requestList);
     } catch (error) {
-      handleFirestoreError(error, OperationType.LIST, 'groupRequests');
+      handleFirestoreError(error, OperationType.LIST, "groupRequests");
     }
   };
 
-  const fetchPlays = async (groupId: string) => {
+  const fetchActivities = async (groupId: string) => {
+    // WARNING: Ensure you have built the composite index for the 'activities' collection:
+    // groupIds (Arrays) DESC/ASC | timestamp DESC
+    console.warn(
+      "DEVELOPER REMINDER: Build composite index for collection 'activities': groupIds (array-contains) + timestamp (desc)",
+    );
+
     const q = query(
-      collection(db, 'plays'),
-      where('groupId', '==', groupId),
-      orderBy('createdAt', 'desc'),
-      limit(10)
+      collection(db, "activities"),
+      where("groupIds", "array-contains", groupId),
+      orderBy("timestamp", "desc"),
+      limit(20),
     );
 
     try {
       const snapshot = await getDocs(q);
-      const playList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'play' } as PlaySession));
-      setPlays(playList);
+      const activityList = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        type: "activity",
+        activityType: doc.data().type,
+      }));
+      setActivities(activityList);
     } catch (error) {
-      handleFirestoreError(error, OperationType.LIST, 'plays');
+      handleFirestoreError(error, OperationType.LIST, "activities");
     }
   };
 
   const fetchFollowing = async () => {
     if (!user) return;
     try {
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      const userDoc = await getDoc(doc(db, "users", user.uid));
       if (userDoc.exists()) {
         const followingIds = userDoc.data().following || [];
         if (followingIds.length > 0) {
-          const q = query(collection(db, 'users'), where('uid', 'in', followingIds.slice(0, 30)));
+          const q = query(
+            collection(db, "users"),
+            where("uid", "in", followingIds.slice(0, 30)),
+          );
           const snapshot = await getDocs(q);
-          const profiles = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as Member));
+          const profiles = snapshot.docs.map(
+            (doc) => ({ uid: doc.id, ...doc.data() }) as Member,
+          );
           setFollowing(profiles);
         }
       }
@@ -432,25 +473,27 @@ export default function GroupDetail() {
       const promises: Promise<any>[] = [];
       for (const friendId of selectedFriends) {
         // Send In-App Notification directly to the user's personal notifications collection
-        promises.push(sendNotification(
-          friendId,
-          'group_invite',
-          'Group Invitation! ⚔️',
-          `You've been invited to join "${group.name}".`,
-          {
-            groupId: group.id,
-            actionUrl: `/groups/${group.id}`
-          }
-        ));
+        promises.push(
+          sendNotification(
+            friendId,
+            "group_invite",
+            "Group Invitation! ⚔️",
+            `You've been invited to join "${group.name}".`,
+            {
+              groupId: group.id,
+              actionUrl: `/groups/${group.id}`,
+            },
+          ),
+        );
       }
       await Promise.all(promises);
-      alert('Invites sent!');
+      alert("Invites sent!");
       setIsInviteModalOpen(false);
       setSelectedFriends([]);
-      setInviteSearch('');
+      setInviteSearch("");
       setInviteSearchResults([]);
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'notifications');
+      handleFirestoreError(error, OperationType.CREATE, "notifications");
     } finally {
       setIsInviting(false);
     }
@@ -460,26 +503,39 @@ export default function GroupDetail() {
     if (!id || !user) return;
     setIsAcceptingInvite(true);
     try {
-      const groupRef = doc(db, 'groups', id);
-      
+      const groupRef = doc(db, "groups", id);
+
       // Update group
       await updateDoc(groupRef, {
-        members: arrayUnion({ userId: user.uid, role: 'member', joinedAt: new Date().toISOString() }),
-        memberIds: arrayUnion(user.uid)
+        members: arrayUnion({
+          userId: user.uid,
+          role: "member",
+          joinedAt: new Date().toISOString(),
+        }),
+        memberIds: arrayUnion(user.uid),
       });
-      
+
       // Delete the notification from the user's inbox
-      const notificationsRef = collection(db, 'users', user.uid, 'notifications');
-      const q = query(notificationsRef, where('type', '==', 'group_invite'), where('groupId', '==', id));
+      const notificationsRef = collection(
+        db,
+        "users",
+        user.uid,
+        "notifications",
+      );
+      const q = query(
+        notificationsRef,
+        where("type", "==", "group_invite"),
+        where("groupId", "==", id),
+      );
       const notifsSnap = await getDocs(q);
-      
+
       if (!notifsSnap.empty) {
         const batch = writeBatch(db);
-        notifsSnap.docs.forEach(docSnap => batch.delete(docSnap.ref));
+        notifsSnap.docs.forEach((docSnap) => batch.delete(docSnap.ref));
         await batch.commit();
       }
 
-      setErrorState('none');
+      setErrorState("none");
       setLoading(true);
       window.location.reload();
     } catch (error) {
@@ -497,18 +553,31 @@ export default function GroupDetail() {
     setIsSearchingUsers(true);
     try {
       // Search by email or username
-      const emailQuery = query(collection(db, 'users'), where('email', '==', inviteSearch.trim().toLowerCase()), limit(10));
-      const usernameQuery = query(collection(db, 'users'), where('username', '==', inviteSearch.trim().toLowerCase()), limit(10));
-      const displayQuery = query(collection(db, 'users'), where('displayName', '>=', inviteSearch.trim()), where('displayName', '<=', inviteSearch.trim() + '\uf8ff'), limit(10));
+      const emailQuery = query(
+        collection(db, "users"),
+        where("email", "==", inviteSearch.trim().toLowerCase()),
+        limit(10),
+      );
+      const usernameQuery = query(
+        collection(db, "users"),
+        where("username", "==", inviteSearch.trim().toLowerCase()),
+        limit(10),
+      );
+      const displayQuery = query(
+        collection(db, "users"),
+        where("displayName", ">=", inviteSearch.trim()),
+        where("displayName", "<=", inviteSearch.trim() + "\uf8ff"),
+        limit(10),
+      );
 
       const [emailSnap, userSnap, dispSnap] = await Promise.all([
         getDocs(emailQuery),
         getDocs(usernameQuery),
-        getDocs(displayQuery)
+        getDocs(displayQuery),
       ]);
 
       const results = new Map();
-      [...emailSnap.docs, ...userSnap.docs, ...dispSnap.docs].forEach(doc => {
+      [...emailSnap.docs, ...userSnap.docs, ...dispSnap.docs].forEach((doc) => {
         if (doc.id !== user.uid) {
           results.set(doc.id, { uid: doc.id, ...doc.data() });
         }
@@ -523,106 +592,123 @@ export default function GroupDetail() {
   };
 
   const feedItems: FeedItem[] = [
-    ...events.map(e => ({ ...e, type: 'event' as const })),
+    ...events.map((e) => ({ ...e, type: "event" as const })),
     ...requests,
-    ...plays
+    ...activities,
   ].sort((a, b) => {
-    const timeA = a.createdAt?.seconds || 0;
-    const timeB = b.createdAt?.seconds || 0;
-    return timeB - timeA;
+    // Some are .timestamp and some are .createdAt
+    const getTime = (item: any) => {
+      const time = item.timestamp || item.createdAt;
+      return time?.seconds || 0;
+    };
+    return getTime(b) - getTime(a);
   });
 
   const seedMockEvent = async (groupId: string) => {
     if (!user) return;
     const eventId = `${groupId}_mock_event`;
     const mockEvent = {
-       title: 'Friday Night Dice (Mock)',
-       location: 'The Board Game Cafe',
-       dateTime: serverTimestamp(),
-       groupId,
-       creatorId: user.uid,
-       attendees: [
-         { userId: user.uid, displayName: user.displayName || 'Gamer', status: 'going' },
-         { userId: 'natasha_id', displayName: 'Natasha', status: 'going' }
-       ],
-       gamesBrought: [
-        { gameId: 'loveletter', title: 'Love Letter', boxArt: 'https://picsum.photos/seed/loveletter/400/400', broughtById: 'natasha_id', broughtByName: 'Natasha' }
-       ],
-       createdAt: serverTimestamp()
+      title: "Friday Night Dice (Mock)",
+      location: "The Board Game Cafe",
+      dateTime: serverTimestamp(),
+      groupId,
+      creatorId: user.uid,
+      attendees: [
+        {
+          userId: user.uid,
+          displayName: user.displayName || "Gamer",
+          status: "going",
+        },
+        { userId: "natasha_id", displayName: "Natasha", status: "going" },
+      ],
+      gamesBrought: [
+        {
+          gameId: "loveletter",
+          title: "Love Letter",
+          boxArt: "https://picsum.photos/seed/loveletter/400/400",
+          broughtById: "natasha_id",
+          broughtByName: "Natasha",
+        },
+      ],
+      createdAt: serverTimestamp(),
     };
-    await setDoc(doc(db, 'groupEvents', eventId), mockEvent);
+    await setDoc(doc(db, "groupEvents", eventId), mockEvent);
   };
 
   const formatDate = (date: any) => {
-    if (!date) return '';
+    if (!date) return "";
     try {
       const d = date.toDate ? date.toDate() : new Date(date);
-      return d.toLocaleDateString('en-US', {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric'
+      return d.toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
       });
     } catch (e) {
-      return '';
+      return "";
     }
   };
 
   const formatTime = (date: any) => {
-    if (!date) return '';
+    if (!date) return "";
     try {
       const d = date.toDate ? date.toDate() : new Date(date);
-      return d.toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit'
+      return d.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
       });
     } catch (e) {
-      return '';
+      return "";
     }
   };
 
   const handleRSVP = async (event: GameNightEvent, status: string) => {
     if (!user) return;
-    
-    const currentStatus = event.attendees.find(a => a.userId === user.uid)?.status;
+
+    const currentStatus = event.attendees.find(
+      (a) => a.userId === user.uid,
+    )?.status;
     if (currentStatus === status) return;
 
-    const otherAttendees = event.attendees.filter(a => a.userId !== user.uid);
+    const otherAttendees = event.attendees.filter((a) => a.userId !== user.uid);
     const updatedAttendees = [
       ...otherAttendees,
-      { userId: user.uid, displayName: user.displayName || 'Gamer', status }
+      { userId: user.uid, displayName: user.displayName || "Gamer", status },
     ];
 
     try {
-      const eventRef = doc(db, 'groupEvents', event.id);
+      const eventRef = doc(db, "groupEvents", event.id);
       await updateDoc(eventRef, {
-        attendees: updatedAttendees
+        attendees: updatedAttendees,
       });
     } catch (error) {
-       handleFirestoreError(error, OperationType.UPDATE, 'groupEvents');
+      handleFirestoreError(error, OperationType.UPDATE, "groupEvents");
     }
   };
 
   const handleCancelEvent = async (event: GroupEvent) => {
     if (!user) return;
-    
+
     const isOwner = user.uid === group?.createdBy;
     const isCreator = user.uid === event.creatorId;
 
     if (!isCreator && !isOwner) {
-      alert("Unauthorized: Only the host or group owner can cancel this event.");
+      alert(
+        "Unauthorized: Only the host or group owner can cancel this event.",
+      );
       return;
     }
 
     try {
-      const eventRef = doc(db, 'groupEvents', event.id);
+      const eventRef = doc(db, "groupEvents", event.id);
       await deleteDoc(eventRef);
     } catch (error: any) {
-       try {
-         const eventRef = doc(db, 'groupEvents', event.id);
-         await updateDoc(eventRef, { status: 'cancelled' });
-       } catch (softError) {
-         handleFirestoreError(error, OperationType.DELETE, 'groupEvents');
-       }
+      try {
+        const eventRef = doc(db, "groupEvents", event.id);
+        await updateDoc(eventRef, { status: "cancelled" });
+      } catch (softError) {
+        handleFirestoreError(error, OperationType.DELETE, "groupEvents");
+      }
     }
   };
 
@@ -630,13 +716,13 @@ export default function GroupDetail() {
     if (!user || !request.eventId || !id) return;
 
     try {
-      const eventRef = doc(db, 'groupEvents', request.eventId);
+      const eventRef = doc(db, "groupEvents", request.eventId);
       const eventSnap = await getDoc(eventRef);
-      
+
       if (eventSnap.exists()) {
         const eventData = eventSnap.data();
         const gamesBrought = eventData.gamesBrought || [];
-        
+
         // Check if game already added
         if (!gamesBrought.find((g: any) => g.gameId === request.gameId)) {
           const newGame = {
@@ -644,65 +730,81 @@ export default function GroupDetail() {
             title: request.gameTitle,
             boxArt: request.gameCover,
             broughtById: user.uid,
-            broughtByName: user.displayName || 'Gamer',
-            verified: true
+            broughtByName: user.displayName || "Gamer",
+            verified: true,
           };
-          
+
           await updateDoc(eventRef, {
-            gamesBrought: [...gamesBrought, newGame]
+            gamesBrought: [...gamesBrought, newGame],
           });
         }
-        
+
         // Resolve request
-        const requestRef = doc(db, 'groupRequests', request.id);
+        const requestRef = doc(db, "groupRequests", request.id);
         await updateDoc(requestRef, {
-          status: 'accepted'
+          status: "accepted",
         });
       } else {
-        // Fallback for mock or legacy 'events' collection if needed, 
+        // Fallback for mock or legacy 'events' collection if needed,
         // but new workflow specifically targets 'groupEvents'
         alert("Event not found or belongs to a legacy collection.");
       }
     } catch (error) {
-       handleFirestoreError(error, OperationType.UPDATE, 'groupRequests');
+      handleFirestoreError(error, OperationType.UPDATE, "groupRequests");
     }
   };
 
   const handleLeaveGroup = async () => {
     if (!user || !group) return;
 
-    const userMember = group.members.find(m => m.userId === user.uid);
-    const otherLeaders = group.members.filter(m => m.userId !== user.uid && m.role === 'leader');
+    const userMember = group.members.find((m) => m.userId === user.uid);
+    const otherLeaders = group.members.filter(
+      (m) => m.userId !== user.uid && m.role === "leader",
+    );
 
-    if (userMember?.role === 'leader' && otherLeaders.length === 0) {
-      alert("UNAUTHORIZED: You are the sole leader of this group. You must transfer leadership to another member or delete the group via Admin Settings before leaving.");
+    if (userMember?.role === "leader" && otherLeaders.length === 0) {
+      alert(
+        "UNAUTHORIZED: You are the sole leader of this group. You must transfer leadership to another member or delete the group via Admin Settings before leaving.",
+      );
       return;
     }
 
-    if (!window.confirm("Are you sure you want to leave this group? Your history remains, but you will lose access to private group features.")) return;
+    if (
+      !window.confirm(
+        "Are you sure you want to leave this group? Your history remains, but you will lose access to private group features.",
+      )
+    )
+      return;
 
     try {
-      const groupRef = doc(db, 'groups', group.id);
-      const updatedMembers = group.members.filter(m => m.userId !== user.uid);
-      const updatedMemberIds = (group.memberIds || []).filter(id => id !== user.uid);
+      const groupRef = doc(db, "groups", group.id);
+      const updatedMembers = group.members.filter((m) => m.userId !== user.uid);
+      const updatedMemberIds = (group.memberIds || []).filter(
+        (id) => id !== user.uid,
+      );
 
       await updateDoc(groupRef, {
         members: updatedMembers,
-        memberIds: updatedMemberIds
+        memberIds: updatedMemberIds,
       });
 
-      navigate('/social?tab=groups');
+      navigate("/social?tab=groups");
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `groups/${group.id}/leave`);
+      handleFirestoreError(
+        error,
+        OperationType.UPDATE,
+        `groups/${group.id}/leave`,
+      );
     }
   };
 
-  const isLeader = group?.members?.find(m => m.userId === user?.uid)?.role === 'leader';
+  const isLeader =
+    group?.members?.find((m) => m.userId === user?.uid)?.role === "leader";
 
-  if (errorState === 'permission' && !loading) {
+  if (errorState === "permission" && !loading) {
     return (
       <div className="min-h-screen bg-charcoal flex items-center justify-center p-6">
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           className="bg-white/5 border border-white/10 rounded-3xl p-8 max-w-md w-full text-center shadow-2xl backdrop-blur-md"
@@ -711,18 +813,25 @@ export default function GroupDetail() {
             <Users className="w-10 h-10 text-emerald-accent" />
           </div>
           <h2 className="text-2xl font-black text-white mb-2">Private Group</h2>
-          <p className="text-white/40 mb-8 font-medium">You need an invitation to view this group. If you were invited, you can join below.</p>
-          
+          <p className="text-white/40 mb-8 font-medium">
+            You need an invitation to view this group. If you were invited, you
+            can join below.
+          </p>
+
           <button
             onClick={acceptInvite}
             disabled={isAcceptingInvite}
             className="w-full py-4 bg-emerald-accent text-charcoal rounded-xl font-black uppercase tracking-widest hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2"
           >
-            {isAcceptingInvite ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Accept Invite'}
+            {isAcceptingInvite ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              "Accept Invite"
+            )}
           </button>
-          
-          <button 
-            onClick={() => navigate('/social?tab=groups')}
+
+          <button
+            onClick={() => navigate("/social?tab=groups")}
             className="mt-4 w-full py-4 bg-white/5 text-white/60 rounded-xl font-bold hover:bg-white/10 transition-all"
           >
             Go Back
@@ -735,7 +844,7 @@ export default function GroupDetail() {
   if (loading || !group) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <motion.div 
+        <motion.div
           animate={{ rotate: 360 }}
           transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
           className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full"
@@ -748,16 +857,16 @@ export default function GroupDetail() {
     <div className="min-h-screen bg-charcoal pb-32 md:pt-20">
       {/* Banner */}
       <div className="h-64 bg-charcoal relative">
-        <img 
-          src={group.bannerImage || undefined} 
-          className="w-full h-full object-cover opacity-30 blur-sm" 
+        <img
+          src={group.bannerImage || undefined}
+          className="w-full h-full object-cover opacity-30 blur-sm"
           alt={group.name}
           referrerPolicy="no-referrer"
           loading="lazy"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-charcoal to-transparent" />
-        <button 
-          onClick={() => navigate('/social?tab=groups')}
+        <button
+          onClick={() => navigate("/social?tab=groups")}
           className="absolute top-8 left-8 w-12 h-12 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center text-white hover:bg-white/20 transition-all border border-white/10"
         >
           <ArrowLeft className="w-6 h-6" />
@@ -768,13 +877,17 @@ export default function GroupDetail() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Column: Group Info & Members */}
           <div className="lg:col-span-1 space-y-8">
-            <motion.div 
+            <motion.div
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               className="bg-white/5 backdrop-blur-xl rounded-[3rem] shadow-2xl p-8 border border-white/10"
             >
               <div className="flex items-center justify-between mb-6">
-                <GroupAvatar seed={group.avatarSeed} size="lg" className="border-2 border-white/20 shadow-xl" />
+                <GroupAvatar
+                  seed={group.avatarSeed}
+                  size="lg"
+                  className="border-2 border-white/20 shadow-xl"
+                />
                 {isLeader && (
                   <button
                     onClick={() => setIsManageModalOpen(true)}
@@ -785,7 +898,7 @@ export default function GroupDetail() {
                   </button>
                 )}
               </div>
-              
+
               <div className="relative">
                 {user?.uid === group.createdBy && (
                   <button
@@ -797,11 +910,13 @@ export default function GroupDetail() {
                   </button>
                 )}
               </div>
-              <h1 className="text-3xl font-black text-white mb-2 tracking-tight">{group.name}</h1>
+              <h1 className="text-3xl font-black text-white mb-2 tracking-tight">
+                {group.name}
+              </h1>
               <p className="text-white/40 font-medium mb-6 leading-relaxed">
                 {group.description}
               </p>
-              <button 
+              <button
                 onClick={() => setIsInviteModalOpen(true)}
                 className="w-full bg-emerald-accent text-charcoal px-6 py-4 rounded-2xl font-black shadow-lg hover:shadow-emerald-accent/20 transition-all active:scale-95 flex items-center justify-center gap-2"
               >
@@ -809,52 +924,66 @@ export default function GroupDetail() {
               </button>
 
               <div className="pt-2">
-                <button 
+                <button
                   onClick={handleLeaveGroup}
                   className="w-full bg-white/5 hover:bg-rose-500/10 text-white/40 hover:text-rose-500 px-6 py-4 rounded-2xl font-black transition-all active:scale-95 flex items-center justify-center gap-2 border border-white/5 hover:border-rose-500/20 group relative overflow-hidden"
                 >
-                  <LogOut className="w-4 h-4 transition-transform group-hover:translate-x-1" /> Leave Group
+                  <LogOut className="w-4 h-4 transition-transform group-hover:translate-x-1" />{" "}
+                  Leave Group
                 </button>
-                {isLeader && (group?.members?.filter(m => m.role === 'leader').length === 1) && (
-                  <p className="text-[9px] font-black text-white/20 uppercase tracking-widest mt-3 text-center px-4 leading-relaxed">
-                    <span className="text-gold-accent">Note:</span> You are the sole leader. Transfer leadership before leaving.
-                  </p>
-                )}
+                {isLeader &&
+                  group?.members?.filter((m) => m.role === "leader").length ===
+                    1 && (
+                    <p className="text-[9px] font-black text-white/20 uppercase tracking-widest mt-3 text-center px-4 leading-relaxed">
+                      <span className="text-gold-accent">Note:</span> You are
+                      the sole leader. Transfer leadership before leaving.
+                    </p>
+                  )}
               </div>
             </motion.div>
 
-            <motion.div 
+            <motion.div
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.1 }}
               className="bg-white/5 backdrop-blur-xl rounded-[3rem] shadow-2xl p-8 border border-white/10"
             >
-                  <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-xl font-black text-white">Members</h3>
-                    <span className="bg-emerald-accent/10 text-emerald-accent px-3 py-1 rounded-full text-xs font-black border border-emerald-accent/20">
-                      {(group.memberIds || group.members).length}
-                    </span>
-                  </div>
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-black text-white">Members</h3>
+                <span className="bg-emerald-accent/10 text-emerald-accent px-3 py-1 rounded-full text-xs font-black border border-emerald-accent/20">
+                  {(group.memberIds || group.members).length}
+                </span>
+              </div>
               <div className="space-y-4">
-                {members.map(member => (
-                  <div key={member.uid} className="flex items-center gap-4 group">
-                    <UserAvatar 
-                      user={member} 
-                      size="md" 
-                      className="rounded-xl border border-white/10" 
+                {members.map((member) => (
+                  <div
+                    key={member.uid}
+                    className="flex items-center gap-4 group"
+                  >
+                    <UserAvatar
+                      user={member}
+                      size="md"
+                      className="rounded-xl border border-white/10"
                     />
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <p className="font-black text-white group-hover:text-emerald-accent transition-colors truncate">
                           {member.displayName}
                         </p>
-                        <ACBadge value={(member as any).attackClass} size="sm" />
+                        <ACBadge
+                          value={(member as any).attackClass}
+                          size="sm"
+                        />
                       </div>
-                        <p className="text-xs font-bold text-white/20 uppercase tracking-widest">
-                          {group.members.find(m => m.userId === member.uid)?.role === 'leader' ? 'Leader' : 'Member'}
-                        </p>
+                      <p className="text-xs font-bold text-white/20 uppercase tracking-widest">
+                        {group.members.find((m) => m.userId === member.uid)
+                          ?.role === "leader"
+                          ? "Leader"
+                          : "Member"}
+                      </p>
                     </div>
-                    {group.members.find(m => m.userId === member.uid)?.role === 'leader' && (
+                    {group.members.find((m) => m.userId === member.uid)
+                      ?.role === "leader" && (
                       <Crown className="w-4 h-4 text-gold-accent" />
                     )}
                   </div>
@@ -865,18 +994,22 @@ export default function GroupDetail() {
 
           {/* Right Column: Feed & Events */}
           <div className="lg:col-span-2 space-y-8">
-            <motion.div 
+            <motion.div
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               className="bg-emerald-accent rounded-[3rem] p-8 text-charcoal shadow-2xl relative overflow-hidden"
             >
               <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
                 <div>
-                  <h2 className="text-3xl font-black mb-2 tracking-tight">Group Hub</h2>
-                  <p className="text-charcoal/70 font-medium">Manage events and schedule sessions.</p>
+                  <h2 className="text-3xl font-black mb-2 tracking-tight">
+                    Group Hub
+                  </h2>
+                  <p className="text-charcoal/70 font-medium">
+                    Manage events and schedule sessions.
+                  </p>
                 </div>
                 <div className="flex items-center gap-2 w-full flex-nowrap md:flex-wrap lg:flex-nowrap pb-2 md:pb-0">
-                  <button 
+                  <button
                     onClick={() => {
                       setPrefilledEventData(undefined);
                       setIsCreateEventOpen(true);
@@ -885,23 +1018,35 @@ export default function GroupDetail() {
                   >
                     <Calendar className="w-4 h-4" /> Event
                   </button>
-                  <button 
+                  <button
                     onClick={() => setIsCreatePollOpen(true)}
                     className="flex-1 bg-charcoal text-white px-2 md:px-6 py-4 rounded-2xl font-black shadow-lg hover:scale-105 transition-transform flex items-center justify-center gap-2 text-xs md:text-sm whitespace-nowrap"
                   >
                     <Plus className="w-4 h-4" /> New Poll
                   </button>
-                  <button 
+                  <button
                     onClick={() => setIsActivePollsOpen(true)}
                     className={cn(
                       "flex-1 px-2 md:px-6 py-4 rounded-2xl font-black shadow-lg hover:scale-105 transition-transform flex items-center justify-center gap-2 text-xs md:text-sm border-2 whitespace-nowrap",
-                      activePollsCount > 0 
-                        ? "bg-gold-accent border-transparent text-charcoal shadow-[0_0_20px_rgba(251,191,36,0.3)]" 
-                        : "bg-charcoal/20 border-charcoal/10 text-charcoal/40"
+                      activePollsCount > 0
+                        ? "bg-gold-accent border-transparent text-charcoal shadow-[0_0_20px_rgba(251,191,36,0.3)]"
+                        : "bg-charcoal/20 border-charcoal/10 text-charcoal/40",
                     )}
                   >
-                    <PollIcon className={cn("w-4 h-4", activePollsCount > 0 ? "text-charcoal" : "text-charcoal/40")} /> 
-                    Polls {activePollsCount > 0 && <span className="ml-1 px-2 py-0.5 bg-black/20 rounded-lg text-[10px] tracking-normal">{activePollsCount}</span>}
+                    <PollIcon
+                      className={cn(
+                        "w-4 h-4",
+                        activePollsCount > 0
+                          ? "text-charcoal"
+                          : "text-charcoal/40",
+                      )}
+                    />
+                    Polls{" "}
+                    {activePollsCount > 0 && (
+                      <span className="ml-1 px-2 py-0.5 bg-black/20 rounded-lg text-[10px] tracking-normal">
+                        {activePollsCount}
+                      </span>
+                    )}
                   </button>
                 </div>
               </div>
@@ -913,27 +1058,32 @@ export default function GroupDetail() {
             {/* Tabs */}
             <div className="grid grid-cols-4 gap-2 bg-white/5 p-2 rounded-full shadow-sm border border-white/10 mb-8 w-full overflow-hidden">
               {[
-                { id: 'feed', label: 'Feed', icon: History },
-                { id: 'chat', label: 'Chat', icon: Smile },
-                { id: 'library', label: 'Shelf', icon: Library },
-                { id: 'events', label: 'Events', icon: Calendar },
+                { id: "feed", label: "Feed", icon: History },
+                { id: "chat", label: "Chat", icon: Smile },
+                { id: "library", label: "Shelf", icon: Library },
+                { id: "events", label: "Events", icon: Calendar },
               ].map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
                   className={cn(
                     "px-2 py-3 font-black transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 text-[10px] sm:text-sm whitespace-nowrap relative rounded-full",
-                    activeTab === tab.id 
-                      ? "text-charcoal" 
-                      : "text-white/40 hover:text-white/60 hover:bg-white/5"
+                    activeTab === tab.id
+                      ? "text-charcoal"
+                      : "text-white/40 hover:text-white/60 hover:bg-white/5",
                   )}
                 >
-                  <tab.icon className={cn("w-3 h-3 sm:w-4 sm:h-4 z-10", activeTab === tab.id ? "text-charcoal" : "text-white/20")} />
+                  <tab.icon
+                    className={cn(
+                      "w-3 h-3 sm:w-4 sm:h-4 z-10",
+                      activeTab === tab.id ? "text-charcoal" : "text-white/20",
+                    )}
+                  />
                   <span className="z-10">{tab.label}</span>
                   {activeTab === tab.id && (
-                    <motion.div 
+                    <motion.div
                       layoutId="activeTabPill"
-                      className="absolute inset-0 bg-gold-accent rounded-full shadow-lg shadow-gold-accent/20" 
+                      className="absolute inset-0 bg-gold-accent rounded-full shadow-lg shadow-gold-accent/20"
                     />
                   )}
                 </button>
@@ -941,7 +1091,7 @@ export default function GroupDetail() {
             </div>
 
             <AnimatePresence mode="wait">
-              {activeTab === 'feed' && (
+              {activeTab === "feed" && (
                 <motion.div
                   key="feed"
                   initial={{ opacity: 0, y: 10 }}
@@ -952,23 +1102,29 @@ export default function GroupDetail() {
                   {feedItems.length === 0 ? (
                     <div className="text-center py-20 bg-white/5 rounded-[3rem] border-2 border-dashed border-white/10">
                       <History className="w-16 h-16 text-white/10 mx-auto mb-4" />
-                      <h3 className="text-xl font-black text-white mb-2">No activity yet</h3>
-                      <p className="text-white/20 font-bold">Start by scheduling a game night!</p>
+                      <h3 className="text-xl font-black text-white mb-2">
+                        No activity yet
+                      </h3>
+                      <p className="text-white/20 font-bold">
+                        Start by scheduling a game night!
+                      </p>
                     </div>
                   ) : (
-                    feedItems.map((item) => (
-                      item.type === 'event' ? (
+                    feedItems.map((item) =>
+                      item.type === "event" ? (
                         <EventCard
                           key={item.id}
                           event={item as any}
                           user={user}
                           groupOwnerId={group?.createdBy}
-                          onRSVP={(id, attendees, status) => handleRSVP(item as any, status)}
+                          onRSVP={(id, attendees, status) =>
+                            handleRSVP(item as any, status)
+                          }
                           onCancel={handleCancelEvent}
                           onBringGame={(id) => setBringGameEventId(id)}
                           onSelect={(evt) => setSelectedEvent(evt)}
                         />
-                      ) : item.type === 'request' ? (
+                      ) : item.type === "request" ? (
                         <motion.div
                           key={item.id}
                           layout
@@ -977,14 +1133,25 @@ export default function GroupDetail() {
                           <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-accent/5 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-110" />
                           <div className="relative flex gap-6">
                             <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-md shrink-0 border-2 border-white/10">
-                              <img src={item.userAvatar || undefined} className="w-full h-full object-cover" alt={item.userName} />
+                              <img
+                                src={item.userAvatar || undefined}
+                                className="w-full h-full object-cover"
+                                alt={item.userName}
+                              />
                             </div>
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-2">
-                                <span className="text-sm font-black text-white">{item.userName}</span>
+                                <span className="text-sm font-black text-white">
+                                  {item.userName}
+                                </span>
                                 <span className="text-[10px] font-black text-emerald-accent/60 uppercase tracking-widest leading-none">
                                   {item.eventId ? (
-                                    <>Requested for <span className="text-white">{item.eventTitle}</span></>
+                                    <>
+                                      Requested for{" "}
+                                      <span className="text-white">
+                                        {item.eventTitle}
+                                      </span>
+                                    </>
                                   ) : (
                                     "is itching to play!"
                                   )}
@@ -995,43 +1162,59 @@ export default function GroupDetail() {
                               </h3>
                               <div className="flex items-center gap-4 mb-6">
                                 <div className="flex -space-x-2">
-                                  {item.owners.map(owner => (
-                                    <div key={owner.uid} className="w-8 h-8 rounded-full border-2 border-charcoal shadow-sm bg-white/10 flex items-center justify-center overflow-hidden">
-                                      <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${owner.uid}`} className="w-full h-full object-cover" alt={owner.displayName} />
+                                  {item.owners.map((owner) => (
+                                    <div
+                                      key={owner.uid}
+                                      className="w-8 h-8 rounded-full border-2 border-charcoal shadow-sm bg-white/10 flex items-center justify-center overflow-hidden"
+                                    >
+                                      <img
+                                        src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${owner.uid}`}
+                                        className="w-full h-full object-cover"
+                                        alt={owner.displayName}
+                                      />
                                     </div>
                                   ))}
                                 </div>
                                 <p className="text-xs font-bold text-white/30">
-                                  Owned by {item.owners.map(o => o.displayName).join(', ')}
+                                  Owned by{" "}
+                                  {item.owners
+                                    .map((o) => o.displayName)
+                                    .join(", ")}
                                 </p>
                               </div>
                               <div className="flex gap-3">
-                                {item.status === 'accepted' ? (
+                                {item.status === "accepted" ? (
                                   <div className="bg-emerald-accent/20 text-emerald-accent px-6 py-3 rounded-xl font-black text-sm flex items-center gap-2 border border-emerald-accent/30">
-                                    <Check className="w-4 h-4" /> Request Accepted
+                                    <Check className="w-4 h-4" /> Request
+                                    Accepted
                                   </div>
                                 ) : (
                                   <>
-                                    {item.owners.some(o => o.uid === user?.uid) ? (
-                                      <button 
-                                        onClick={() => handleAcceptRequest(item)}
+                                    {item.owners.some(
+                                      (o) => o.uid === user?.uid,
+                                    ) ? (
+                                      <button
+                                        onClick={() =>
+                                          handleAcceptRequest(item)
+                                        }
                                         className="bg-emerald-accent text-charcoal px-6 py-3 rounded-xl font-black text-sm shadow-lg hover:shadow-emerald-accent/20 transition-all active:scale-95 flex items-center gap-2"
                                       >
-                                        <Check className="w-4 h-4" /> I'll Bring It!
+                                        <Check className="w-4 h-4" /> I'll Bring
+                                        It!
                                       </button>
                                     ) : (
-                                      <button 
+                                      <button
                                         disabled
                                         className="bg-white/5 text-white/20 px-6 py-3 rounded-xl font-black text-sm border border-white/10 cursor-not-allowed"
                                       >
                                         Pending Approval
                                       </button>
                                     )}
-                                    <button 
+                                    <button
                                       onClick={() => {
                                         setPrefilledEventData({
                                           title: item.gameTitle,
-                                          description: `Requested by ${item.userName} for ${item.gameTitle}`
+                                          description: `Requested by ${item.userName} for ${item.gameTitle}`,
                                         });
                                         setIsCreateEventOpen(true);
                                       }}
@@ -1044,11 +1227,15 @@ export default function GroupDetail() {
                               </div>
                             </div>
                             <div className="hidden sm:block w-24 h-24 rounded-2xl overflow-hidden shadow-lg border-4 border-charcoal rotate-6 group-hover:rotate-0 transition-transform">
-                              <img src={item.gameCover || undefined} className="w-full h-full object-cover opacity-60 group-hover:opacity-100" alt={item.gameTitle} />
+                              <img
+                                src={item.gameCover || undefined}
+                                className="w-full h-full object-cover opacity-60 group-hover:opacity-100"
+                                alt={item.gameTitle}
+                              />
                             </div>
                           </div>
                         </motion.div>
-                      ) : (
+                      ) : item.type === "activity" ? (
                         <motion.div
                           key={item.id}
                           layout
@@ -1057,78 +1244,151 @@ export default function GroupDetail() {
                           <div className="absolute top-0 right-0 w-32 h-32 bg-gold-accent/5 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-110" />
                           <div className="relative flex gap-6">
                             <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-md shrink-0 border-2 border-white/10">
-                              <img src={item.userAvatar || undefined} className="w-full h-full object-cover" alt={item.userName} />
+                              <img
+                                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${item.avatarSeed || item.userId || item.userName}`}
+                                className="w-full h-full object-cover"
+                                alt={item.userName}
+                              />
                             </div>
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-2">
-                                <span className="text-sm font-black text-white">{item.userName}</span>
-                                {members.find(m => m.uid === item.userId)?.attackClass && (
-                                  <ACBadge value={(members.find(m => m.uid === item.userId) as any).attackClass} size="sm" />
+                                <span className="text-sm font-black text-white">
+                                  {item.userName}
+                                </span>
+                                {members.find((m) => m.uid === item.userId)
+                                  ?.attackClass && (
+                                  <ACBadge
+                                    value={
+                                      (
+                                        members.find(
+                                          (m) => m.uid === item.userId,
+                                        ) as any
+                                      ).attackClass
+                                    }
+                                    size="sm"
+                                  />
                                 )}
-                                <span className="text-[10px] font-black text-gold-accent/60 uppercase tracking-widest">logged a play!</span>
+                                <span className="text-[10px] font-black text-gold-accent/60 uppercase tracking-widest">
+                                  {item.activityType === "play_logged"
+                                    ? "logged a play!"
+                                    : item.activityType === "review_added"
+                                      ? "wrote a review!"
+                                      : item.activityType === "game_added"
+                                        ? "added to collection!"
+                                        : "performed an action"}
+                                </span>
                               </div>
                               <h3 className="text-2xl font-black text-white mb-4 tracking-tight">
-                                {item.gameTitle}
+                                {item.metadata?.gameTitle}
                               </h3>
-                              <div className="flex items-center gap-3 mb-4">
-                                <div className="bg-white/5 px-3 py-1 rounded-lg border border-white/10 flex items-center gap-2">
-                                  <Calendar className="w-3 h-3 text-gold-accent" />
-                                  <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">{item.date}</span>
-                                </div>
-                                <div className="bg-white/5 px-3 py-1 rounded-lg border border-white/10 flex items-center gap-2">
-                                  <Users className="w-3 h-3 text-gold-accent" />
-                                  <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">{item.players.length} Players</span>
-                                </div>
-                              </div>
-                              <div className="flex -space-x-2">
-                                {item.players.map((p, i) => (
-                                  <div key={i} className="w-8 h-8 rounded-full border-2 border-charcoal shadow-sm bg-white/10 flex items-center justify-center overflow-hidden">
-                                    <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${p}`} className="w-full h-full object-cover" alt={p} />
+
+                              {item.activityType === "play_logged" && (
+                                <>
+                                  <div className="flex items-center gap-3 mb-4">
+                                    <div className="bg-white/5 px-3 py-1 rounded-lg border border-white/10 flex items-center gap-2">
+                                      <Calendar className="w-3 h-3 text-gold-accent" />
+                                      <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">
+                                        {formatDate(item.timestamp)}
+                                      </span>
+                                    </div>
+                                    {item.metadata?.score !== undefined && (
+                                      <div className="bg-white/5 px-3 py-1 rounded-lg border border-white/10 flex items-center gap-2">
+                                        <span className="text-[10px] font-black text-gold-accent uppercase tracking-widest">
+                                          Score: {item.metadata.score}
+                                        </span>
+                                      </div>
+                                    )}
+                                    {item.metadata?.winners?.length > 0 && (
+                                      <div className="bg-white/5 px-3 py-1 rounded-lg border border-white/10 flex items-center gap-2">
+                                        <span className="text-[10px] font-black text-gold-accent uppercase tracking-widest">
+                                          Winners:{" "}
+                                          {item.metadata.winners.join(", ")}
+                                        </span>
+                                      </div>
+                                    )}
                                   </div>
-                                ))}
-                              </div>
+                                </>
+                              )}
+
+                              {item.activityType === "review_added" && (
+                                <>
+                                  <div className="flex items-center gap-3 mb-4">
+                                    <div className="bg-white/5 px-3 py-1 rounded-lg border border-white/10 flex items-center gap-2">
+                                      <span className="text-[10px] font-black text-gold-accent uppercase tracking-widest">
+                                        Rating:{" "}
+                                        {Math.round(item.metadata?.score || 0)}
+                                        /20
+                                      </span>
+                                    </div>
+                                  </div>
+                                  {item.metadata?.text && (
+                                    <p className="text-sm text-white/60 italic mb-4">
+                                      "{item.metadata.text}"
+                                    </p>
+                                  )}
+                                </>
+                              )}
+
+                              {item.activityType === "game_added" && (
+                                <div className="bg-white/5 px-3 py-1 rounded-lg border border-white/10 inline-flex items-center gap-2">
+                                  <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">
+                                    Shelf: {item.metadata?.shelf}
+                                  </span>
+                                </div>
+                              )}
                             </div>
                             <div className="hidden sm:block w-24 h-24 rounded-2xl overflow-hidden shadow-lg border-4 border-charcoal -rotate-6 group-hover:rotate-0 transition-transform">
-                              <img src={item.gameCover || undefined} className="w-full h-full object-cover opacity-60 group-hover:opacity-100" alt={item.gameTitle} />
+                              <img
+                                src={
+                                  item.metadata?.gameCover ||
+                                  item.gameCover ||
+                                  undefined
+                                }
+                                className="w-full h-full object-cover opacity-60 group-hover:opacity-100"
+                                alt={item.metadata?.gameTitle}
+                              />
                             </div>
                           </div>
                         </motion.div>
-                      )
-                    ))
+                      ) : null,
+                    )
                   )}
                 </motion.div>
               )}
 
-              {activeTab === 'chat' && (
+              {activeTab === "chat" && (
                 <motion.div
                   key="chat"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                 >
-                  <GroupChat groupId={id || ''} />
+                  <GroupChat groupId={id || ""} />
                 </motion.div>
               )}
 
-              {activeTab === 'library' && (
+              {activeTab === "library" && (
                 <motion.div
                   key="library"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                 >
-                  <GroupLibrary groupId={id || ''} members={members} />
+                  <GroupLibrary groupId={id || ""} members={members} />
                 </motion.div>
               )}
 
-              {activeTab === 'events' && (
+              {activeTab === "events" && (
                 <motion.div
                   key="events"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                 >
-                  <GroupEvents groupId={id || ''} groupOwnerId={group?.createdBy} />
+                  <GroupEvents
+                    groupId={id || ""}
+                    groupOwnerId={group?.createdBy}
+                  />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -1136,27 +1396,27 @@ export default function GroupDetail() {
         </div>
       </div>
 
-      <CreatePollModal 
+      <CreatePollModal
         isOpen={isCreatePollOpen}
         onClose={() => setIsCreatePollOpen(false)}
-        groupId={id || ''}
+        groupId={id || ""}
         groupName={group?.name}
       />
 
-      <ActivePollsModal 
+      <ActivePollsModal
         isOpen={isActivePollsOpen}
         onClose={() => setIsActivePollsOpen(false)}
-        groupId={id || ''}
+        groupId={id || ""}
         onScheduleEvent={handlePollToEvent}
       />
 
-      <CreateEventModal 
+      <CreateEventModal
         isOpen={isCreateEventOpen}
         onClose={() => {
           setIsCreateEventOpen(false);
           setPrefilledEventData(undefined);
         }}
-        groupId={id || ''}
+        groupId={id || ""}
         groupName={group?.name}
         initialData={prefilledEventData}
       />
@@ -1173,22 +1433,28 @@ export default function GroupDetail() {
               className="absolute inset-0 bg-black/80 backdrop-blur-md"
             />
             <motion.div
-              initial={{ y: '100%' }}
+              initial={{ y: "100%" }}
               animate={{ y: 0 }}
-              exit={{ y: '100%' }}
+              exit={{ y: "100%" }}
               className="relative w-full max-w-lg bg-charcoal rounded-t-[3rem] sm:rounded-[3rem] shadow-2xl overflow-hidden border-t sm:border border-white/10 p-8"
             >
               <div className="text-center mb-8">
                 <div className="w-16 h-16 bg-emerald-accent/10 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-emerald-accent/20">
                   <UserPlus className="w-8 h-8 text-emerald-accent" />
                 </div>
-                <h2 className="text-3xl font-black text-white tracking-tight">Invite Friends</h2>
-                <p className="text-white/40 font-bold mt-2">Grow the {group.name} crew!</p>
+                <h2 className="text-3xl font-black text-white tracking-tight">
+                  Invite Friends
+                </h2>
+                <p className="text-white/40 font-bold mt-2">
+                  Grow the {group.name} crew!
+                </p>
               </div>
 
               {/* User Search Input */}
               <div className="mb-6 space-y-2">
-                <label className="text-[10px] font-black text-white/20 uppercase tracking-widest ml-4">Search by Username or Email</label>
+                <label className="text-[10px] font-black text-white/20 uppercase tracking-widest ml-4">
+                  Search by Username or Email
+                </label>
                 <form onSubmit={handleSearchUsers} className="relative group">
                   <input
                     type="text"
@@ -1210,83 +1476,122 @@ export default function GroupDetail() {
                 {/* Search Results */}
                 {inviteSearchResults.length > 0 && (
                   <div className="pb-4 border-b border-white/5 mb-4">
-                    <p className="text-[10px] font-black text-emerald-accent uppercase tracking-widest mb-3 ml-2">Search Results</p>
+                    <p className="text-[10px] font-black text-emerald-accent uppercase tracking-widest mb-3 ml-2">
+                      Search Results
+                    </p>
                     <div className="space-y-2">
                       {inviteSearchResults.map((searchedUser) => (
                         <button
                           key={searchedUser.uid}
                           onClick={() => {
-                            setSelectedFriends(prev => 
-                              prev.includes(searchedUser.uid) 
-                                ? prev.filter(id => id !== searchedUser.uid) 
-                                : [...prev, searchedUser.uid]
+                            setSelectedFriends((prev) =>
+                              prev.includes(searchedUser.uid)
+                                ? prev.filter((id) => id !== searchedUser.uid)
+                                : [...prev, searchedUser.uid],
                             );
                           }}
                           className={cn(
                             "w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left",
-                            selectedFriends.includes(searchedUser.uid) 
-                              ? "bg-emerald-accent/10 border-emerald-accent/30" 
-                              : "bg-white/5 border-white/10"
+                            selectedFriends.includes(searchedUser.uid)
+                              ? "bg-emerald-accent/10 border-emerald-accent/30"
+                              : "bg-white/5 border-white/10",
                           )}
                         >
-                          <img 
-                            src={searchedUser.photoURL || undefined} 
-                            alt={searchedUser.displayName} 
+                          <img
+                            src={searchedUser.photoURL || undefined}
+                            alt={searchedUser.displayName}
                             className="w-10 h-10 rounded-lg object-cover border border-white/10"
                           />
                           <div className="flex-1 min-w-0">
-                            <h4 className="font-black text-white text-sm truncate">{searchedUser.displayName}</h4>
-                            <p className="text-[9px] font-bold text-white/20 truncate">{searchedUser.email || `@${searchedUser.username}`}</p>
+                            <h4 className="font-black text-white text-sm truncate">
+                              {searchedUser.displayName}
+                            </h4>
+                            <p className="text-[9px] font-bold text-white/20 truncate">
+                              {searchedUser.email ||
+                                `@${searchedUser.username}`}
+                            </p>
                           </div>
-                          {selectedFriends.includes(searchedUser.uid) && <Check className="w-4 h-4 text-emerald-accent" />}
+                          {selectedFriends.includes(searchedUser.uid) && (
+                            <Check className="w-4 h-4 text-emerald-accent" />
+                          )}
                         </button>
                       ))}
                     </div>
                   </div>
                 )}
 
-                <p className="text-[10px] font-black text-white/20 uppercase tracking-widest mb-3 ml-2">Your Friends</p>
-                {following.filter(f => ! (group.memberIds || group.members.map((m: any) => typeof m === 'string' ? m : m.userId)).includes(f.uid)).length > 0 ? (
-                  following.filter(f => ! (group.memberIds || group.members.map((m: any) => typeof m === 'string' ? m : m.userId)).includes(f.uid)).map((friend) => (
-                    <button
-                      key={friend.uid}
-                      onClick={() => {
-                        setSelectedFriends(prev => 
-                          prev.includes(friend.uid) 
-                            ? prev.filter(id => id !== friend.uid) 
-                            : [...prev, friend.uid]
-                        );
-                      }}
-                      className={cn(
-                        "w-full flex items-center gap-4 p-4 rounded-2xl border transition-all text-left group",
-                        selectedFriends.includes(friend.uid) 
-                          ? "bg-emerald-accent/10 border-emerald-accent/30" 
-                          : "bg-white/5 border-white/10 hover:border-emerald-accent/30"
-                      )}
-                    >
-                      <img 
-                        src={friend.photoURL || undefined} 
-                        alt={friend.displayName} 
-                        className="w-12 h-12 rounded-xl object-cover border border-white/10"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-black text-white truncate">{friend.displayName}</h4>
-                        <p className="text-[10px] font-black text-white/20 uppercase tracking-widest">Friend</p>
-                      </div>
-                      <div className={cn(
-                        "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all",
-                        selectedFriends.includes(friend.uid)
-                          ? "bg-emerald-accent border-emerald-accent text-charcoal"
-                          : "border-white/10"
-                      )}>
-                        {selectedFriends.includes(friend.uid) && <Check className="w-4 h-4" />}
-                      </div>
-                    </button>
-                  ))
+                <p className="text-[10px] font-black text-white/20 uppercase tracking-widest mb-3 ml-2">
+                  Your Friends
+                </p>
+                {following.filter(
+                  (f) =>
+                    !(
+                      group.memberIds ||
+                      group.members.map((m: any) =>
+                        typeof m === "string" ? m : m.userId,
+                      )
+                    ).includes(f.uid),
+                ).length > 0 ? (
+                  following
+                    .filter(
+                      (f) =>
+                        !(
+                          group.memberIds ||
+                          group.members.map((m: any) =>
+                            typeof m === "string" ? m : m.userId,
+                          )
+                        ).includes(f.uid),
+                    )
+                    .map((friend) => (
+                      <button
+                        key={friend.uid}
+                        onClick={() => {
+                          setSelectedFriends((prev) =>
+                            prev.includes(friend.uid)
+                              ? prev.filter((id) => id !== friend.uid)
+                              : [...prev, friend.uid],
+                          );
+                        }}
+                        className={cn(
+                          "w-full flex items-center gap-4 p-4 rounded-2xl border transition-all text-left group",
+                          selectedFriends.includes(friend.uid)
+                            ? "bg-emerald-accent/10 border-emerald-accent/30"
+                            : "bg-white/5 border-white/10 hover:border-emerald-accent/30",
+                        )}
+                      >
+                        <img
+                          src={friend.photoURL || undefined}
+                          alt={friend.displayName}
+                          className="w-12 h-12 rounded-xl object-cover border border-white/10"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-black text-white truncate">
+                            {friend.displayName}
+                          </h4>
+                          <p className="text-[10px] font-black text-white/20 uppercase tracking-widest">
+                            Friend
+                          </p>
+                        </div>
+                        <div
+                          className={cn(
+                            "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all",
+                            selectedFriends.includes(friend.uid)
+                              ? "bg-emerald-accent border-emerald-accent text-charcoal"
+                              : "border-white/10",
+                          )}
+                        >
+                          {selectedFriends.includes(friend.uid) && (
+                            <Check className="w-4 h-4" />
+                          )}
+                        </div>
+                      </button>
+                    ))
                 ) : (
                   <div className="text-center py-10 bg-white/5 rounded-3xl border border-dashed border-white/10">
                     <SearchX className="w-10 h-10 text-white/10 mx-auto mb-2" />
-                    <p className="text-white/20 font-bold">No friends left to invite!</p>
+                    <p className="text-white/20 font-bold">
+                      No friends left to invite!
+                    </p>
                   </div>
                 )}
               </div>
@@ -1330,9 +1635,11 @@ export default function GroupDetail() {
           isOpen={isEditAvatarOpen}
           onClose={() => setIsEditAvatarOpen(false)}
           groupId={group.id}
-          currentSeed={group.avatarSeed || 'default'}
+          currentSeed={group.avatarSeed || "default"}
           onSuccess={(newSeed) => {
-            setGroup(prev => prev ? { ...prev, avatarSeed: newSeed } : null);
+            setGroup((prev) =>
+              prev ? { ...prev, avatarSeed: newSeed } : null,
+            );
           }}
         />
       )}
@@ -1342,20 +1649,21 @@ export default function GroupDetail() {
           isOpen={isManageModalOpen}
           onClose={() => setIsManageModalOpen(false)}
           groupId={group.id}
-          joinCode={group.joinCode || 'N/A'}
+          joinCode={group.joinCode || "N/A"}
           isPrivate={!!group.isPrivate}
-          members={members.map(m => ({
+          members={members.map((m) => ({
             ...m,
-            role: group.members.find(gm => gm.userId === m.uid)?.role || 'member'
+            role:
+              group.members.find((gm) => gm.userId === m.uid)?.role || "member",
           }))}
           onRefresh={() => fetchGroupData(group.id)}
         />
       )}
 
-      <BringGameModal 
+      <BringGameModal
         isOpen={!!bringGameEventId}
         onClose={() => setBringGameEventId(null)}
-        eventId={bringGameEventId || ''}
+        eventId={bringGameEventId || ""}
       />
     </div>
   );

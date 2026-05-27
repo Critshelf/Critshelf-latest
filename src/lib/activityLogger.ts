@@ -25,6 +25,7 @@ export interface ActivityMetadata {
   dateTime?: any;
   score?: number;
   text?: string;
+  winners?: string[];
 }
 
 export interface LogActivityParams {
@@ -34,6 +35,7 @@ export interface LogActivityParams {
   type: ActivityType;
   groupId?: string;
   groupName?: string;
+  groupIds?: string[];
   metadata?: ActivityMetadata;
 }
 
@@ -47,6 +49,7 @@ export async function logActivity({
   type,
   groupId,
   groupName,
+  groupIds,
   metadata = {}
 }: LogActivityParams) {
   try {
@@ -58,6 +61,7 @@ export async function logActivity({
       type,
       groupId: groupId || null,
       groupName: groupName || null,
+      groupIds: groupIds || (groupId ? [groupId] : []),
       metadata,
       timestamp: serverTimestamp()
     });

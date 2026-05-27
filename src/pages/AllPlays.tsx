@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
-import { collection, query, where, getDocs, orderBy, or } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, or, limit } from 'firebase/firestore';
 import { cn } from '../lib/utils';
 import { useUser } from '../contexts/UserContext';
 
@@ -118,11 +118,11 @@ export default function AllPlays() {
                           alt={session.gameTitle}
                           className={cn(
                             "w-full h-full object-cover",
-                            session.isArtApproved ? "" : "blur-md opacity-50 grayscale"
+                            (session.customImageApproved || session.isApproved) ? "" : "blur-md opacity-50 grayscale"
                           )}
                           referrerPolicy="no-referrer"
                         />
-                        {!session.isArtApproved && (
+                        {!(session.customImageApproved || session.isApproved) && (
                           <div className="absolute inset-0 flex items-center justify-center p-1 text-center bg-gray-900/60 font-black">
                              <span className="text-[10px] uppercase leading-tight text-white/50 tracking-tighter break-all line-clamp-3">{session.gameTitle}</span>
                           </div>

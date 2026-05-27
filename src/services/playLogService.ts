@@ -13,7 +13,8 @@ import {
   writeBatch,
   increment,
   or,
-  and
+  and,
+  limit
 } from 'firebase/firestore';
 import { calculateBaseDC, calculateFinalDC } from '../lib/dcUtils';
 
@@ -21,6 +22,7 @@ export interface PlayLogPayload {
   gameId: string;
   gameTitle: string;
   groupId?: string;
+  groupIds?: string[];
   rating: number; // D20_Rating (1-20)
   vibeTag: string;
   userId: string;

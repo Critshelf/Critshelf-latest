@@ -1,42 +1,48 @@
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Search, 
-  Plus, 
-  Users, 
-  Dices, 
-  ChevronRight, 
+import React, { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import {
+  Search,
+  Plus,
+  Users,
+  Dices,
+  ChevronRight,
   ChevronLeft,
   Star,
   Activity as ActivityIcon,
   MessageCircle,
   Loader2,
-  Quote
-} from 'lucide-react';
-import { useNavigate, Link } from 'react-router-dom';
-import { db, OperationType, handleFirestoreError } from '../lib/firebase';
-import { 
-  collection, 
-  query, 
-  where, 
-  getDocs, 
-  limit, 
-  orderBy, 
-  doc, 
+  Quote,
+} from "lucide-react";
+import { useNavigate, Link } from "react-router-dom";
+import { db, OperationType, handleFirestoreError } from "../lib/firebase";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  limit,
+  orderBy,
+  doc,
   getDoc,
   onSnapshot,
   or,
-  and
-} from 'firebase/firestore';
-import { cn } from '../lib/utils';
-import D20Die from '../components/D20Die';
-import GameTitleWithDC from '../components/GameTitleWithDC';
-import LogPlayModal from '../components/LogPlayModal';
-import ACBadge from '../components/ACBadge';
-import UserAvatar from '../components/UserAvatar';
+  and,
+  documentId,
+} from "firebase/firestore";
+import { cn } from "../lib/utils";
+import D20Die from "../components/D20Die";
+import GameTitleWithDC from "../components/GameTitleWithDC";
+import LogPlayModal from "../components/LogPlayModal";
+import ACBadge from "../components/ACBadge";
+import UserAvatar from "../components/UserAvatar";
 
 const GameCardSkeleton: React.FC<{ className?: string }> = ({ className }) => (
-  <div className={cn("animate-pulse bg-white/5 border border-white/10 rounded-[2.5rem] overflow-hidden", className)}>
+  <div
+    className={cn(
+      "animate-pulse bg-white/5 border border-white/10 rounded-[2.5rem] overflow-hidden",
+      className,
+    )}
+  >
     <div className="h-48 w-full relative flex items-center justify-between px-4 sm:px-6">
       <div className="w-11 h-11 sm:w-14 sm:h-14 bg-white/10 rounded-full" />
       <div className="flex-1 px-4 space-y-3">
@@ -49,11 +55,11 @@ const GameCardSkeleton: React.FC<{ className?: string }> = ({ className }) => (
   </div>
 );
 
-import GameCard, { Game } from '../components/GameCard';
-import { useUser } from '../contexts/UserContext';
-import ActivityItem from '../components/ActivityItem';
+import GameCard, { Game } from "../components/GameCard";
+import { useUser } from "../contexts/UserContext";
+import ActivityItem from "../components/ActivityItem";
 // import logo from '../assets/logo.png';
-const logo = '/logo.png?v=3'; // Adding version parameter to force refresh of updated asset
+const logo = "/logo.png?v=3"; // Adding version parameter to force refresh of updated asset
 
 interface RotationGame extends Game {
   playCount: number;
@@ -73,7 +79,7 @@ interface Review {
   attackClass?: number;
 }
 
-import { useRecentGames } from '../hooks/useRecentGames';
+import { useRecentGames } from "../hooks/useRecentGames";
 
 export default function Home() {
   const { profile, user, groupRatings } = useUser();
@@ -81,10 +87,10 @@ export default function Home() {
   const [rotationIndex, setRotationIndex] = useState(0);
   const { recentGames, loading: loadingRecent } = useRecentGames();
   const [friendReviews, setFriendReviews] = useState<any[]>([]);
-  
+
   const [loadingRotation, setLoadingRotation] = useState(true);
   const [loadingReviews, setLoadingReviews] = useState(true);
-  
+
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -99,20 +105,23 @@ export default function Home() {
     let unsubscribeRotation: (() => void)[] = [];
     const oneYearAgo = new Date();
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-    
+
     // REDUCED TO 50 TO PREVENT READ LEAKS
     console.warn(
       "Firestore index warning: If 'Heavy Rotation' (Home page) fails to load, ensure you have " +
-      "created a composite index for collection 'plays' with: participantIds (Array) and " +
-      "playDate (Ascending/Descending) in the Firebase console."
+        "created a composite index for collection 'plays' with: participantIds (Array) and " +
+        "playDate (Ascending/Descending) in the Firebase console.",
     );
     const qPlays = query(
-      collection(db, 'plays'),
+      collection(db, "plays"),
       and(
-        or(where('participantIds', 'array-contains', user.uid), where('userId', '==', user.uid)),
-        where('playDate', '>=', oneYearAgo)
+        or(
+          where("participantIds", "array-contains", user.uid),
+          where("userId", "==", user.uid),
+        ),
+        where("playDate", ">=", oneYearAgo),
       ),
-      limit(50)
+      limit(50),
     );
 
     const fetchRotation = async () => {
@@ -120,22 +129,22 @@ export default function Home() {
         const playsSnap = await getDocs(qPlays);
         const playCounts: Record<string, number> = {};
         const playMetadata: Record<string, any> = {};
-        
-        playsSnap.docs.forEach(d => {
+
+        playsSnap.docs.forEach((d) => {
           const data = d.data();
           playCounts[data.gameId] = (playCounts[data.gameId] || 0) + 1;
           if (!playMetadata[data.gameId]) {
             playMetadata[data.gameId] = {
-              title: data.gameTitle || 'Unknown Game',
-              coverImage: data.gameCover || '',
-              isArtApproved: data.isArtApproved || false
+              title: data.gameTitle || "Unknown Game",
+              coverImage: data.gameCover || "",
+              isArtApproved: data.isArtApproved || false,
             };
           }
         });
 
         const sortedGameIds = Object.entries(playCounts)
           .sort(([, a], [, b]) => b - a)
-          .slice(0, 3);
+          .slice(0, 10);
 
         if (sortedGameIds.length === 0) {
           setRotationGames([]);
@@ -143,13 +152,37 @@ export default function Home() {
           return;
         }
 
+        const topGameIdsArray = sortedGameIds.map(([id]) => id);
+        if (!topGameIdsArray || topGameIdsArray.length === 0) return;
+        console.log("1. IDs sent to Firebase:", topGameIdsArray);
+
+        const qGames = query(
+          collection(db, "games"),
+          where(documentId(), "in", topGameIdsArray),
+        );
+        const gamesSnap = await getDocs(qGames);
+        console.log(
+          "2. Raw Firebase Data:",
+          gamesSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+        );
+
+        const gamesMap = new Map();
+        gamesSnap.docs.forEach((doc) => gamesMap.set(doc.id, doc.data()));
+
         const gamesResults = sortedGameIds.map(([id, count]) => {
-          const meta = playMetadata[id];
-          if (!meta) return null;
-          return { id, ...meta, playCount: count } as RotationGame;
+          const gameData = gamesMap.get(id) || {};
+          const meta = playMetadata[id] || {};
+
+          return {
+            id,
+            ...meta,
+            ...gameData,
+            playCount: count,
+          } as RotationGame;
         });
 
-        setRotationGames(gamesResults.filter(Boolean) as RotationGame[]);
+        const finalGamesList = gamesResults.slice(0, 3) as RotationGame[];
+        setRotationGames(finalGamesList);
       } catch (error) {
         console.error("Firebase Query Error:", error);
       } finally {
@@ -171,16 +204,43 @@ export default function Home() {
 
     const fetchFriendsReviews = async () => {
       const qFriends = query(
-        collection(db, 'activities'),
-        where('type', '==', 'review_added'),
-        where('userId', 'in', following.slice(0, 10)),
-        orderBy('timestamp', 'desc'),
-        limit(3)
+        collection(db, "activities"),
+        where("type", "==", "review_added"),
+        where("userId", "in", following.slice(0, 10)),
+        orderBy("timestamp", "desc"),
+        limit(3),
       );
-      
+
       try {
         const snap = await getDocs(qFriends);
-        setFriendReviews(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const activityListRaw = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        
+        // Extract gameIds
+        const gameIds = activityListRaw.map((a: any) => a.metadata?.gameId).filter(Boolean);
+        const uniqueGameIds = Array.from(new Set(gameIds)).slice(0, 10);
+        
+        const gamesMap = new Map();
+        if (uniqueGameIds.length > 0) {
+          const gamesQ = query(collection(db, "games"), where(documentId(), "in", uniqueGameIds));
+          const gamesSnap = await getDocs(gamesQ);
+          gamesSnap.docs.forEach((doc) => gamesMap.set(doc.id, doc.data()));
+        }
+        
+        const activityList = activityListRaw.map((a: any) => {
+          if (a.metadata?.gameId) {
+            const gameData = gamesMap.get(a.metadata.gameId) || {};
+            return {
+              ...a,
+              metadata: {
+                ...a.metadata,
+                ...gameData
+              }
+            };
+          }
+          return a;
+        });
+
+        setFriendReviews(activityList);
       } catch (error) {
         console.error("Friends Reviews Fetch Error:", error);
       } finally {
@@ -189,8 +249,7 @@ export default function Home() {
     };
 
     fetchFriendsReviews();
-  }, [user?.uid, (profile as any)?.following?.join(',')]);
-
+  }, [user?.uid, (profile as any)?.following?.join(",")]);
 
   useEffect(() => {
     if (rotationGames.length > 0 && rotationIndex >= rotationGames.length) {
@@ -203,16 +262,18 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-charcoal pt-12 pb-32 px-4 sm:px-6">
       <div className="max-w-4xl mx-auto space-y-12">
-        
         {/* App Header / Logo */}
         <header className="flex flex-col items-center justify-center py-8">
-          <Link to="/" className="flex flex-col items-center gap-3 group transition-transform hover:scale-105 duration-300">
+          <Link
+            to="/"
+            className="flex flex-col items-center gap-3 group transition-transform hover:scale-105 duration-300"
+          >
             <div className="relative w-24 h-24 flex items-center justify-center bg-white rounded-3xl shadow-inner overflow-hidden border border-white/10">
-              <img 
-                src={logo} 
-                alt="CritShelf Logo" 
+              <img
+                src={logo}
+                alt="CritShelf Logo"
                 loading="eager"
-                style={{ mixBlendMode: 'multiply' as any }}
+                style={{ mixBlendMode: "multiply" as any }}
                 className="w-full h-full object-contain contrast-[1.1]"
               />
             </div>
@@ -232,11 +293,13 @@ export default function Home() {
               <div className="w-8 h-8 bg-emerald-accent/10 rounded-lg flex items-center justify-center border border-emerald-accent/20">
                 <ActivityIcon className="w-4 h-4 text-emerald-accent" />
               </div>
-              <h2 className="text-xl font-black text-white tracking-tight uppercase tracking-widest text-[10px]">Your Heavy Rotation</h2>
+              <h2 className="text-xl font-black text-white tracking-tight uppercase tracking-widest text-[10px]">
+                Your Heavy Rotation
+              </h2>
             </div>
             {user && (
-              <Link 
-                to="/collection" 
+              <Link
+                to="/collection"
                 className="text-[10px] font-black uppercase tracking-widest text-emerald-accent hover:text-white transition-colors"
               >
                 Full Collection →
@@ -248,12 +311,15 @@ export default function Home() {
             {!user ? (
               <div className="bg-white/5 border border-white/10 rounded-[3rem] p-10 text-center">
                 <ActivityIcon className="w-12 h-12 text-emerald-accent/20 mx-auto mb-4" />
-                <h3 className="text-xl font-black text-white mb-2">Track Your Rotation</h3>
+                <h3 className="text-xl font-black text-white mb-2">
+                  Track Your Rotation
+                </h3>
                 <p className="text-white/40 font-medium mb-8 max-w-sm mx-auto">
-                  Sign up to track your rolling play history and identify your table's heavy favorites.
+                  Sign up to track your rolling play history and identify your
+                  table's heavy favorites.
                 </p>
-                <button 
-                  onClick={() => navigate('/auth')}
+                <button
+                  onClick={() => navigate("/auth")}
                   className="bg-emerald-accent text-charcoal px-8 py-3 rounded-2xl font-black text-sm shadow-lg hover:shadow-emerald-accent/20 transition-all hover:scale-105"
                 >
                   Get Started
@@ -263,7 +329,7 @@ export default function Home() {
               <div className="relative">
                 <GameCardSkeleton />
                 <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 flex gap-2">
-                  {[1, 2, 3].map(i => (
+                  {[1, 2, 3].map((i) => (
                     <div key={i} className="w-2 h-2 rounded-full bg-white/5" />
                   ))}
                 </div>
@@ -272,12 +338,12 @@ export default function Home() {
               <div className="relative group">
                 <div className="flex overflow-x-auto snap-x snap-mandatory gap-4 pb-4 w-full [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                   {rotationGames.map((game, idx) => (
-                    <div 
+                    <div
                       key={game.id}
                       className={cn(
                         "min-w-[85vw] md:min-w-0 md:w-full shrink-0 snap-center",
                         // Keep Desktop behavior functionally tied to rotationIndex
-                        idx !== rotationIndex ? "md:hidden" : "md:block"
+                        idx !== rotationIndex ? "md:hidden" : "md:block",
                       )}
                     >
                       <AnimatePresence mode="wait">
@@ -289,8 +355,8 @@ export default function Home() {
                           transition={{ duration: 0.3 }}
                           className="relative"
                         >
-                          <GameCard 
-                            game={game} 
+                          <GameCard
+                            game={game}
                             personalRating={profile?.ratings?.[game.id]}
                             groupRating={groupRatings[game.id]?.rating}
                             groupName={groupRatings[game.id]?.groupName}
@@ -305,11 +371,11 @@ export default function Home() {
 
                 {/* Carousel Paging Arrows */}
                 {rotationIndex > 0 && (
-                  <button 
+                  <button
                     onClick={(e) => {
                       e.stopPropagation();
                       e.preventDefault();
-                      setRotationIndex(prev => prev - 1);
+                      setRotationIndex((prev) => prev - 1);
                     }}
                     className="hidden md:flex absolute -left-6 top-1/2 -translate-y-1/2 z-30 w-12 h-12 bg-charcoal/80 backdrop-blur-md rounded-full border border-white/10 items-center justify-center text-white hover:bg-emerald-accent hover:text-charcoal transition-all shadow-2xl active:scale-95 group/btn"
                   >
@@ -318,11 +384,11 @@ export default function Home() {
                 )}
 
                 {rotationIndex < rotationGames.length - 1 && (
-                  <button 
+                  <button
                     onClick={(e) => {
                       e.stopPropagation();
                       e.preventDefault();
-                      setRotationIndex(prev => prev + 1);
+                      setRotationIndex((prev) => prev + 1);
                     }}
                     className="hidden md:flex absolute -right-6 top-1/2 -translate-y-1/2 z-30 w-12 h-12 bg-charcoal/80 backdrop-blur-md rounded-full border border-white/10 items-center justify-center text-white hover:bg-emerald-accent hover:text-charcoal transition-all shadow-2xl active:scale-95 group/btn"
                   >
@@ -333,11 +399,13 @@ export default function Home() {
                 {/* Carousel Dots Indicator */}
                 <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 flex gap-2">
                   {rotationGames.map((_, idx) => (
-                    <div 
+                    <div
                       key={idx}
                       className={cn(
                         "w-2 h-2 rounded-full transition-all duration-300 md:block hidden",
-                        idx === rotationIndex ? "bg-emerald-accent w-6" : "bg-white/10"
+                        idx === rotationIndex
+                          ? "bg-emerald-accent w-6"
+                          : "bg-white/10",
                       )}
                     />
                   ))}
@@ -348,9 +416,13 @@ export default function Home() {
                 <div className="w-16 h-16 bg-white/5 rounded-3xl flex items-center justify-center mx-auto mb-6 border border-white/10">
                   <Dices className="w-8 h-8 text-white/10" />
                 </div>
-                <h3 className="text-xl font-black text-white mb-2">No Plays Yet</h3>
-                <p className="text-white/30 font-bold">Log Plays to Start your Rotation</p>
-                <button 
+                <h3 className="text-xl font-black text-white mb-2">
+                  No Plays Yet
+                </h3>
+                <p className="text-white/30 font-bold">
+                  Log Plays to Start your Rotation
+                </p>
+                <button
                   onClick={() => setIsLogModalOpen(true)}
                   className="mt-8 bg-emerald-accent/10 text-emerald-accent px-8 py-3 rounded-2xl font-black text-sm hover:bg-emerald-accent hover:text-charcoal transition-all border border-emerald-accent/20"
                 >
@@ -364,34 +436,40 @@ export default function Home() {
         {/* Step 2: The Quick-Action Bar */}
         {user && (
           <section className="grid grid-cols-3 gap-4">
-            <button 
+            <button
               onClick={() => setIsLogModalOpen(true)}
               className="bg-white/5 border border-white/10 rounded-[2rem] p-6 flex flex-col items-center gap-3 hover:bg-white/10 transition-all group"
             >
               <div className="w-12 h-12 bg-emerald-accent/10 rounded-2xl flex items-center justify-center border border-emerald-accent/20 group-hover:scale-110 transition-transform">
                 <Dices className="w-6 h-6 text-emerald-accent" />
               </div>
-              <span className="text-[10px] font-black text-white/60 uppercase tracking-widest text-center">Record Play</span>
+              <span className="text-[10px] font-black text-white/60 uppercase tracking-widest text-center">
+                Record Play
+              </span>
             </button>
 
-            <button 
-              onClick={() => navigate('/browse')}
+            <button
+              onClick={() => navigate("/browse")}
               className="bg-white/5 border border-white/10 rounded-[2rem] p-6 flex flex-col items-center gap-3 hover:bg-white/10 transition-all group"
             >
               <div className="w-12 h-12 bg-emerald-accent/10 rounded-2xl flex items-center justify-center border border-emerald-accent/20 group-hover:scale-110 transition-transform">
                 <Search className="w-6 h-6 text-emerald-accent" />
               </div>
-              <span className="text-[10px] font-black text-white/60 uppercase tracking-widest text-center">Find Game</span>
+              <span className="text-[10px] font-black text-white/60 uppercase tracking-widest text-center">
+                Find Game
+              </span>
             </button>
 
-            <button 
-              onClick={() => navigate('/social')}
+            <button
+              onClick={() => navigate("/social")}
               className="bg-white/5 border border-white/10 rounded-[2rem] p-6 flex flex-col items-center gap-3 hover:bg-white/10 transition-all group"
             >
               <div className="w-12 h-12 bg-emerald-accent/10 rounded-2xl flex items-center justify-center border border-emerald-accent/20 group-hover:scale-110 transition-transform">
                 <Users className="w-6 h-6 text-emerald-accent" />
               </div>
-              <span className="text-[10px] font-black text-white/60 uppercase tracking-widest text-center">Social Hub</span>
+              <span className="text-[10px] font-black text-white/60 uppercase tracking-widest text-center">
+                Social Hub
+              </span>
             </button>
           </section>
         )}
@@ -402,22 +480,27 @@ export default function Home() {
             <div className="w-8 h-8 bg-gold-accent/10 rounded-lg flex items-center justify-center border border-gold-accent/20">
               <Plus className="w-4 h-4 text-gold-accent" />
             </div>
-            <h2 className="text-xl font-black text-white tracking-tight uppercase tracking-widest text-[10px]">Recently Added to CritShelf</h2>
+            <h2 className="text-xl font-black text-white tracking-tight uppercase tracking-widest text-[10px]">
+              Recently Added to CritShelf
+            </h2>
           </div>
 
           <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory no-scrollbar pb-6 px-2 items-stretch">
             {loadingRecent ? (
               Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="w-full shrink-0 snap-center min-h-[12rem]">
+                <div
+                  key={i}
+                  className="w-full shrink-0 snap-center min-h-[12rem]"
+                >
                   <GameCardSkeleton className="h-full" />
                 </div>
               ))
             ) : recentGames.length > 0 ? (
               recentGames.map((game) => (
                 <div key={game.id} className="w-full shrink-0 snap-center">
-                  <GameCard 
-                    game={game} 
-                    compact 
+                  <GameCard
+                    game={game}
+                    compact
                     personalRating={profile?.ratings?.[game.id]}
                     groupRating={groupRatings[game.id]?.rating}
                     groupName={groupRatings[game.id]?.groupName}
@@ -426,7 +509,9 @@ export default function Home() {
               ))
             ) : (
               <div className="w-full text-center py-12 bg-white/5 rounded-[2.5rem] border border-dashed border-white/10">
-                <p className="text-white/20 font-bold text-sm uppercase tracking-widest">No Discovery Feed Available</p>
+                <p className="text-white/20 font-bold text-sm uppercase tracking-widest">
+                  No Discovery Feed Available
+                </p>
               </div>
             )}
           </div>
@@ -439,30 +524,39 @@ export default function Home() {
               <div className="w-8 h-8 bg-gold-accent/10 rounded-lg flex items-center justify-center border border-gold-accent/20">
                 <Star className="w-4 h-4 text-gold-accent fill-gold-accent" />
               </div>
-              <h2 className="text-xl font-black text-white tracking-tight uppercase tracking-widest text-[10px]">Recent Ratings</h2>
+              <h2 className="text-xl font-black text-white tracking-tight uppercase tracking-widest text-[10px]">
+                Recent Ratings
+              </h2>
             </div>
           </div>
 
           <div className="space-y-6 mb-8">
             {!user ? (
-               <div className="bg-white/5 border border-white/10 rounded-[2rem] p-8 text-center">
+              <div className="bg-white/5 border border-white/10 rounded-[2rem] p-8 text-center">
                 <MessageCircle className="w-10 h-10 text-emerald-accent/20 mx-auto mb-3" />
-                <h3 className="text-lg font-black text-white mb-2">Join the Community</h3>
-                <p className="text-white/40 text-sm font-medium mb-6">See what your friends are playing and reviewing.</p>
-                <button 
-                  onClick={() => navigate('/auth')}
+                <h3 className="text-lg font-black text-white mb-2">
+                  Join the Community
+                </h3>
+                <p className="text-white/40 text-sm font-medium mb-6">
+                  See what your friends are playing and reviewing.
+                </p>
+                <button
+                  onClick={() => navigate("/auth")}
                   className="w-full py-3 rounded-xl border border-emerald-accent/20 text-emerald-accent font-black text-[10px] uppercase tracking-widest hover:bg-emerald-accent hover:text-charcoal transition-all"
                 >
                   Login to see reviews
                 </button>
               </div>
             ) : loadingReviews ? (
-              [1, 2, 3].map(i => (
-                <div key={i} className="animate-pulse bg-white/5 border border-white/10 rounded-[2.5rem] p-6 h-32 shadow-xl" />
+              [1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="animate-pulse bg-white/5 border border-white/10 rounded-[2.5rem] p-6 h-32 shadow-xl"
+                />
               ))
             ) : friendReviews.length > 0 ? (
               friendReviews.map((activity) => (
-                <motion.div 
+                <motion.div
                   key={activity.id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -471,14 +565,21 @@ export default function Home() {
                   <div className="flex flex-col md:flex-row gap-6">
                     {/* Character/Friend Column */}
                     <div className="flex flex-row md:flex-col items-center gap-4 shrink-0">
-                      <UserAvatar 
-                         user={{ uid: activity.userId, avatarSeed: activity.avatarSeed }} 
-                         size="md" 
-                         className="rounded-2xl border-2 border-white/10 shadow-lg group-hover:border-gold-accent/30 transition-all" 
+                      <UserAvatar
+                        user={{
+                          uid: activity.userId,
+                          avatarSeed: activity.avatarSeed,
+                        }}
+                        size="md"
+                        className="rounded-2xl border-2 border-white/10 shadow-lg group-hover:border-gold-accent/30 transition-all"
                       />
                       <div className="text-left md:text-center">
-                        <span className="text-sm font-black text-white block truncate max-w-[100px]">{activity.userName}</span>
-                        <span className="text-[8px] font-black text-white/20 uppercase tracking-widest">Friend</span>
+                        <span className="text-sm font-black text-white block truncate max-w-[100px]">
+                          {activity.userName}
+                        </span>
+                        <span className="text-[8px] font-black text-white/20 uppercase tracking-widest">
+                          Friend
+                        </span>
                       </div>
                     </div>
 
@@ -486,31 +587,41 @@ export default function Home() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-4 mb-4">
                         <div className="flex items-center gap-4">
-                          <div className="w-12 h-16 rounded-xl overflow-hidden border border-white/10 shadow-lg flex-shrink-0">
-                            <img 
-                              src={activity.metadata.gameCover || null} 
+                          <div className="w-12 h-16 rounded-xl overflow-hidden border border-white/10 shadow-lg flex-shrink-0 relative">
+                            <img
+                              src={activity.metadata.coverImage || activity.metadata.gameCover || null}
                               alt={activity.metadata.gameTitle}
-                              className="w-full h-full object-cover transition-transform group-hover:scale-110"
+                              className={cn(
+                                "w-full h-full object-cover transition-transform group-hover:scale-110",
+                                (activity.metadata.customImageApproved || activity.metadata.isApproved) ? "" : "blur-md opacity-50 grayscale"
+                              )}
                               referrerPolicy="no-referrer"
                             />
+                            {!(activity.metadata.customImageApproved || activity.metadata.isApproved) && (
+                              <div className="absolute inset-0 flex items-center justify-center p-1 text-center bg-gray-900/60 font-black">
+                                <span className="text-[6px] uppercase leading-tight text-white/50 tracking-tighter break-all line-clamp-3">{activity.metadata.gameTitle}</span>
+                              </div>
+                            )}
                           </div>
                           <div>
                             <h3 className="text-lg font-black text-white leading-tight uppercase tracking-tight line-clamp-1">
                               {activity.metadata.gameTitle}
                             </h3>
                             <div className="flex items-center gap-2 mt-1">
-                               <MessageCircle className="w-3 h-3 text-gold-accent/50" />
-                               <span className="text-[9px] font-black text-white/20 uppercase tracking-tighter">Review Posted</span>
+                              <MessageCircle className="w-3 h-3 text-gold-accent/50" />
+                              <span className="text-[9px] font-black text-white/20 uppercase tracking-tighter">
+                                Review Posted
+                              </span>
                             </div>
                           </div>
                         </div>
 
                         <div className="shrink-0">
-                          <D20Die 
-                            value={activity.metadata.score} 
-                            theme="gold" 
-                            size="sm" 
-                            className="drop-shadow-[0_0_10px_rgba(251,191,36,0.2)]" 
+                          <D20Die
+                            value={activity.metadata.score}
+                            theme="gold"
+                            size="sm"
+                            className="drop-shadow-[0_0_10px_rgba(251,191,36,0.2)]"
                           />
                         </div>
                       </div>
@@ -534,12 +645,15 @@ export default function Home() {
             ) : (
               <div className="text-center py-16 bg-white/5 rounded-[3rem] border-2 border-dashed border-white/10">
                 <Users className="w-12 h-12 text-white/10 mx-auto mb-4" />
-                <h3 className="text-lg font-black text-white mb-2">No Reviews from Friends</h3>
+                <h3 className="text-lg font-black text-white mb-2">
+                  No Reviews from Friends
+                </h3>
                 <p className="text-white/30 text-sm font-bold max-w-xs mx-auto">
-                  Follow some fellow gamers or get your friends to share their thoughts!
+                  Follow some fellow gamers or get your friends to share their
+                  thoughts!
                 </p>
-                <button 
-                  onClick={() => navigate('/search-users')}
+                <button
+                  onClick={() => navigate("/search-users")}
                   className="mt-6 text-gold-accent font-black text-[10px] uppercase tracking-widest hover:underline"
                 >
                   Discover new friends
@@ -548,20 +662,19 @@ export default function Home() {
             )}
           </div>
 
-          <button 
-            onClick={() => navigate('/friend-reviews')}
+          <button
+            onClick={() => navigate("/friend-reviews")}
             className="w-full py-4 rounded-2xl border-2 border-white/10 text-white/40 font-black text-xs uppercase tracking-widest hover:bg-white/5 hover:text-white transition-all flex items-center justify-center gap-2 group"
           >
             See All Friend Reviews
             <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </button>
         </section>
-
       </div>
 
-      <LogPlayModal 
-        isOpen={isLogModalOpen} 
-        onClose={() => setIsLogModalOpen(false)} 
+      <LogPlayModal
+        isOpen={isLogModalOpen}
+        onClose={() => setIsLogModalOpen(false)}
       />
     </div>
   );
