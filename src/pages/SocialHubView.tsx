@@ -32,13 +32,14 @@ import {
   documentId
 } from 'firebase/firestore';
 import { cn } from '../lib/utils';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import ACBadge from '../components/ACBadge';
 import GroupAvatar from '../components/GroupAvatar';
 import UserAvatar from '../components/UserAvatar';
 import DiscoverGroupsModal from '../components/DiscoverGroupsModal';
 import CreateGroupModal from '../components/CreateGroupModal';
 import ActivityItem from '../components/ActivityItem';
+import SocialHubFeed from '../components/SocialHubFeed';
 import { useUser } from '../contexts/UserContext';
 
 type Tab = 'activity' | 'friends' | 'groups';
@@ -382,103 +383,7 @@ export default function SocialHubView() {
               exit={{ opacity: 0, y: -20 }}
               className="space-y-6"
             >
-              {feed.length > 0 ? (
-                <>
-                  {feed.map((item) => (
-                    <div key={item.id}>
-                      {item.type === 'review' ? (
-                        <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-6 shadow-xl overflow-hidden relative group hover:bg-white/[0.07] transition-all">
-                          <div className="flex items-start gap-5">
-                            <UserAvatar 
-                              user={{ 
-                                photoURL: item.sourceAvatar, 
-                                uid: item.userId,
-                                displayName: item.sourceName 
-                              }} 
-                              size="md" 
-                              className="rounded-xl border border-white/10" 
-                            />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="text-[10px] font-black text-emerald-accent uppercase tracking-widest bg-emerald-accent/10 px-2 py-0.5 rounded-md">Friend</span>
-                                <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">{item.createdAt.toLocaleDateString()}</span>
-                              </div>
-                              <h3 className="text-lg font-black text-white leading-tight">
-                                <span className="text-emerald-accent">{item.sourceName}</span> {item.title}
-                              </h3>
-                              {item.text && (
-                                <p className="mt-3 text-white/60 italic leading-relaxed line-clamp-2">"{item.text}"</p>
-                              )}
-                            </div>
-                            {item.score && (
-                              <div className="shrink-0 flex flex-col items-center gap-1">
-                                <div className="w-12 h-12 bg-gold-accent/10 rounded-2xl flex items-center justify-center border border-gold-accent/20">
-                                  <span className="text-xl font-black text-gold-accent">{item.score}</span>
-                                </div>
-                                <span className="text-[8px] font-black text-gold-accent/40 uppercase">D20</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        item.activity ? (
-                          <ActivityItem activity={(item as any).activity} />
-                        ) : (
-                          <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-6 shadow-xl overflow-hidden relative group hover:bg-white/[0.07] transition-all">
-                            <div className="flex items-start gap-5">
-                              <GroupAvatar seed={item.groupId ? groups.find(g => g.id === item.groupId)?.avatarSeed : 'default'} size="sm" className="bg-purple-500/10 border-purple-500/20 text-purple-500 rounded-xl" />
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span className="text-[10px] font-black text-purple-500 uppercase tracking-widest bg-purple-500/10 px-2 py-0.5 rounded-md">Group</span>
-                                  <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">{item.createdAt.toLocaleDateString()}</span>
-                                </div>
-                                <h3 className="text-lg font-black text-white leading-tight">
-                                  <span className="text-purple-500">{item.sourceName}</span>: {item.title}
-                                </h3>
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  ))}
-                  
-                  {hasMore ? (
-                    <div className="flex justify-center pt-4">
-                      <button
-                        onClick={loadMore}
-                        disabled={loadingMore}
-                        className="px-8 py-4 bg-white/5 border border-white/10 rounded-2xl text-white/40 font-black text-xs uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all disabled:opacity-50 flex items-center gap-2"
-                      >
-                        {loadingMore ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            Loading...
-                          </>
-                        ) : (
-                          'Load More Activity'
-                        )}
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex justify-center pt-12">
-                      <button 
-                         onClick={() => navigate('/activity-log')}
-                         className="w-full max-w-sm py-5 rounded-[2rem] border-2 border-emerald-accent/20 bg-emerald-accent/5 text-emerald-accent font-black text-xs uppercase tracking-[0.2em] hover:bg-emerald-accent hover:text-charcoal transition-all flex items-center justify-center gap-3 group shadow-2xl"
-                      >
-                        See Full Community Log
-                        <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                      </button>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="text-center py-20 bg-white/5 rounded-[3rem] border border-dashed border-white/10">
-                  <ActivityIcon className="w-12 h-12 text-white/10 mx-auto mb-4" />
-                  <h3 className="text-xl font-black text-white mb-2">No activity yet</h3>
-                  <p className="text-white/40 font-medium">Follow friends or join groups to see what's happening</p>
-                </div>
-              )}
+              <SocialHubFeed />
             </motion.div>
           )}
 
@@ -502,23 +407,29 @@ export default function SocialHubView() {
 
               <div className="space-y-4">
                 {friends.map((friend) => (
-                  <div key={friend.uid} className="bg-white/5 border border-white/10 rounded-[2rem] p-5 flex items-center gap-5 group">
+                  <Link to={`/profile/${friend.uid}`} key={friend.uid} className="bg-white/5 border border-white/10 rounded-[2rem] p-5 flex items-center gap-5 group hover:bg-white/10 transition-colors">
                     <UserAvatar 
                       user={friend} 
                       size="md" 
-                      className="rounded-xl border border-white/10" 
+                      className="rounded-xl border border-white/10 group-hover:ring-2 group-hover:ring-emerald-accent transition-all" 
                     />
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-lg font-black text-white truncate">{friend.displayName}</h3>
-                      <p className="text-white/40 text-xs font-bold uppercase tracking-widest">Gamer</p>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <h3 className="text-lg font-black text-white group-hover:text-emerald-accent transition-colors truncate">{friend.displayName}</h3>
+                        <ACBadge value={friend.attackClass} size="sm" />
+                      </div>
+                      <p className="text-white/40 text-xs font-bold uppercase tracking-widest">{friend.title || 'Gamer'}</p>
                     </div>
                     <button 
-                      onClick={() => handleUnfollow(friend.uid)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handleUnfollow(friend.uid);
+                      }}
                       className="p-3 rounded-xl bg-white/5 text-white/20 hover:bg-rose-500/20 hover:text-rose-500 transition-all border border-white/10"
                     >
                       <UserMinus className="w-5 h-5" />
                     </button>
-                  </div>
+                  </Link>
                 ))}
                 {friends.length === 0 && (
                   <div className="text-center py-20 bg-white/5 rounded-[3rem] border border-dashed border-white/10">

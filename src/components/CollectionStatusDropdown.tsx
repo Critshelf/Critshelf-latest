@@ -5,7 +5,7 @@ import { doc, setDoc, onSnapshot, serverTimestamp, deleteDoc } from 'firebase/fi
 import { cn } from '../lib/utils';
 import { Plus, Check, ChevronDown, Loader2, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { logActivity } from '../lib/activityLogger';
+import { logSocialActivity } from '../lib/socialActivityLogger';
 
 interface CollectionStatusDropdownProps {
   gameId: string;
@@ -85,15 +85,13 @@ export default function CollectionStatusDropdown({
         addedAt: serverTimestamp(),
       });
 
-      logActivity({
-        userId: user.uid,
-        userName: user.displayName || 'Anonymous',
-        avatarSeed: profile?.avatarSeed || user.uid,
-        type: 'game_added',
-        groupIds: userGroupIds,
+      logSocialActivity({
+        type: 'COLLECTION_ADD',
+        actorId: user.uid,
+        actorName: user.displayName || 'Anonymous',
+        targetId: gameId,
+        targetName: gameTitle,
         metadata: {
-          gameId: gameId,
-          gameTitle: gameTitle,
           gameCover: gameCover,
           isArtApproved: isArtApproved,
           shelf: shelfId

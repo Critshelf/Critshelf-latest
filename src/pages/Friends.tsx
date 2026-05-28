@@ -4,7 +4,7 @@ import { Search, UserPlus, Check, Users, History, ChevronRight, UserSearch as Us
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { cn } from '../lib/utils';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import ACBadge from '../components/ACBadge';
 import { useUser } from '../contexts/UserContext';
 import UserAvatar from '../components/UserAvatar';
@@ -94,19 +94,19 @@ export default function Friends() {
           
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {friends.map((friend) => (
-              <div key={friend.uid} className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/10 group hover:border-emerald-accent/50 transition-all">
+              <Link to={`/profile/${friend.uid}`} key={friend.uid} className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/10 group hover:border-emerald-accent/50 transition-all">
                 <div className="flex items-center gap-4">
-                  <UserAvatar user={friend} size="md" className="rounded-xl border border-white/10" />
+                  <UserAvatar user={friend} size="md" className="rounded-xl border border-white/10 group-hover:ring-2 group-hover:ring-emerald-accent transition-all" />
                   <div>
                     <div className="flex items-center gap-2 mb-0.5">
-                      <p className="font-black text-white">{friend.displayName}</p>
+                      <p className="font-black text-white group-hover:text-emerald-accent transition-colors">{friend.displayName}</p>
                       <ACBadge value={friend.attackClass} size="sm" />
                     </div>
                     <p className="text-[10px] font-black text-white/20 uppercase tracking-widest">Friend</p>
                   </div>
                 </div>
                 <ChevronRight className="w-5 h-5 text-white/10 group-hover:text-emerald-accent transition-colors" />
-              </div>
+              </Link>
             ))}
             {friends.length === 0 && (
               <div className="col-span-full text-center py-12">

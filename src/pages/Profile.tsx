@@ -54,10 +54,11 @@ import {
   documentId,
 } from "firebase/firestore";
 import { cn } from "../lib/utils";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import D20Die from "../components/D20Die";
 import ACBadge from "../components/ACBadge";
 import UserAvatar from "../components/UserAvatar";
+import { calculateAndStoreAttackClass } from "../services/playLogService";
 import ActivityItem from "../components/ActivityItem";
 
 import { useUser } from "../contexts/UserContext";
@@ -136,6 +137,11 @@ export default function Profile() {
   const [searching, setSearching] = useState(false);
   const [updatingTitle, setUpdatingTitle] = useState(false);
   const navigate = useNavigate();
+
+  const { id: routeId } = useParams<{ id: string }>();
+  const targetUserId = routeId || user?.uid;
+  const isOwnProfile = !routeId || routeId === user?.uid;
+  const [viewingProfile, setViewingProfile] = useState<any>(null);
 
   // Debounce search query
   useEffect(() => {
@@ -257,12 +263,39 @@ export default function Profile() {
   };
 
   useEffect(() => {
-    if (user && profile) {
+    if (isOwnProfile) {
+      setViewingProfile(profile);
+      return;
+    }
+
+    if (targetUserId) {
+      const fetchProfile = async () => {
+        try {
+          const docRef = doc(db, "users", targetUserId);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            setViewingProfile({ ...docSnap.data(), uid: docSnap.id });
+          } else {
+            setViewingProfile(null);
+          }
+        } catch (e) {
+          console.error("Error fetching viewing profile", e);
+        }
+      };
+      fetchProfile();
+    }
+  }, [targetUserId, profile, isOwnProfile]);
+
+  useEffect(() => {
+    if (targetUserId && viewingProfile) {
       setLoadingContent(true);
+      // Trigger a passive recalculation of AC when viewing a profile to catch group plays
+      calculateAndStoreAttackClass(targetUserId).catch(console.error);
+
       Promise.all([
-        fetchRecentActivities(user.uid),
-        fetchFavorites(user.uid),
-        fetchStats(user.uid),
+        fetchRecentActivities(targetUserId),
+        fetchFavorites(targetUserId),
+        fetchStats(targetUserId),
       ]).finally(() => setLoadingContent(false));
     } else {
       setActivities([]);
@@ -271,7 +304,7 @@ export default function Profile() {
       setGroupsCount("-");
       setWinsCount("-");
     }
-  }, [user, profile]);
+  }, [targetUserId, viewingProfile]);
 
   const fetchStats = async (userId: string) => {
     try {
@@ -430,7 +463,9 @@ export default function Profile() {
 
   const fetchRecentActivities = async (userId: string) => {
     try {
-      console.warn("Firestore index warning: If 'Recent Activity' fails to load, ensure you have created a composite index for collection 'activities' with: userIds (Array) and timestamp (Descending) in the Firebase console.");
+      console.warn(
+        "Firestore index warning: If 'Recent Activity' fails to load, ensure you have created a composite index for collection 'activities' with: userIds (Array) and timestamp (Descending) in the Firebase console.",
+      );
       const q = query(
         collection(db, "activities"),
         where("userIds", "array-contains", userId),
@@ -527,7 +562,7 @@ export default function Profile() {
     );
   }
 
-  if (!user) {
+  if (!user && isOwnProfile) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6 bg-charcoal">
         <motion.div
@@ -819,38 +854,40 @@ export default function Profile() {
           <div className="flex flex-col md:flex-row items-center gap-8 text-center md:text-left">
             <div className="relative group">
               <UserAvatar
-                user={profile || user}
+                user={viewingProfile || user}
                 size="xl"
                 className="rounded-[2rem] border-2 border-white/10 shadow-lg"
               />
-              <button
-                onClick={() => {
-                  const isGoogle =
-                    user?.providerData[0]?.providerId === "google.com";
-                  setLocalAvatarPreference(
-                    profile?.avatarPreference ||
-                      (isGoogle ? "google" : "dicebear"),
-                  );
-                  setLocalAvatarSeed(
-                    profile?.avatarSeed ||
-                      user?.uid ||
-                      Math.random().toString(36).substring(7),
-                  );
-                  setShowAvatarModal(true);
-                }}
-                className="absolute bottom-0 right-0 bg-emerald-accent text-charcoal p-2 rounded-xl shadow-lg hover:scale-110 transition-transform"
-              >
-                <Camera className="w-5 h-5" />
-              </button>
+              {isOwnProfile && (
+                <button
+                  onClick={() => {
+                    const isGoogle =
+                      user?.providerData[0]?.providerId === "google.com";
+                    setLocalAvatarPreference(
+                      profile?.avatarPreference ||
+                        (isGoogle ? "google" : "dicebear"),
+                    );
+                    setLocalAvatarSeed(
+                      profile?.avatarSeed ||
+                        user?.uid ||
+                        Math.random().toString(36).substring(7),
+                    );
+                    setShowAvatarModal(true);
+                  }}
+                  className="absolute bottom-0 right-0 bg-emerald-accent text-charcoal p-2 rounded-xl shadow-lg hover:scale-110 transition-transform"
+                >
+                  <Camera className="w-5 h-5" />
+                </button>
+              )}
             </div>
 
             <div className="flex-1">
               <div className="flex flex-col md:flex-row items-center md:items-end gap-3 mb-1">
                 <h1 className="text-4xl font-black text-white tracking-tight">
-                  {profile?.displayName || user?.displayName || "Gamer"}
+                  {viewingProfile?.displayName || user?.displayName || "Gamer"}
                 </h1>
                 <ACBadge
-                  value={profile?.attackClass}
+                  value={viewingProfile?.attackClass}
                   size="md"
                   className="mb-2"
                 />
@@ -858,45 +895,52 @@ export default function Profile() {
               <div className="flex flex-col gap-1 mb-4">
                 <div className="flex items-center justify-center md:justify-start gap-2">
                   <button
-                    onClick={() => setShowTitleModal(true)}
-                    className="group flex items-center gap-2 bg-emerald-accent/10 px-3 py-1 rounded-full text-xs uppercase tracking-widest border border-emerald-accent/20 hover:border-emerald-accent/50 hover:bg-emerald-accent/20 transition-all text-emerald-accent font-bold"
+                    onClick={() => isOwnProfile && setShowTitleModal(true)}
+                    disabled={!isOwnProfile}
+                    className="group flex items-center gap-2 bg-emerald-accent/10 px-3 py-1 rounded-full text-xs uppercase tracking-widest border border-emerald-accent/20 hover:border-emerald-accent/50 hover:bg-emerald-accent/20 transition-all text-emerald-accent font-bold disabled:hover:border-emerald-accent/20 disabled:hover:bg-emerald-accent/10"
                   >
-                    {profile?.profileTitle || "Master Strategist"}
-                    <ChevronDown className="w-3 h-3 opacity-50 group-hover:opacity-100 transition-opacity" />
+                    {viewingProfile?.profileTitle || "Master Strategist"}
+                    {isOwnProfile && (
+                      <ChevronDown className="w-3 h-3 opacity-50 group-hover:opacity-100 transition-opacity" />
+                    )}
                   </button>
-                  {profile?.location && (
+                  {viewingProfile?.location && (
                     <span className="flex items-center gap-1 text-white/40 text-xs font-bold">
-                      <MapPin className="w-3 h-3" /> {profile.location}
+                      <MapPin className="w-3 h-3" /> {viewingProfile.location}
                     </span>
                   )}
                 </div>
-                {profile?.bio && (
+                {viewingProfile?.bio && (
                   <p className="text-white/60 text-sm font-medium italic max-w-md">
-                    "{profile.bio}"
+                    "{viewingProfile.bio}"
                   </p>
                 )}
               </div>
               <div className="flex flex-wrap gap-3 justify-center md:justify-start">
-                <button
-                  onClick={() => {
-                    setEditName(
-                      profile?.displayName || user?.displayName || "",
-                    );
-                    setEditBio(profile?.bio || "");
-                    setEditLocation(profile?.location || "");
-                    setShowEditModal(true);
-                  }}
-                  className="bg-emerald-accent text-charcoal px-6 py-2.5 rounded-xl font-bold shadow-lg hover:shadow-emerald-accent/20 transition-all active:scale-95"
-                >
-                  Edit Profile
-                </button>
-                <button
-                  onClick={signOut}
-                  className="bg-white/5 text-white/40 px-6 py-2.5 rounded-xl font-bold hover:bg-white/10 transition-colors flex items-center gap-2 border border-white/10"
-                >
-                  <LogOut className="w-4 h-4" />
-                  Sign Out
-                </button>
+                {isOwnProfile && (
+                  <button
+                    onClick={() => {
+                      setEditName(
+                        profile?.displayName || user?.displayName || "",
+                      );
+                      setEditBio(profile?.bio || "");
+                      setEditLocation(profile?.location || "");
+                      setShowEditModal(true);
+                    }}
+                    className="bg-emerald-accent text-charcoal px-6 py-2.5 rounded-xl font-bold shadow-lg hover:shadow-emerald-accent/20 transition-all active:scale-95"
+                  >
+                    Edit Profile
+                  </button>
+                )}
+                {isOwnProfile && (
+                  <button
+                    onClick={signOut}
+                    className="bg-white/5 text-white/40 px-6 py-2.5 rounded-xl font-bold hover:bg-white/10 transition-colors flex items-center gap-2 border border-white/10"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Sign Out
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -1018,18 +1062,39 @@ export default function Profile() {
               }
 
               return (
-                <button
+                <div
                   key={`empty-${index}`}
-                  onClick={() => setShowSearch(true)}
-                  className="aspect-[2/3] rounded-2xl border-2 border-dashed border-emerald-accent/20 bg-emerald-accent/5 flex flex-col items-center justify-center gap-3 group hover:border-emerald-accent/40 hover:bg-emerald-accent/10 transition-all"
+                  onClick={() => isOwnProfile && setShowSearch(true)}
+                  className={cn(
+                    "aspect-[2/3] rounded-2xl border-2 border-dashed border-emerald-accent/20 bg-emerald-accent/5 flex flex-col items-center justify-center gap-3 transition-all",
+                    isOwnProfile
+                      ? "cursor-pointer group hover:border-emerald-accent/40 hover:bg-emerald-accent/10"
+                      : "",
+                  )}
                 >
-                  <div className="w-10 h-10 rounded-full bg-emerald-accent/10 flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <Plus className="w-6 h-6 text-emerald-accent" />
+                  <div
+                    className={cn(
+                      "w-10 h-10 rounded-full flex items-center justify-center transition-transform",
+                      isOwnProfile
+                        ? "bg-emerald-accent/10 group-hover:scale-110"
+                        : "bg-white/5",
+                    )}
+                  >
+                    {isOwnProfile && (
+                      <Plus className="w-6 h-6 text-emerald-accent" />
+                    )}
                   </div>
-                  <span className="text-[10px] uppercase font-black tracking-widest text-emerald-accent/40 group-hover:text-emerald-accent/60">
-                    Add Favorite
+                  <span
+                    className={cn(
+                      "text-[10px] uppercase font-black tracking-widest",
+                      isOwnProfile
+                        ? "text-emerald-accent/40 group-hover:text-emerald-accent/60"
+                        : "text-white/20",
+                    )}
+                  >
+                    {isOwnProfile ? "Add Favorite" : "Empty Slot"}
                   </span>
-                </button>
+                </div>
               );
             })}
           </div>
@@ -1051,12 +1116,14 @@ export default function Profile() {
                 Recent Activity
               </h2>
             </div>
-            <button
-              onClick={() => navigate("/activity-log")}
-              className="text-sm font-black text-emerald-accent hover:bg-emerald-accent/10 px-4 py-2 rounded-xl transition-all"
-            >
-              View All
-            </button>
+            {isOwnProfile && (
+              <button
+                onClick={() => navigate("/activity-log")}
+                className="text-sm font-black text-emerald-accent hover:bg-emerald-accent/10 px-4 py-2 rounded-xl transition-all"
+              >
+                View All
+              </button>
+            )}
           </div>
 
           <div className="space-y-4">

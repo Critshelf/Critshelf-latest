@@ -43,7 +43,7 @@ import GameTitleWithDC from "./GameTitleWithDC";
 import { submitPlayLog } from "../services/playLogService";
 import { useUser } from "../contexts/UserContext";
 import UserAvatar from "./UserAvatar";
-import { logActivity } from "../lib/activityLogger";
+import { logSocialActivity } from "../lib/socialActivityLogger";
 
 interface UserProfile {
   uid: string;
@@ -467,22 +467,20 @@ export default function LogPlayModal({
 
       if (result.success) {
         // Log Activity
-        logActivity({
-          userId: user.uid,
-          userName: user.displayName || "Anonymous",
-          avatarSeed: profile?.avatarSeed || user.uid,
-          type: "play_logged",
-          groupId: selectedGroupId || undefined,
-          groupIds: userGroupIds,
-          groupName: groups.find((g) => g.id === selectedGroupId)?.name,
-          userIds: Array.from(new Set([user.uid, ...finalPlayers.map(p => p.userId).filter(Boolean)])),
+        logSocialActivity({
+          actorId: user.uid,
+          actorName: user.displayName || "Anonymous",
+          type: "LOG_PLAY",
+          targetId: selectedGame.id,
+          targetName: selectedGame.title,
           metadata: {
-            gameId: selectedGame.id,
-            gameTitle: selectedGame.title,
+            playId: result.playId,
             gameCover: selectedGame.coverImage,
             isArtApproved: selectedGame.isArtApproved,
             score: finalPlayers.find((p) => p.userId === user.uid)?.score,
             winners: finalPlayers.filter((p) => p.isWinner).map((p) => p.name),
+            groupId: selectedGroupId || undefined,
+            groupName: groups.find((g) => g.id === selectedGroupId)?.name,
           },
         });
 

@@ -137,6 +137,14 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         unsubscribeProfile = onSnapshot(userDocRef, (snap) => {
           if (snap.exists()) {
             const data = snap.data() as UserProfile;
+            
+            // Trigger AC init if it's completely missing
+            if (data.attackClass === undefined) {
+              import('../services/playLogService').then(({ calculateAndStoreAttackClass }) => {
+                calculateAndStoreAttackClass(currentUser.uid).catch(console.error);
+              });
+            }
+
             setProfile({
               ...data,
               notificationPreferences: data.notificationPreferences || DEFAULT_NOTIFICATION_PREFERENCES

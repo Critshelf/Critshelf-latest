@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Users,
@@ -47,6 +47,7 @@ import {
 import { cn } from "../lib/utils";
 import GroupChat from "../components/GroupChat";
 import GroupLibrary from "../components/GroupLibrary";
+import GroupFeed from "../components/GroupFeed";
 import ACBadge from "../components/ACBadge";
 import GroupAvatar from "../components/GroupAvatar";
 import { useUser } from "../contexts/UserContext";
@@ -956,16 +957,17 @@ export default function GroupDetail() {
               </div>
               <div className="space-y-4">
                 {members.map((member) => (
-                  <div
+                  <Link
+                    to={`/profile/${member.uid}`}
                     key={member.uid}
-                    className="flex items-center gap-4 group"
+                    className="flex items-center gap-4 group hover:bg-white/5 p-2 -mx-2 rounded-xl transition-all"
                   >
                     <UserAvatar
                       user={member}
                       size="md"
-                      className="rounded-xl border border-white/10"
+                      className="rounded-xl border border-white/10 group-hover:ring-2 group-hover:ring-emerald-accent transition-all"
                     />
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="font-black text-white group-hover:text-emerald-accent transition-colors truncate">
                           {member.displayName}
@@ -986,7 +988,7 @@ export default function GroupDetail() {
                       ?.role === "leader" && (
                       <Crown className="w-4 h-4 text-gold-accent" />
                     )}
-                  </div>
+                  </Link>
                 ))}
               </div>
             </motion.div>
@@ -1099,260 +1101,7 @@ export default function GroupDetail() {
                   exit={{ opacity: 0, y: -10 }}
                   className="space-y-6"
                 >
-                  {feedItems.length === 0 ? (
-                    <div className="text-center py-20 bg-white/5 rounded-[3rem] border-2 border-dashed border-white/10">
-                      <History className="w-16 h-16 text-white/10 mx-auto mb-4" />
-                      <h3 className="text-xl font-black text-white mb-2">
-                        No activity yet
-                      </h3>
-                      <p className="text-white/20 font-bold">
-                        Start by scheduling a game night!
-                      </p>
-                    </div>
-                  ) : (
-                    feedItems.map((item) =>
-                      item.type === "event" ? (
-                        <EventCard
-                          key={item.id}
-                          event={item as any}
-                          user={user}
-                          groupOwnerId={group?.createdBy}
-                          onRSVP={(id, attendees, status) =>
-                            handleRSVP(item as any, status)
-                          }
-                          onCancel={handleCancelEvent}
-                          onBringGame={(id) => setBringGameEventId(id)}
-                          onSelect={(evt) => setSelectedEvent(evt)}
-                        />
-                      ) : item.type === "request" ? (
-                        <motion.div
-                          key={item.id}
-                          layout
-                          className="bg-white/5 rounded-[3rem] p-8 shadow-2xl border border-white/10 relative overflow-hidden group"
-                        >
-                          <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-accent/5 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-110" />
-                          <div className="relative flex gap-6">
-                            <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-md shrink-0 border-2 border-white/10">
-                              <img
-                                src={item.userAvatar || undefined}
-                                className="w-full h-full object-cover"
-                                alt={item.userName}
-                              />
-                            </div>
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="text-sm font-black text-white">
-                                  {item.userName}
-                                </span>
-                                <span className="text-[10px] font-black text-emerald-accent/60 uppercase tracking-widest leading-none">
-                                  {item.eventId ? (
-                                    <>
-                                      Requested for{" "}
-                                      <span className="text-white">
-                                        {item.eventTitle}
-                                      </span>
-                                    </>
-                                  ) : (
-                                    "is itching to play!"
-                                  )}
-                                </span>
-                              </div>
-                              <h3 className="text-2xl font-black text-white mb-4 tracking-tight">
-                                {item.gameTitle}
-                              </h3>
-                              <div className="flex items-center gap-4 mb-6">
-                                <div className="flex -space-x-2">
-                                  {item.owners.map((owner) => (
-                                    <div
-                                      key={owner.uid}
-                                      className="w-8 h-8 rounded-full border-2 border-charcoal shadow-sm bg-white/10 flex items-center justify-center overflow-hidden"
-                                    >
-                                      <img
-                                        src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${owner.uid}`}
-                                        className="w-full h-full object-cover"
-                                        alt={owner.displayName}
-                                      />
-                                    </div>
-                                  ))}
-                                </div>
-                                <p className="text-xs font-bold text-white/30">
-                                  Owned by{" "}
-                                  {item.owners
-                                    .map((o) => o.displayName)
-                                    .join(", ")}
-                                </p>
-                              </div>
-                              <div className="flex gap-3">
-                                {item.status === "accepted" ? (
-                                  <div className="bg-emerald-accent/20 text-emerald-accent px-6 py-3 rounded-xl font-black text-sm flex items-center gap-2 border border-emerald-accent/30">
-                                    <Check className="w-4 h-4" /> Request
-                                    Accepted
-                                  </div>
-                                ) : (
-                                  <>
-                                    {item.owners.some(
-                                      (o) => o.uid === user?.uid,
-                                    ) ? (
-                                      <button
-                                        onClick={() =>
-                                          handleAcceptRequest(item)
-                                        }
-                                        className="bg-emerald-accent text-charcoal px-6 py-3 rounded-xl font-black text-sm shadow-lg hover:shadow-emerald-accent/20 transition-all active:scale-95 flex items-center gap-2"
-                                      >
-                                        <Check className="w-4 h-4" /> I'll Bring
-                                        It!
-                                      </button>
-                                    ) : (
-                                      <button
-                                        disabled
-                                        className="bg-white/5 text-white/20 px-6 py-3 rounded-xl font-black text-sm border border-white/10 cursor-not-allowed"
-                                      >
-                                        Pending Approval
-                                      </button>
-                                    )}
-                                    <button
-                                      onClick={() => {
-                                        setPrefilledEventData({
-                                          title: item.gameTitle,
-                                          description: `Requested by ${item.userName} for ${item.gameTitle}`,
-                                        });
-                                        setIsCreateEventOpen(true);
-                                      }}
-                                      className="bg-white/5 text-white/40 px-6 py-3 rounded-xl font-black text-sm hover:bg-white/10 transition-all border border-white/10 flex items-center gap-2"
-                                    >
-                                      <Calendar className="w-4 h-4" /> New Event
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                            <div className="hidden sm:block w-24 h-24 rounded-2xl overflow-hidden shadow-lg border-4 border-charcoal rotate-6 group-hover:rotate-0 transition-transform">
-                              <img
-                                src={item.gameCover || undefined}
-                                className="w-full h-full object-cover opacity-60 group-hover:opacity-100"
-                                alt={item.gameTitle}
-                              />
-                            </div>
-                          </div>
-                        </motion.div>
-                      ) : item.type === "activity" ? (
-                        <motion.div
-                          key={item.id}
-                          layout
-                          className="bg-white/5 rounded-[3rem] p-8 shadow-2xl border border-white/10 relative overflow-hidden group"
-                        >
-                          <div className="absolute top-0 right-0 w-32 h-32 bg-gold-accent/5 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-110" />
-                          <div className="relative flex gap-6">
-                            <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-md shrink-0 border-2 border-white/10">
-                              <img
-                                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${item.avatarSeed || item.userId || item.userName}`}
-                                className="w-full h-full object-cover"
-                                alt={item.userName}
-                              />
-                            </div>
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="text-sm font-black text-white">
-                                  {item.userName}
-                                </span>
-                                {members.find((m) => m.uid === item.userId)
-                                  ?.attackClass && (
-                                  <ACBadge
-                                    value={
-                                      (
-                                        members.find(
-                                          (m) => m.uid === item.userId,
-                                        ) as any
-                                      ).attackClass
-                                    }
-                                    size="sm"
-                                  />
-                                )}
-                                <span className="text-[10px] font-black text-gold-accent/60 uppercase tracking-widest">
-                                  {item.activityType === "play_logged"
-                                    ? "logged a play!"
-                                    : item.activityType === "review_added"
-                                      ? "wrote a review!"
-                                      : item.activityType === "game_added"
-                                        ? "added to collection!"
-                                        : "performed an action"}
-                                </span>
-                              </div>
-                              <h3 className="text-2xl font-black text-white mb-4 tracking-tight">
-                                {item.metadata?.gameTitle}
-                              </h3>
-
-                              {item.activityType === "play_logged" && (
-                                <>
-                                  <div className="flex items-center gap-3 mb-4">
-                                    <div className="bg-white/5 px-3 py-1 rounded-lg border border-white/10 flex items-center gap-2">
-                                      <Calendar className="w-3 h-3 text-gold-accent" />
-                                      <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">
-                                        {formatDate(item.timestamp)}
-                                      </span>
-                                    </div>
-                                    {item.metadata?.score !== undefined && (
-                                      <div className="bg-white/5 px-3 py-1 rounded-lg border border-white/10 flex items-center gap-2">
-                                        <span className="text-[10px] font-black text-gold-accent uppercase tracking-widest">
-                                          Score: {item.metadata.score}
-                                        </span>
-                                      </div>
-                                    )}
-                                    {item.metadata?.winners?.length > 0 && (
-                                      <div className="bg-white/5 px-3 py-1 rounded-lg border border-white/10 flex items-center gap-2">
-                                        <span className="text-[10px] font-black text-gold-accent uppercase tracking-widest">
-                                          Winners:{" "}
-                                          {item.metadata.winners.join(", ")}
-                                        </span>
-                                      </div>
-                                    )}
-                                  </div>
-                                </>
-                              )}
-
-                              {item.activityType === "review_added" && (
-                                <>
-                                  <div className="flex items-center gap-3 mb-4">
-                                    <div className="bg-white/5 px-3 py-1 rounded-lg border border-white/10 flex items-center gap-2">
-                                      <span className="text-[10px] font-black text-gold-accent uppercase tracking-widest">
-                                        Rating:{" "}
-                                        {Math.round(item.metadata?.score || 0)}
-                                        /20
-                                      </span>
-                                    </div>
-                                  </div>
-                                  {item.metadata?.text && (
-                                    <p className="text-sm text-white/60 italic mb-4">
-                                      "{item.metadata.text}"
-                                    </p>
-                                  )}
-                                </>
-                              )}
-
-                              {item.activityType === "game_added" && (
-                                <div className="bg-white/5 px-3 py-1 rounded-lg border border-white/10 inline-flex items-center gap-2">
-                                  <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">
-                                    Shelf: {item.metadata?.shelf}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                            <div className="hidden sm:block w-24 h-24 rounded-2xl overflow-hidden shadow-lg border-4 border-charcoal -rotate-6 group-hover:rotate-0 transition-transform">
-                              <img
-                                src={
-                                  item.metadata?.gameCover ||
-                                  item.gameCover ||
-                                  undefined
-                                }
-                                className="w-full h-full object-cover opacity-60 group-hover:opacity-100"
-                                alt={item.metadata?.gameTitle}
-                              />
-                            </div>
-                          </div>
-                        </motion.div>
-                      ) : null,
-                    )
-                  )}
+                  <GroupFeed groupId={id || ""} />
                 </motion.div>
               )}
 

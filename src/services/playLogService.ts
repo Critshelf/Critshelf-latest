@@ -38,35 +38,91 @@ export interface PlayLogPayload {
 }
 
 /**
+ * Core mathematical logic for determining a user's Attack Class based on their plays and game complexities.
+ */
+export function calculateLocalAttackClass(
+  userId: string,
+  playsData: any[],
+  gamesMap: Map<string, any>,
+): number {
+  const oneYearAgo = new Date();
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+  // 1. Filter plays for this user from the last 12 months
+  const userPlays = playsData.filter((p) => {
+    // Accommodate timestamp objects or standard dates
+    let dateObj = p.playDate;
+    if (p.playDate && typeof p.playDate.toDate === "function") {
+      dateObj = p.playDate.toDate();
+    } else if (typeof p.playDate === "string") {
+      dateObj = new Date(p.playDate);
+    }
+
+    return p.userIds?.includes(userId) && dateObj && dateObj >= oneYearAgo;
+  });
+
+  if (userPlays.length === 0) return 0;
+
+  // 2. Extract unique game IDs directly from plays (cap at 20)
+  const rawGameIds = Array.from(new Set(userPlays.map((p) => p.gameId))).slice(
+    0,
+    20,
+  );
+
+  // 3. Match against game data to get base DC
+  const gameDCs = rawGameIds
+    .map((gameId) => {
+      const gameData = gamesMap.get(gameId);
+      if (!gameData) return null;
+      return calculateBaseDC(gameData);
+    })
+    .filter((dc): dc is number => dc !== null);
+
+  if (gameDCs.length === 0) return 0;
+
+  // 4. Calculate average and round
+  const averageAC = gameDCs.reduce((acc, val) => acc + val, 0) / gameDCs.length;
+  return Math.round(averageAC);
+}
+
+/**
  * Calculates the Attack Class (AC) for a user based on the last 12 months of plays.
  */
-async function calculateAndStoreAttackClass(userId: string) {
+export async function calculateAndStoreAttackClass(userId: string) {
   try {
     const oneYearAgo = new Date();
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
-    // 1. Get plays from the last 12 months
+    // 1. Get plays for this user (filtering dates locally to avoid composite index requirement)
     const playsQuery = query(
       collection(db, "plays"),
-      and(
-        where("userIds", "array-contains", userId),
-        where("playDate", ">=", oneYearAgo),
-      ),
-      limit(200),
+      where("userIds", "array-contains", userId),
+      limit(1000),
     );
     const playsSnap = await getDocs(playsQuery);
 
-    if (playsSnap.empty) {
+    const validDocs = playsSnap.docs.filter((d) => {
+      const data = d.data();
+      let dateObj = data.playDate;
+      if (data.playDate && typeof data.playDate.toDate === "function") {
+        dateObj = data.playDate.toDate();
+      } else if (typeof data.playDate === "string") {
+        dateObj = new Date(data.playDate);
+      }
+      return dateObj && dateObj >= oneYearAgo;
+    });
+
+    if (validDocs.length === 0) {
       await updateDoc(doc(db, "users", userId), { attackClass: 0 });
       return;
     }
 
-    // 2. Extract unique game IDs directly from plays (cap at 20 to prevent quota death)
+    // 2. Extract unique game IDs
     const rawGameIds = Array.from(
-      new Set(playsSnap.docs.map((d) => d.data().gameId)),
+      new Set(validDocs.map((d) => d.data().gameId)),
     ).slice(0, 20);
 
-    // 3. For each unique game, get a quick mock base DC (don't query reviews to save immense quota)
+    // 3. For each unique game, get a quick mock base DC
     const gameDCPromises = rawGameIds.map(async (gameId) => {
       const gameDoc = await getDoc(doc(db, "games", gameId));
       if (!gameDoc.exists()) return null;
@@ -182,8 +238,10 @@ export async function submitPlayLog(payload: PlayLogPayload) {
     });
 
     // 3. Update Attack Class (Rolling 12-Month)
-    // We do this after logging the play so the new play is included
-    await calculateAndStoreAttackClass(userId);
+    // We do this after logging the play so the new play is included for all participants
+    userIds.forEach((uid) => {
+      calculateAndStoreAttackClass(uid).catch(console.error);
+    });
 
     // 4. Handle Group Stats Transaction (Running Totals)
     // Only execute if a group is linked to this session
@@ -239,7 +297,7 @@ export async function submitPlayLog(payload: PlayLogPayload) {
       });
     }
 
-    return { success: true };
+    return { success: true, playId: playDocRef.id };
   } catch (error) {
     // Use the custom error handler to provide context for debugging security rules or other issues
     handleFirestoreError(

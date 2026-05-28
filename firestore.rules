@@ -207,11 +207,7 @@ service cloud.firestore {
                     isAdmin() ||
                     (
                       isAuthenticated() && 
-                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['totalWins']) &&
-                      (
-                        (!('totalWins' in resource.data) && request.resource.data.totalWins == 1) || 
-                        (request.resource.data.totalWins == resource.data.totalWins + 1)
-                      )
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['totalWins', 'attackClass'])
                     );
 
       match /notifications/{notificationId} {
@@ -372,13 +368,7 @@ service cloud.firestore {
 
     // Plays
     match /plays/{playId} {
-      allow read: if isAuthenticated() && (
-        !('groupId' in resource.data) || 
-        resource.data.groupId == null || 
-        request.auth.uid == resource.data.userId ||
-        get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.memberIds.hasAny([request.auth.uid]) ||
-        isAdmin()
-      );
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId;
       allow update: if isAuthenticated() && request.auth.uid == resource.data.userId;
       allow delete: if isAuthenticated() && (request.auth.uid == resource.data.userId || isAdmin());

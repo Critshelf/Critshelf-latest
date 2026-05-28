@@ -41,7 +41,7 @@ import ACBadge from '../components/ACBadge';
 import { calculateBaseDC, calculateFinalDC } from '../lib/dcUtils';
 import { useUser } from '../contexts/UserContext';
 import UserAvatar from '../components/UserAvatar';
-import { logActivity } from '../lib/activityLogger';
+import { logSocialActivity } from '../lib/socialActivityLogger';
 import CollectionStatusDropdown from '../components/CollectionStatusDropdown';
 
 interface Review {
@@ -209,15 +209,13 @@ export default function GamePage() {
       });
 
       // Log Activity
-      logActivity({
-        userId: user.uid,
-        userName: user.displayName || 'Gamer',
-        avatarSeed: (profile as any)?.avatarSeed || user.uid,
-        type: 'review_added',
-        groupIds: userGroupIds,
+      logSocialActivity({
+        type: 'REVIEW_GAME',
+        actorId: user.uid,
+        actorName: user.displayName || 'Gamer',
+        targetId: game.id,
+        targetName: game.title,
         metadata: {
-          gameId: game.id,
-          gameTitle: game.title,
           gameCover: game.coverImage,
           isArtApproved: game.isArtApproved,
           score: personalScore,

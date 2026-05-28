@@ -10,7 +10,7 @@ interface ACBadgeProps {
 }
 
 export default function ACBadge({ value, size = 'sm', className }: ACBadgeProps) {
-  if (value === undefined || value === 0) return null;
+  const displayValue = value ?? 0;
 
   const sizes = {
     sm: {
@@ -45,7 +45,7 @@ export default function ACBadge({ value, size = 'sm', className }: ACBadgeProps)
     >
       <Swords className={cn("text-rose-500", currentSize.icon)} />
       <span className={cn("font-black text-white", currentSize.text)}>
-        {value}
+        {displayValue}
       </span>
     </motion.div>
   );
