@@ -36,6 +36,7 @@ export interface LogActivityParams {
   groupId?: string;
   groupName?: string;
   groupIds?: string[];
+  userIds?: string[];
   metadata?: ActivityMetadata;
 }
 
@@ -50,6 +51,7 @@ export async function logActivity({
   groupId,
   groupName,
   groupIds,
+  userIds,
   metadata = {}
 }: LogActivityParams) {
   try {
@@ -62,6 +64,7 @@ export async function logActivity({
       groupId: groupId || null,
       groupName: groupName || null,
       groupIds: groupIds || (groupId ? [groupId] : []),
+      userIds: userIds || [userId],
       metadata,
       timestamp: serverTimestamp()
     });

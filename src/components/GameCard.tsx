@@ -66,17 +66,18 @@ interface GameCardProps {
   onClick?: (e: React.MouseEvent) => void;
 }
 
-const GameCard: React.FC<GameCardProps> = ({ 
-  game, 
-  compact = false, 
-  personalRating,
-  groupRating,
-  groupName,
-  isRecentPlay,
-  playCount,
-  onClick
-}) => {
-  console.log("4. GameCard received:", game.id, game.coverImage);
+const GameCard: React.FC<GameCardProps> = (props) => {
+  const { 
+    game, 
+    compact = false, 
+    personalRating,
+    groupRating,
+    groupName,
+    isRecentPlay,
+    playCount,
+    onClick
+  } = props;
+  console.log("GAMECARD X-RAY -> Title:", props.game?.title || (props as any).title, "| CoverImage:", props.game?.coverImage || (props as any).coverImage, "| Full Props:", props);
   const [imgError, setImgError] = useState(false);
 
   // Social Rating Logic - strictly based on game data or props if available
@@ -85,7 +86,7 @@ const GameCard: React.FC<GameCardProps> = ({
   const displayGroup = groupRating || (game as any).groupRating;
   const activeGroupName = groupName || (game as any).groupName;
 
-  const resolvedImage = game.coverImage;
+  const resolvedImage = game.coverImage || game.thumbnail;
 
   return (
     <motion.div

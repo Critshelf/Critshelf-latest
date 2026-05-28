@@ -1,13 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { 
-  X, 
-  Search, 
-  Calendar, 
-  MapPin, 
-  Users, 
-  Crown, 
-  Plus, 
+import { useState, useEffect, useCallback } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import {
+  X,
+  Search,
+  Calendar,
+  MapPin,
+  Users,
+  Crown,
+  Plus,
   MessageSquare,
   Trophy,
   Check,
@@ -21,18 +21,29 @@ import {
   UserPlus,
   Loader2,
   ExternalLink,
-  Layers
-} from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { db, OperationType, handleFirestoreError } from '../lib/firebase';
-import { collection, query, where, getDocs, doc, getDoc, orderBy, startAt, endAt, limit } from 'firebase/firestore';
-import { cn } from '../lib/utils';
-import D20Die from './D20Die';
-import GameTitleWithDC from './GameTitleWithDC';
-import { submitPlayLog } from '../services/playLogService';
-import { useUser } from '../contexts/UserContext';
-import UserAvatar from './UserAvatar';
-import { logActivity } from '../lib/activityLogger';
+  Layers,
+} from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { db, OperationType, handleFirestoreError } from "../lib/firebase";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  getDoc,
+  orderBy,
+  startAt,
+  endAt,
+  limit,
+} from "firebase/firestore";
+import { cn } from "../lib/utils";
+import D20Die from "./D20Die";
+import GameTitleWithDC from "./GameTitleWithDC";
+import { submitPlayLog } from "../services/playLogService";
+import { useUser } from "../contexts/UserContext";
+import UserAvatar from "./UserAvatar";
+import { logActivity } from "../lib/activityLogger";
 
 interface UserProfile {
   uid: string;
@@ -51,7 +62,7 @@ interface Player {
   isWinner: boolean;
   userId?: string;
   avatar?: string;
-  avatarPreference?: 'google' | 'dicebear';
+  avatarPreference?: "google" | "dicebear";
   avatarSeed?: string;
 }
 
@@ -65,7 +76,12 @@ interface LogPlayModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialGameId?: string;
-  initialGame?: { id: string; title: string; coverImage?: string; isArtApproved?: boolean };
+  initialGame?: {
+    id: string;
+    title: string;
+    coverImage?: string;
+    isArtApproved?: boolean;
+  };
   initialGroupId?: string;
 }
 
@@ -74,73 +90,83 @@ const VIBE_OPTIONS = [
   "🗣️ Table Riot",
   "☕ Cozy & Chill",
   "🗡️ Cutthroat",
-  "🗺️ Immersive Journey"
+  "🗺️ Immersive Journey",
 ];
 
-type GameMode = 'ffa' | 'teams' | 'coop';
+type GameMode = "ffa" | "teams" | "coop";
 
-export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGame, initialGroupId }: LogPlayModalProps) {
+export default function LogPlayModal({
+  isOpen,
+  onClose,
+  initialGameId,
+  initialGame,
+  initialGroupId,
+}: LogPlayModalProps) {
   const { user, profile, userGroupIds } = useUser();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedGame, setSelectedGame] = useState<any>(null);
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [location, setLocation] = useState('');
-  
+  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [location, setLocation] = useState("");
+
   // Game Mode State
-  const [gameMode, setGameMode] = useState<GameMode>('ffa'); 
+  const [gameMode, setGameMode] = useState<GameMode>("ffa");
   const [keepScore, setKeepScore] = useState(true);
-  
+
   // FFA Players
   const [players, setPlayers] = useState<Player[]>([
-    { 
-      name: user?.displayName || 'Me', 
-      score: 0, 
-      isWinner: false, 
+    {
+      name: user?.displayName || "Me",
+      score: 0,
+      isWinner: false,
       userId: user?.uid,
-      avatar: user?.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.uid}`
-    }
+      avatar:
+        user?.photoURL ||
+        `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.uid}`,
+    },
   ]);
 
   // Teams State - Structure Refactored for Container Assignment
   const [teams, setTeams] = useState<Team[]>([
     {
       players: [
-        { 
-          name: user?.displayName || 'Me', 
-          score: 0, 
-          isWinner: false, 
+        {
+          name: user?.displayName || "Me",
+          score: 0,
+          isWinner: false,
           userId: user?.uid,
-          avatar: user?.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.uid}`
-        }
+          avatar:
+            user?.photoURL ||
+            `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.uid}`,
+        },
       ],
       score: 0,
-      isWinner: false
+      isWinner: false,
     },
     {
       players: [],
       score: 0,
-      isWinner: false
-    }
+      isWinner: false,
+    },
   ]);
   const [selectedTeamIndex, setSelectedTeamIndex] = useState(0);
 
   const [isVictory, setIsVictory] = useState(true);
   const [rating, setRating] = useState(18);
-  const [vibeCheck, setVibeCheck] = useState<string>('');
-  const [selectedGroupId, setSelectedGroupId] = useState('');
+  const [vibeCheck, setVibeCheck] = useState<string>("");
+  const [selectedGroupId, setSelectedGroupId] = useState("");
   const [selectedExpansions, setSelectedExpansions] = useState<string[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [friends, setFriends] = useState<UserProfile[]>([]);
-  
+
   // Player Selection States
   const [isAddFriendOpen, setIsAddFriendOpen] = useState(false);
   const [isAddGuestOpen, setIsAddGuestOpen] = useState(false);
-  const [guestNameInput, setGuestNameInput] = useState('');
+  const [guestNameInput, setGuestNameInput] = useState("");
 
   useEffect(() => {
     if (user && profile) {
@@ -157,10 +183,15 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
         return;
       }
 
-      const q = query(collection(db, 'users'), where('uid', 'in', followingIds.slice(0, 30)));
+      const q = query(
+        collection(db, "users"),
+        where("uid", "in", followingIds.slice(0, 30)),
+      );
       const snapshot = await getDocs(q);
-      const friendProfiles = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
-      
+      const friendProfiles = snapshot.docs.map(
+        (doc) => ({ uid: doc.id, ...doc.data() }) as UserProfile,
+      );
+
       setFriends(friendProfiles);
     } catch (error) {
       console.error("Error fetching friends for logger:", error);
@@ -169,9 +200,14 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
 
   const fetchGroups = async (userId: string) => {
     try {
-      const q = query(collection(db, 'groups'), where('memberIds', 'array-contains', userId));
+      const q = query(
+        collection(db, "groups"),
+        where("memberIds", "array-contains", userId),
+      );
       const snapshot = await getDocs(q);
-      const groupList = snapshot.docs.map(doc => ({ id: doc.id, name: doc.data().name } as Group));
+      const groupList = snapshot.docs.map(
+        (doc) => ({ id: doc.id, name: doc.data().name }) as Group,
+      );
       setGroups(groupList);
     } catch (error) {
       console.error("Error fetching groups:", error);
@@ -183,35 +219,36 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
       setSelectedGroupId(initialGroupId);
     } else if (isOpen) {
       // Only reset if it's a fresh open without an initial group
-      setSelectedGroupId('');
+      setSelectedGroupId("");
     }
   }, [initialGroupId, isOpen]);
 
   useEffect(() => {
-      if (initialGame) {
-        setSelectedGame({
-          id: initialGame.id,
-          title: initialGame.title,
-          coverImage: initialGame.coverImage || 'https://picsum.photos/seed/game/400/400',
-          isArtApproved: initialGame.isArtApproved ?? false,
-          playTime: '60 min',
-          expansions: (initialGame as any).expansions || []
-        });
-        setSelectedExpansions([]);
-        setStep(2);
-      } else if (initialGameId) {
-        const fetchInitialGame = async () => {
-          try {
-            const gameDoc = await getDoc(doc(db, 'games', initialGameId));
-            if (gameDoc.exists()) {
-              setSelectedGame({ id: gameDoc.id, ...gameDoc.data() });
-              setSelectedExpansions([]);
-              setStep(2);
-            }
-          } catch (error) {
-            console.error("Error fetching initial game:", error);
+    if (initialGame) {
+      setSelectedGame({
+        id: initialGame.id,
+        title: initialGame.title,
+        coverImage:
+          initialGame.coverImage || "https://picsum.photos/seed/game/400/400",
+        isArtApproved: initialGame.isArtApproved ?? false,
+        playTime: "60 min",
+        expansions: (initialGame as any).expansions || [],
+      });
+      setSelectedExpansions([]);
+      setStep(2);
+    } else if (initialGameId) {
+      const fetchInitialGame = async () => {
+        try {
+          const gameDoc = await getDoc(doc(db, "games", initialGameId));
+          if (gameDoc.exists()) {
+            setSelectedGame({ id: gameDoc.id, ...gameDoc.data() });
+            setSelectedExpansions([]);
+            setStep(2);
           }
-        };
+        } catch (error) {
+          console.error("Error fetching initial game:", error);
+        }
+      };
       fetchInitialGame();
     }
   }, [initialGameId, initialGame, isOpen]);
@@ -228,18 +265,24 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
       try {
         // Firestore prefix search: title >= query AND title <= query + \uf8ff
         const q = query(
-          collection(db, 'games'),
-          orderBy('title'),
-          startAt(searchQuery),
-          endAt(searchQuery + '\uf8ff'),
-          limit(5)
+          collection(db, "games"),
+          orderBy("name_lowercase"),
+          startAt(searchQuery.toLowerCase()),
+          endAt(searchQuery.toLowerCase() + "\uf8ff"),
+          limit(5),
         );
-        
+
         const snapshot = await getDocs(q);
-        const results = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
+        const results = snapshot.docs.map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            coverImage: data.coverImage || data.thumbnail || "",
+            customImageApproved:
+              data.customImageApproved || data.isApproved || false,
+          } as any;
+        });
         setSearchResults(results);
       } catch (error) {
         console.error("Search error:", error);
@@ -253,16 +296,19 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
   }, [searchQuery]);
 
   const handleAddPlayerToTeam = (friend: UserProfile, teamIdx: number) => {
-    const newPlayer = { 
-      name: friend.displayName, 
-      score: 0, 
-      isWinner: false, 
+    const newPlayer = {
+      name: friend.displayName,
+      score: 0,
+      isWinner: false,
       userId: friend.uid,
-      avatar: friend.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${friend.uid}`
+      avatar:
+        friend.photoURL ||
+        `https://api.dicebear.com/7.x/avataaars/svg?seed=${friend.uid}`,
     };
 
-    if (teams.some(team => team.players.some(p => p.userId === friend.uid))) return;
-    
+    if (teams.some((team) => team.players.some((p) => p.userId === friend.uid)))
+      return;
+
     const newTeams = [...teams];
     newTeams[teamIdx].players = [...newTeams[teamIdx].players, newPlayer];
     setTeams(newTeams);
@@ -271,78 +317,92 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
 
   const handleAddGuestToTeam = (name: string, teamIdx: number) => {
     if (!name.trim()) return;
-    
-    const newPlayer = { 
-      name: name.trim(), 
-      score: 0, 
+
+    const newPlayer = {
+      name: name.trim(),
+      score: 0,
       isWinner: false,
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${name.trim()}`
+      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${name.trim()}`,
     };
 
     const newTeams = [...teams];
     newTeams[teamIdx].players = [...newTeams[teamIdx].players, newPlayer];
     setTeams(newTeams);
-    
-    setGuestNameInput('');
+
+    setGuestNameInput("");
     setIsAddGuestOpen(false);
   };
 
   const addPlayerFromFriend = (friend: UserProfile) => {
-    if (gameMode === 'teams') {
+    if (gameMode === "teams") {
       handleAddPlayerToTeam(friend, selectedTeamIndex);
       return;
     }
 
-    const newPlayer = { 
-      name: friend.displayName, 
-      score: 0, 
-      isWinner: false, 
+    const newPlayer = {
+      name: friend.displayName,
+      score: 0,
+      isWinner: false,
       userId: friend.uid,
-      avatar: friend.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${friend.uid}`
+      avatar:
+        friend.photoURL ||
+        `https://api.dicebear.com/7.x/avataaars/svg?seed=${friend.uid}`,
     };
 
-    if (players.some(p => p.userId === friend.uid)) return;
+    if (players.some((p) => p.userId === friend.uid)) return;
     setPlayers([...players, newPlayer]);
     setIsAddFriendOpen(false);
   };
 
   const handleAddGuest = () => {
-    if (gameMode === 'teams') {
+    if (gameMode === "teams") {
       handleAddGuestToTeam(guestNameInput, selectedTeamIndex);
       return;
     }
 
     if (!guestNameInput.trim()) return;
-    
-    const newPlayer = { 
-      name: guestNameInput.trim(), 
-      score: 0, 
+
+    const newPlayer = {
+      name: guestNameInput.trim(),
+      score: 0,
       isWinner: false,
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${guestNameInput.trim()}`
+      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${guestNameInput.trim()}`,
     };
 
     setPlayers([...players, newPlayer]);
-    setGuestNameInput('');
+    setGuestNameInput("");
     setIsAddGuestOpen(false);
   };
 
   const removePlayer = (playerToRemove: Player) => {
     if (playerToRemove.userId === user?.uid) return;
 
-    if (gameMode === 'ffa' || gameMode === 'coop') {
-      setPlayers(players.filter(p => p.userId ? p.userId !== playerToRemove.userId : p.name !== playerToRemove.name));
+    if (gameMode === "ffa" || gameMode === "coop") {
+      setPlayers(
+        players.filter((p) =>
+          p.userId
+            ? p.userId !== playerToRemove.userId
+            : p.name !== playerToRemove.name,
+        ),
+      );
     } else {
-      setTeams(teams.map(team => ({
-        ...team,
-        players: team.players.filter(p => p.userId ? p.userId !== playerToRemove.userId : p.name !== playerToRemove.name)
-      })));
+      setTeams(
+        teams.map((team) => ({
+          ...team,
+          players: team.players.filter((p) =>
+            p.userId
+              ? p.userId !== playerToRemove.userId
+              : p.name !== playerToRemove.name,
+          ),
+        })),
+      );
     }
   };
 
   const toggleWinner = (index: number) => {
     const newPlayers = players.map((p, i) => ({
       ...p,
-      isWinner: i === index ? !p.isWinner : p.isWinner
+      isWinner: i === index ? !p.isWinner : p.isWinner,
     }));
     setPlayers(newPlayers);
   };
@@ -365,19 +425,22 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
 
   const handleSubmit = async () => {
     if (!selectedGame || !user) return;
-    
+
     setIsSubmitting(true);
     try {
-      const finalPlayers = gameMode === 'teams' 
-        ? teams.flatMap((t, tIdx) => t.players.map(p => ({
-            ...p,
-            score: keepScore ? t.score : null, // Apply team score to all players in team if keepScore is true
-            isWinner: t.isWinner
-          })))
-        : players.map(p => ({
-            ...p,
-            score: keepScore ? p.score : null
-          }));
+      const finalPlayers =
+        gameMode === "teams"
+          ? teams.flatMap((t, tIdx) =>
+              t.players.map((p) => ({
+                ...p,
+                score: keepScore ? t.score : null, // Apply team score to all players in team if keepScore is true
+                isWinner: t.isWinner,
+              })),
+            )
+          : players.map((p) => ({
+              ...p,
+              score: keepScore ? p.score : null,
+            }));
 
       const result = await submitPlayLog({
         gameId: selectedGame.id,
@@ -388,8 +451,10 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
         rating,
         vibeTag: vibeCheck || "🎲 Standard Game",
         userId: user.uid,
-        userName: user.displayName || 'Anonymous',
-        userAvatar: user.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.uid}`,
+        userName: user.displayName || "Anonymous",
+        userAvatar:
+          user.photoURL ||
+          `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.uid}`,
         players: finalPlayers,
         location,
         date,
@@ -397,57 +462,68 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
           ? selectedGame.expansions
               .filter((exp: any) => selectedExpansions.includes(exp.id))
               .map((exp: any) => ({ id: exp.id, title: exp.title }))
-          : []
+          : [],
       });
 
       if (result.success) {
         // Log Activity
         logActivity({
           userId: user.uid,
-          userName: user.displayName || 'Anonymous',
+          userName: user.displayName || "Anonymous",
           avatarSeed: profile?.avatarSeed || user.uid,
-          type: 'play_logged',
+          type: "play_logged",
           groupId: selectedGroupId || undefined,
           groupIds: userGroupIds,
-          groupName: groups.find(g => g.id === selectedGroupId)?.name,
+          groupName: groups.find((g) => g.id === selectedGroupId)?.name,
+          userIds: Array.from(new Set([user.uid, ...finalPlayers.map(p => p.userId).filter(Boolean)])),
           metadata: {
             gameId: selectedGame.id,
             gameTitle: selectedGame.title,
             gameCover: selectedGame.coverImage,
             isArtApproved: selectedGame.isArtApproved,
-            score: finalPlayers.find(p => p.userId === user.uid)?.score,
-            winners: finalPlayers.filter(p => p.isWinner).map(p => p.name)
-          }
+            score: finalPlayers.find((p) => p.userId === user.uid)?.score,
+            winners: finalPlayers.filter((p) => p.isWinner).map((p) => p.name),
+          },
         });
 
         onClose();
         setStep(1);
         setSelectedGame(null);
         setSelectedExpansions([]);
-        setPlayers([{ 
-          name: user?.displayName || 'Me', 
-          score: 0, 
-          isWinner: false, 
-          userId: user?.uid,
-          avatar: profile?.photoURL || user?.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.uid}`,
-          avatarPreference: profile?.avatarPreference || 'google',
-          avatarSeed: profile?.avatarSeed || user?.uid
-        }]);
+        setPlayers([
+          {
+            name: user?.displayName || "Me",
+            score: 0,
+            isWinner: false,
+            userId: user?.uid,
+            avatar:
+              profile?.photoURL ||
+              user?.photoURL ||
+              `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.uid}`,
+            avatarPreference: profile?.avatarPreference || "google",
+            avatarSeed: profile?.avatarSeed || user?.uid,
+          },
+        ]);
         setTeams([
           {
-            players: [{ 
-              name: user?.displayName || 'Me', 
-              score: 0, 
-              isWinner: false, 
-              userId: user?.uid,
-              avatar: profile?.photoURL || user?.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.uid}`,
-              avatarPreference: profile?.avatarPreference || 'google',
-              avatarSeed: profile?.avatarSeed || user?.uid
-            }],
+            players: [
+              {
+                name: user?.displayName || "Me",
+                score: 0,
+                isWinner: false,
+                userId: user?.uid,
+                avatar:
+                  profile?.photoURL ||
+                  user?.photoURL ||
+                  `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.uid}`,
+                avatarPreference: profile?.avatarPreference || "google",
+                avatarSeed: profile?.avatarSeed || user?.uid,
+              },
+            ],
             score: 0,
-            isWinner: false
+            isWinner: false,
           },
-          { players: [], score: 0, isWinner: false }
+          { players: [], score: 0, isWinner: false },
         ]);
       }
     } catch (error) {
@@ -461,14 +537,14 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
         className="absolute inset-0 bg-black/80 backdrop-blur-md"
       />
-      
+
       <motion.div
         initial={{ opacity: 0, scale: 0.9, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -477,7 +553,7 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
       >
         {/* Header - Sticky Style */}
         <div className="bg-gradient-to-br from-emerald-600 to-emerald-900 p-8 text-white relative shrink-0 z-10">
-          <button 
+          <button
             onClick={onClose}
             className="absolute top-6 right-6 p-2 bg-black/20 rounded-xl hover:bg-black/40 transition-all"
           >
@@ -488,8 +564,12 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
               <Trophy className="w-6 h-6 text-gold-accent" />
             </div>
             <div>
-              <h2 className="text-2xl font-black tracking-tight">Log a Session</h2>
-              <p className="text-emerald-100 text-xs font-bold uppercase tracking-widest opacity-80">CritShelf Premium Logger</p>
+              <h2 className="text-2xl font-black tracking-tight">
+                Log a Session
+              </h2>
+              <p className="text-emerald-100 text-xs font-bold uppercase tracking-widest opacity-80">
+                CritShelf Premium Logger
+              </p>
             </div>
           </div>
         </div>
@@ -500,9 +580,11 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
           <section className="space-y-8">
             <div className="flex items-center gap-2 mb-2">
               <div className="w-1 h-4 bg-emerald-accent rounded-full" />
-              <h3 className="text-xs font-black text-white/40 uppercase tracking-widest">The Details</h3>
+              <h3 className="text-xs font-black text-white/40 uppercase tracking-widest">
+                The Details
+              </h3>
             </div>
-            
+
             <div className="space-y-4">
               <div className="relative">
                 <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
@@ -512,7 +594,7 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
                     <Search className="w-5 h-5 text-white/20" />
                   )}
                 </div>
-                <input 
+                <input
                   type="text"
                   placeholder="Select Game..."
                   className="w-full bg-white/5 border-2 border-white/10 rounded-2xl py-4 pl-12 pr-4 font-bold text-white outline-none focus:border-emerald-accent transition-all"
@@ -524,48 +606,51 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
                 />
                 {searchQuery && !selectedGame && (
                   <div className="absolute top-full left-0 right-0 mt-2 bg-[#1a1a1a] rounded-2xl border border-white/10 shadow-2xl z-50 overflow-hidden">
-                    {searchResults.length > 0 ? (
-                      searchResults.map(game => (
-                        <button
-                          key={game.id}
-                          onClick={() => {
-                            setSelectedGame(game);
-                            setSelectedExpansions([]);
-                            setSearchQuery('');
-                            setSearchResults([]);
-                          }}
-                          className="w-full flex items-center gap-4 p-4 hover:bg-emerald-accent/10 transition-all text-left border-b border-white/5 last:border-0 group"
-                        >
-                          <img 
-                            src={(game.coverImage || game.coverArt) || null} 
-                            className="w-10 h-10 rounded-lg object-cover border border-white/10" 
-                            referrerPolicy="no-referrer"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <GameTitleWithDC 
-                              game={game} 
-                              shieldSize="sm" 
-                              titleClassName="text-white block group-hover:text-emerald-accent"
+                    {searchResults.length > 0
+                      ? searchResults.map((game) => (
+                          <button
+                            key={game.id}
+                            onClick={() => {
+                              setSelectedGame(game);
+                              setSelectedExpansions([]);
+                              setSearchQuery("");
+                              setSearchResults([]);
+                            }}
+                            className="w-full flex items-center gap-4 p-4 hover:bg-emerald-accent/10 transition-all text-left border-b border-white/5 last:border-0 group"
+                          >
+                            <img
+                              src={game.coverImage || game.coverArt || null}
+                              className="w-10 h-10 rounded-lg object-cover border border-white/10"
+                              referrerPolicy="no-referrer"
                             />
-                            <span className="text-[8px] font-black text-white/20 uppercase tracking-widest pl-10">
-                              {game.publisher || 'Board Game'}
-                            </span>
+                            <div className="flex-1 min-w-0">
+                              <GameTitleWithDC
+                                game={game}
+                                shieldSize="sm"
+                                titleClassName="text-white block group-hover:text-emerald-accent"
+                              />
+                              <span className="text-[8px] font-black text-white/20 uppercase tracking-widest pl-10">
+                                {game.publisher || "Board Game"}
+                              </span>
+                            </div>
+                            <ChevronRight className="w-4 h-4 text-white/10 group-hover:text-emerald-accent transition-all" />
+                          </button>
+                        ))
+                      : !isSearching &&
+                        searchQuery.length >= 2 && (
+                          <div className="p-6 text-center">
+                            <p className="text-white/40 font-bold text-sm mb-3">
+                              Game not found?
+                            </p>
+                            <button
+                              onClick={() => navigate("/browse")}
+                              className="flex items-center gap-2 text-emerald-accent font-black text-xs uppercase tracking-widest mx-auto hover:underline"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              Add it manually
+                            </button>
                           </div>
-                          <ChevronRight className="w-4 h-4 text-white/10 group-hover:text-emerald-accent transition-all" />
-                        </button>
-                      ))
-                    ) : !isSearching && searchQuery.length >= 2 && (
-                      <div className="p-6 text-center">
-                        <p className="text-white/40 font-bold text-sm mb-3">Game not found?</p>
-                        <button 
-                          onClick={() => navigate('/browse')}
-                          className="flex items-center gap-2 text-emerald-accent font-black text-xs uppercase tracking-widest mx-auto hover:underline"
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                          Add it manually
-                        </button>
-                      </div>
-                    )}
+                        )}
                   </div>
                 )}
               </div>
@@ -573,7 +658,7 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
               <div className="grid grid-cols-2 gap-4">
                 <div className="relative">
                   <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/20" />
-                  <input 
+                  <input
                     type="date"
                     className="w-full bg-white/5 border-2 border-white/10 rounded-2xl py-4 pl-12 pr-4 font-bold text-white outline-none focus:border-emerald-accent transition-all"
                     value={date}
@@ -582,7 +667,7 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
                 </div>
                 <div className="relative">
                   <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/20" />
-                  <input 
+                  <input
                     type="text"
                     placeholder="Location (Optional)"
                     className="w-full bg-white/5 border-2 border-white/10 rounded-2xl py-4 pl-12 pr-4 font-bold text-white outline-none focus:border-emerald-accent transition-all"
@@ -593,81 +678,100 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
               </div>
 
               {/* Expansions Selection */}
-              {selectedGame?.expansions && selectedGame.expansions.length > 0 && (
-                <div className="space-y-4 pt-2">
-                  <div className="flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-emerald-accent" />
-                    <h4 className="text-[10px] font-black text-white/40 uppercase tracking-widest">Expansions Included (Optional)</h4>
+              {selectedGame?.expansions &&
+                selectedGame.expansions.length > 0 && (
+                  <div className="space-y-4 pt-2">
+                    <div className="flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-emerald-accent" />
+                      <h4 className="text-[10px] font-black text-white/40 uppercase tracking-widest">
+                        Expansions Included (Optional)
+                      </h4>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedGame.expansions.map((exp: any) => (
+                        <button
+                          key={exp.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedExpansions((prev) =>
+                              prev.includes(exp.id)
+                                ? prev.filter((id) => id !== exp.id)
+                                : [...prev, exp.id],
+                            );
+                          }}
+                          className={cn(
+                            "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border",
+                            selectedExpansions.includes(exp.id)
+                              ? "bg-emerald-accent text-charcoal border-emerald-accent"
+                              : "bg-white/5 text-white/40 border-white/10 hover:border-white/20",
+                          )}
+                        >
+                          {exp.title}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedGame.expansions.map((exp: any) => (
-                      <button
-                        key={exp.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedExpansions(prev => 
-                            prev.includes(exp.id) 
-                              ? prev.filter(id => id !== exp.id) 
-                              : [...prev, exp.id]
-                          );
-                        }}
-                        className={cn(
-                          "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border",
-                          selectedExpansions.includes(exp.id)
-                            ? "bg-emerald-accent text-charcoal border-emerald-accent"
-                            : "bg-white/5 text-white/40 border-white/10 hover:border-white/20"
-                        )}
-                      >
-                        {exp.title}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+                )}
 
               {/* Game Mode Segmented Control */}
               <div className="bg-white/5 p-1 rounded-2xl flex gap-1 border border-white/10">
-                {(['ffa', 'teams', 'coop'] as const).map((mode) => (
+                {(["ffa", "teams", "coop"] as const).map((mode) => (
                   <button
                     key={mode}
                     onClick={() => setGameMode(mode)}
                     className={cn(
                       "flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                      gameMode === mode 
-                        ? "bg-emerald-accent text-charcoal shadow-lg" 
-                        : "text-white/40 hover:text-white/60"
+                      gameMode === mode
+                        ? "bg-emerald-accent text-charcoal shadow-lg"
+                        : "text-white/40 hover:text-white/60",
                     )}
                   >
-                    {mode === 'ffa' ? 'Free-for-All' : mode === 'teams' ? 'Teams' : 'Co-op'}
+                    {mode === "ffa"
+                      ? "Free-for-All"
+                      : mode === "teams"
+                        ? "Teams"
+                        : "Co-op"}
                   </button>
                 ))}
               </div>
 
               {/* Keep Score Toggle */}
-              <div 
+              <div
                 onClick={() => setKeepScore(!keepScore)}
                 className="flex items-center justify-between bg-white/5 p-4 rounded-2xl border border-white/10 cursor-pointer hover:bg-white/10 transition-all group"
               >
                 <div className="flex items-center gap-4">
-                  <div className={cn(
-                    "w-10 h-10 rounded-xl flex items-center justify-center transition-all",
-                    keepScore ? "bg-emerald-accent/20 text-emerald-accent" : "bg-white/5 text-white/20"
-                  )}>
+                  <div
+                    className={cn(
+                      "w-10 h-10 rounded-xl flex items-center justify-center transition-all",
+                      keepScore
+                        ? "bg-emerald-accent/20 text-emerald-accent"
+                        : "bg-white/5 text-white/20",
+                    )}
+                  >
                     <Dices className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="text-xs font-black text-white uppercase tracking-widest">Keep Points/Score</h4>
-                    <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Track numeric values during play</p>
+                    <h4 className="text-xs font-black text-white uppercase tracking-widest">
+                      Keep Points/Score
+                    </h4>
+                    <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">
+                      Track numeric values during play
+                    </p>
                   </div>
                 </div>
-                <div className={cn(
-                  "w-12 h-6 rounded-full relative transition-all duration-300",
-                  keepScore ? "bg-emerald-accent" : "bg-white/10"
-                )}>
-                  <div className={cn(
-                    "absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-300 shadow-lg",
-                    keepScore ? "left-7" : "left-1"
-                  )} />
+                <div
+                  className={cn(
+                    "w-12 h-6 rounded-full relative transition-all duration-300",
+                    keepScore ? "bg-emerald-accent" : "bg-white/10",
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-300 shadow-lg",
+                      keepScore ? "left-7" : "left-1",
+                    )}
+                  />
                 </div>
               </div>
             </div>
@@ -678,36 +782,38 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
             <div className="flex items-center gap-2 mb-2">
               <div className="w-1 h-4 bg-emerald-accent rounded-full" />
               <h3 className="text-xs font-black text-white/40 uppercase tracking-widest">
-                {gameMode === 'teams' ? 'Team Rosters' : 'Player Selection'}
+                {gameMode === "teams" ? "Team Rosters" : "Player Selection"}
               </h3>
             </div>
 
-            {gameMode !== 'teams' && (
+            {gameMode !== "teams" && (
               <>
                 {/* Selected Players Tags (FFA/Co-op Only) */}
                 <div className="flex flex-wrap gap-3">
                   {players.map((player, pIdx) => (
-                    <motion.div 
+                    <motion.div
                       layout
                       initial={{ opacity: 0, scale: 0.8 }}
                       animate={{ opacity: 1, scale: 1 }}
                       key={`${player.userId || player.name}-${pIdx}`}
                       className="flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-2 rounded-full group transition-all hover:border-emerald-accent/30"
                     >
-                      <UserAvatar 
-                        user={{ 
-                          photoURL: player.avatar, 
-                          avatarPreference: player.avatarPreference, 
+                      <UserAvatar
+                        user={{
+                          photoURL: player.avatar,
+                          avatarPreference: player.avatarPreference,
                           avatarSeed: player.avatarSeed,
                           uid: player.userId,
-                          displayName: player.name 
-                        }} 
-                        size="xs" 
-                        className="w-6 h-6 rounded-full border border-white/10" 
+                          displayName: player.name,
+                        }}
+                        size="xs"
+                        className="w-6 h-6 rounded-full border border-white/10"
                       />
-                      <span className="text-xs font-bold text-white/80">{player.name}</span>
+                      <span className="text-xs font-bold text-white/80">
+                        {player.name}
+                      </span>
                       {player.userId !== user?.uid && (
-                        <button 
+                        <button
                           onClick={() => removePlayer(player)}
                           className="p-1 text-white/20 hover:text-rose-500 transition-colors"
                         >
@@ -720,14 +826,14 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
 
                 {/* Add Buttons (FFA/Co-op Only) */}
                 <div className="flex gap-4">
-                  <button 
+                  <button
                     onClick={() => setIsAddFriendOpen(true)}
                     className="flex-1 flex items-center justify-center gap-2 py-4 rounded-2xl border-2 border-emerald-accent text-emerald-accent font-black text-xs uppercase tracking-widest hover:bg-emerald-accent/5 transition-all active:scale-95"
                   >
                     <UserPlus className="w-4 h-4" />
                     Add Friend
                   </button>
-                  <button 
+                  <button
                     onClick={() => setIsAddGuestOpen(true)}
                     className="flex-1 flex items-center justify-center gap-2 py-4 rounded-2xl border-2 border-white/10 text-white/40 font-black text-xs uppercase tracking-widest hover:bg-white/5 transition-all active:scale-95"
                   >
@@ -740,34 +846,44 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
 
             <div className="space-y-8">
               {/* Teams Mode - Container-First Assignment */}
-              {gameMode === 'teams' ? (
+              {gameMode === "teams" ? (
                 <div className="space-y-6">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     {teams.map((team, tIdx) => (
-                      <div 
+                      <div
                         key={tIdx}
                         className={cn(
                           "bg-white/5 rounded-[2.5rem] p-6 border-2 transition-all relative flex flex-col gap-6",
-                          team.isWinner ? "border-gold-accent bg-gold-accent/5 shadow-[0_10px_40px_rgba(251,191,36,0.1)]" : "border-white/10"
+                          team.isWinner
+                            ? "border-gold-accent bg-gold-accent/5 shadow-[0_10px_40px_rgba(251,191,36,0.1)]"
+                            : "border-white/10",
                         )}
                       >
                         {/* Team Header */}
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            <div className={cn(
-                              "w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs border",
-                              team.isWinner ? "bg-gold-accent text-charcoal border-transparent" : "bg-white/10 text-white/40 border-white/10"
-                            )}>
+                            <div
+                              className={cn(
+                                "w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs border",
+                                team.isWinner
+                                  ? "bg-gold-accent text-charcoal border-transparent"
+                                  : "bg-white/10 text-white/40 border-white/10",
+                              )}
+                            >
                               {tIdx + 1}
                             </div>
-                            <h4 className="text-xs font-black text-white uppercase tracking-widest">Team {tIdx + 1}</h4>
+                            <h4 className="text-xs font-black text-white uppercase tracking-widest">
+                              Team {tIdx + 1}
+                            </h4>
                           </div>
-                          
-                          <button 
+
+                          <button
                             onClick={() => toggleTeamWinner(tIdx)}
                             className={cn(
                               "p-3 rounded-2xl transition-all shadow-lg",
-                              team.isWinner ? "bg-gold-accent text-charcoal scale-110" : "bg-white/5 text-white/20 hover:text-gold-accent hover:bg-gold-accent/10"
+                              team.isWinner
+                                ? "bg-gold-accent text-charcoal scale-110"
+                                : "bg-white/5 text-white/20 hover:text-gold-accent hover:bg-gold-accent/10",
                             )}
                           >
                             <Crown className="w-5 h-5" />
@@ -777,28 +893,35 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
                         {/* Player List Inside Team */}
                         <div className="space-y-3 min-h-[100px] border-y border-white/5 py-4">
                           {team.players.map((p, pIdx) => (
-                            <div key={pIdx} className="flex items-center justify-between group/p">
+                            <div
+                              key={pIdx}
+                              className="flex items-center justify-between group/p"
+                            >
                               <div className="flex items-center gap-3">
-                                <UserAvatar 
-                                  user={{ 
-                                    photoURL: p.avatar, 
-                                    avatarPreference: p.avatarPreference, 
+                                <UserAvatar
+                                  user={{
+                                    photoURL: p.avatar,
+                                    avatarPreference: p.avatarPreference,
                                     avatarSeed: p.avatarSeed,
                                     uid: p.userId,
-                                    displayName: p.name 
-                                  }} 
-                                  size="xs" 
-                                  className="w-8 h-8 rounded-full border border-white/10" 
+                                    displayName: p.name,
+                                  }}
+                                  size="xs"
+                                  className="w-8 h-8 rounded-full border border-white/10"
                                 />
-                                <span className={cn(
-                                  "text-sm font-bold",
-                                  p.userId === user?.uid ? "text-gold-accent" : "text-white/60"
-                                )}>
+                                <span
+                                  className={cn(
+                                    "text-sm font-bold",
+                                    p.userId === user?.uid
+                                      ? "text-gold-accent"
+                                      : "text-white/60",
+                                  )}
+                                >
                                   {p.name}
                                 </span>
                               </div>
                               {p.userId !== user?.uid && (
-                                <button 
+                                <button
                                   onClick={() => removePlayer(p)}
                                   className="opacity-0 group-hover/p:opacity-100 p-1.5 text-white/20 hover:text-rose-500 transition-all hover:bg-rose-500/10 rounded-lg"
                                 >
@@ -807,11 +930,13 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
                               )}
                             </div>
                           ))}
-                          
+
                           {team.players.length === 0 && (
                             <div className="h-full flex flex-col items-center justify-center opacity-20 py-4">
                               <Users className="w-8 h-8 mb-2" />
-                              <p className="text-[10px] font-black uppercase tracking-widest">No Players</p>
+                              <p className="text-[10px] font-black uppercase tracking-widest">
+                                No Players
+                              </p>
                             </div>
                           )}
                         </div>
@@ -819,7 +944,7 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
                         {/* Team Actions: Add & Score */}
                         <div className="space-y-4">
                           <div className="flex gap-2">
-                            <button 
+                            <button
                               onClick={() => {
                                 setSelectedTeamIndex(tIdx);
                                 setIsAddFriendOpen(true);
@@ -829,7 +954,7 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
                               <UserPlus className="w-3.5 h-3.5" />
                               Friend
                             </button>
-                            <button 
+                            <button
                               onClick={() => {
                                 setSelectedTeamIndex(tIdx);
                                 setIsAddGuestOpen(true);
@@ -843,13 +968,20 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
 
                           {keepScore && (
                             <div className="flex items-center gap-4 bg-black/20 p-3 rounded-2xl border border-white/5">
-                              <span className="text-[10px] font-black text-white/20 uppercase tracking-widest pl-2">Score</span>
-                              <input 
+                              <span className="text-[10px] font-black text-white/20 uppercase tracking-widest pl-2">
+                                Score
+                              </span>
+                              <input
                                 type="number"
                                 className="w-full bg-transparent border-none text-right font-black text-white focus:ring-0 text-xl"
                                 placeholder="0"
-                                value={team.score || ''}
-                                onChange={(e) => updateTeamScore(tIdx, parseInt(e.target.value) || 0)}
+                                value={team.score || ""}
+                                onChange={(e) =>
+                                  updateTeamScore(
+                                    tIdx,
+                                    parseInt(e.target.value) || 0,
+                                  )
+                                }
                               />
                             </div>
                           )}
@@ -858,53 +990,63 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
                     ))}
                   </div>
 
-                  <button 
+                  <button
                     onClick={addTeam}
                     className="w-full py-6 rounded-[2rem] border-2 border-dashed border-white/10 hover:border-emerald-accent/30 text-white/20 hover:text-emerald-accent transition-all flex flex-col items-center gap-2 group"
                   >
                     <Plus className="w-6 h-6 group-hover:scale-125 transition-transform" />
-                    <span className="text-[10px] font-black uppercase tracking-widest">Add Another Team</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest">
+                      Add Another Team
+                    </span>
                   </button>
                 </div>
               ) : (
                 /* FFA / Co-op Player List */
                 <div className="grid grid-cols-1 gap-2">
                   {players.map((player, idx) => (
-                    <div key={idx} className="flex items-center justify-between bg-white/5 p-4 rounded-2xl border border-white/10 group/player">
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between bg-white/5 p-4 rounded-2xl border border-white/10 group/player"
+                    >
                       <div className="flex items-center gap-4">
-                        <UserAvatar 
-                          user={{ 
-                            photoURL: player.avatar, 
-                            avatarPreference: player.avatarPreference, 
+                        <UserAvatar
+                          user={{
+                            photoURL: player.avatar,
+                            avatarPreference: player.avatarPreference,
                             avatarSeed: player.avatarSeed,
                             uid: player.userId,
-                            displayName: player.name 
-                          }} 
-                          size="xs" 
-                          className="w-10 h-10 rounded-full border-2 border-white/10" 
+                            displayName: player.name,
+                          }}
+                          size="xs"
+                          className="w-10 h-10 rounded-full border-2 border-white/10"
                         />
-                        <span className="font-black text-white">{player.name}</span>
+                        <span className="font-black text-white">
+                          {player.name}
+                        </span>
                       </div>
                       <div className="flex items-center gap-4">
                         {keepScore && (
-                          <input 
+                          <input
                             type="number"
                             placeholder="Score"
                             className="w-20 bg-black/40 border border-white/10 rounded-xl p-2 text-center font-black text-white outline-none focus:border-emerald-accent"
                             value={player.score}
                             onChange={(e) => {
                               const newPlayers = [...players];
-                              newPlayers[idx].score = parseInt(e.target.value) || 0;
+                              newPlayers[idx].score =
+                                parseInt(e.target.value) || 0;
                               setPlayers(newPlayers);
                             }}
                           />
                         )}
-                        {gameMode === 'ffa' && (
-                          <button 
+                        {gameMode === "ffa" && (
+                          <button
                             onClick={() => toggleWinner(idx)}
                             className={cn(
                               "p-2.5 rounded-xl transition-all",
-                              player.isWinner ? "bg-gold-accent text-charcoal shadow-lg scale-110" : "text-white/20 hover:text-white/40"
+                              player.isWinner
+                                ? "bg-gold-accent text-charcoal shadow-lg scale-110"
+                                : "text-white/20 hover:text-white/40",
                             )}
                           >
                             <Crown className="w-6 h-6" />
@@ -919,30 +1061,46 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
           </section>
 
           {/* Section 3: The Outcome (Co-op specific) */}
-          {gameMode === 'coop' && (
+          {gameMode === "coop" && (
             <section className="space-y-6">
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-1 h-4 bg-emerald-accent rounded-full" />
-                <h3 className="text-xs font-black text-white/40 uppercase tracking-widest">The Outcome</h3>
+                <h3 className="text-xs font-black text-white/40 uppercase tracking-widest">
+                  The Outcome
+                </h3>
               </div>
               <div className="bg-white/5 rounded-3xl p-8 border-2 border-white/10 flex items-center justify-between">
                 <div className="flex items-center gap-6">
-                  <div className={cn(
-                    "w-16 h-16 rounded-2xl flex items-center justify-center shadow-2xl transition-all",
-                    isVictory ? "bg-emerald-accent text-charcoal" : "bg-rose-500 text-white"
-                  )}>
-                    {isVictory ? <Smile className="w-8 h-8" /> : <Frown className="w-8 h-8" />}
+                  <div
+                    className={cn(
+                      "w-16 h-16 rounded-2xl flex items-center justify-center shadow-2xl transition-all",
+                      isVictory
+                        ? "bg-emerald-accent text-charcoal"
+                        : "bg-rose-500 text-white",
+                    )}
+                  >
+                    {isVictory ? (
+                      <Smile className="w-8 h-8" />
+                    ) : (
+                      <Frown className="w-8 h-8" />
+                    )}
                   </div>
                   <div>
-                    <p className="font-black text-white text-2xl tracking-tight">{isVictory ? 'Victory' : 'Defeat'}</p>
-                    <p className="text-white/40 text-xs font-bold uppercase tracking-widest">Table Consensus</p>
+                    <p className="font-black text-white text-2xl tracking-tight">
+                      {isVictory ? "Victory" : "Defeat"}
+                    </p>
+                    <p className="text-white/40 text-xs font-bold uppercase tracking-widest">
+                      Table Consensus
+                    </p>
                   </div>
                 </div>
-                <button 
+                <button
                   onClick={() => setIsVictory(!isVictory)}
                   className={cn(
                     "px-8 py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-lg active:scale-95",
-                    isVictory ? "bg-white/10 text-white hover:bg-white/20" : "bg-emerald-accent text-charcoal"
+                    isVictory
+                      ? "bg-white/10 text-white hover:bg-white/20"
+                      : "bg-emerald-accent text-charcoal",
                   )}
                 >
                   Toggle Result
@@ -955,35 +1113,49 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
           <section className="space-y-8">
             <div className="flex items-center gap-2 mb-2">
               <div className="w-1 h-4 bg-emerald-accent rounded-full" />
-              <h3 className="text-xs font-black text-white/40 uppercase tracking-widest">Vibe & Group</h3>
+              <h3 className="text-xs font-black text-white/40 uppercase tracking-widest">
+                Vibe & Group
+              </h3>
             </div>
 
             <div className="space-y-8">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="relative">
                   <Users className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/20" />
-                  <select 
+                  <select
                     className="w-full bg-white/5 border-2 border-white/10 rounded-2xl py-4 pl-12 pr-4 font-bold text-white outline-none focus:border-emerald-accent appearance-none transition-all"
                     value={selectedGroupId}
                     onChange={(e) => setSelectedGroupId(e.target.value)}
                   >
-                    <option value="" className="bg-charcoal">Link to Group (Optional)...</option>
-                    {groups.map(group => (
-                      <option key={group.id} value={group.id} className="bg-charcoal">{group.name}</option>
+                    <option value="" className="bg-charcoal">
+                      Link to Group (Optional)...
+                    </option>
+                    {groups.map((group) => (
+                      <option
+                        key={group.id}
+                        value={group.id}
+                        className="bg-charcoal"
+                      >
+                        {group.name}
+                      </option>
                     ))}
                   </select>
                 </div>
 
                 <div className="relative">
                   <Smile className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/20" />
-                  <select 
+                  <select
                     className="w-full bg-white/5 border-2 border-white/10 rounded-2xl py-4 pl-12 pr-4 font-bold text-white outline-none focus:border-emerald-accent appearance-none transition-all"
                     value={vibeCheck}
                     onChange={(e) => setVibeCheck(e.target.value)}
                   >
-                    <option value="" className="bg-charcoal">Session Vibe (Optional)...</option>
-                    {VIBE_OPTIONS.map(vibe => (
-                      <option key={vibe} value={vibe} className="bg-charcoal">{vibe}</option>
+                    <option value="" className="bg-charcoal">
+                      Session Vibe (Optional)...
+                    </option>
+                    {VIBE_OPTIONS.map((vibe) => (
+                      <option key={vibe} value={vibe} className="bg-charcoal">
+                        {vibe}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -997,13 +1169,15 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
                   <div className="flex-1 w-full space-y-6">
                     <div className="space-y-2">
                       <div className="text-center">
-                        <span className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em]">Rate this Session (Optional)</span>
+                        <span className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em]">
+                          Rate this Session (Optional)
+                        </span>
                       </div>
                       <div className="flex justify-between text-[9px] font-black text-white/20 uppercase tracking-widest px-1">
                         <span>Critical Fail</span>
                         <span>Nat 20</span>
                       </div>
-                      <input 
+                      <input
                         type="range"
                         min="1"
                         max="20"
@@ -1022,18 +1196,23 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
 
         {/* Footer - Sticky Style */}
         <div className="p-8 bg-black/40 border-t border-white/10 flex items-center justify-end shrink-0">
-          <button 
+          <button
             onClick={handleSubmit}
             disabled={
-              isSubmitting || 
-              !selectedGame || 
-              !date || 
-              (gameMode === 'teams' ? teams.every(t => t.players.length === 0) : players.length === 0) ||
-              (gameMode !== 'coop' && (gameMode === 'teams' ? !teams.some(t => t.isWinner) : !players.some(p => p.isWinner)))
+              isSubmitting ||
+              !selectedGame ||
+              !date ||
+              (gameMode === "teams"
+                ? teams.every((t) => t.players.length === 0)
+                : players.length === 0) ||
+              (gameMode !== "coop" &&
+                (gameMode === "teams"
+                  ? !teams.some((t) => t.isWinner)
+                  : !players.some((p) => p.isWinner)))
             }
             className="w-full sm:w-auto bg-gold-accent text-charcoal px-12 py-5 rounded-[1.5rem] font-black shadow-xl hover:shadow-gold-accent/20 transition-all flex items-center justify-center gap-3 disabled:opacity-50 active:scale-95"
           >
-            {isSubmitting ? 'Recording Session...' : 'Log Session'}
+            {isSubmitting ? "Recording Session..." : "Log Session"}
             <Check className="w-6 h-6" />
           </button>
         </div>
@@ -1043,7 +1222,7 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
       <AnimatePresence>
         {isAddFriendOpen && (
           <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -1057,21 +1236,33 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
               className="relative w-full max-w-md bg-charcoal rounded-[2.5rem] shadow-2xl overflow-hidden border border-white/10"
             >
               <div className="p-6 border-b border-white/5 flex items-center justify-between">
-                <h3 className="text-lg font-black text-white tracking-tight">Add Friend</h3>
-                <button onClick={() => setIsAddFriendOpen(false)} className="text-white/20 hover:text-white"><X className="w-5 h-5" /></button>
+                <h3 className="text-lg font-black text-white tracking-tight">
+                  Add Friend
+                </h3>
+                <button
+                  onClick={() => setIsAddFriendOpen(false)}
+                  className="text-white/20 hover:text-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
               <div className="p-4 max-h-[400px] overflow-y-auto no-scrollbar">
                 {friends.length === 0 ? (
                   <div className="text-center py-8">
-                    <p className="text-white/40 italic font-medium">No friends added yet.</p>
+                    <p className="text-white/40 italic font-medium">
+                      No friends added yet.
+                    </p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 gap-2">
-                    {friends.map(friend => {
-                      const isAdded = gameMode === 'teams' 
-                        ? teams.some(t => t.players.some(p => p.userId === friend.uid))
-                        : players.some(p => p.userId === friend.uid);
-                      
+                    {friends.map((friend) => {
+                      const isAdded =
+                        gameMode === "teams"
+                          ? teams.some((t) =>
+                              t.players.some((p) => p.userId === friend.uid),
+                            )
+                          : players.some((p) => p.userId === friend.uid);
+
                       return (
                         <button
                           key={friend.uid}
@@ -1079,25 +1270,34 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
                           onClick={() => addPlayerFromFriend(friend)}
                           className={cn(
                             "w-full flex items-center gap-4 p-4 rounded-2xl transition-all text-left group",
-                            isAdded ? "opacity-30 cursor-not-allowed" : "hover:bg-white/5 bg-white/[0.02]"
+                            isAdded
+                              ? "opacity-30 cursor-not-allowed"
+                              : "hover:bg-white/5 bg-white/[0.02]",
                           )}
                         >
-                          <UserAvatar 
-                            user={{ 
-                              photoURL: friend.photoURL, 
-                              avatarPreference: (friend as any).avatarPreference, 
+                          <UserAvatar
+                            user={{
+                              photoURL: friend.photoURL,
+                              avatarPreference: (friend as any)
+                                .avatarPreference,
                               avatarSeed: (friend as any).avatarSeed,
                               uid: friend.uid,
-                              displayName: friend.displayName 
-                            }} 
-                            size="md" 
-                            className="w-12 h-12 rounded-xl border border-white/10" 
+                              displayName: friend.displayName,
+                            }}
+                            size="md"
+                            className="w-12 h-12 rounded-xl border border-white/10"
                           />
                           <div className="flex-1">
-                            <p className="font-black text-white">{friend.displayName}</p>
-                            <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">CritShelf User</p>
+                            <p className="font-black text-white">
+                              {friend.displayName}
+                            </p>
+                            <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">
+                              CritShelf User
+                            </p>
                           </div>
-                          {!isAdded && <Plus className="w-5 h-5 text-emerald-accent opacity-0 group-hover:opacity-100 transition-all" />}
+                          {!isAdded && (
+                            <Plus className="w-5 h-5 text-emerald-accent opacity-0 group-hover:opacity-100 transition-all" />
+                          )}
                         </button>
                       );
                     })}
@@ -1113,7 +1313,7 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
       <AnimatePresence>
         {isAddGuestOpen && (
           <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -1126,21 +1326,25 @@ export default function LogPlayModal({ isOpen, onClose, initialGameId, initialGa
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               className="relative w-full max-w-sm bg-charcoal rounded-[2rem] shadow-2xl overflow-hidden border border-white/10 p-8"
             >
-              <h3 className="text-xl font-black text-white tracking-tight mb-6">Add Guest</h3>
+              <h3 className="text-xl font-black text-white tracking-tight mb-6">
+                Add Guest
+              </h3>
               <div className="space-y-6">
                 <div>
-                  <label className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-2 block">Guest Name</label>
-                  <input 
+                  <label className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-2 block">
+                    Guest Name
+                  </label>
+                  <input
                     autoFocus
                     type="text"
                     placeholder="e.g. Uncle Bob"
                     className="w-full bg-white/5 border-2 border-white/10 rounded-2xl p-4 font-bold text-white outline-none focus:border-gold-accent transition-all"
                     value={guestNameInput}
                     onChange={(e) => setGuestNameInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddGuest()}
+                    onKeyDown={(e) => e.key === "Enter" && handleAddGuest()}
                   />
                 </div>
-                <button 
+                <button
                   onClick={handleAddGuest}
                   className="w-full bg-gold-accent text-charcoal py-4 rounded-2xl font-black shadow-lg hover:shadow-gold-accent/20 transition-all active:scale-95"
                 >

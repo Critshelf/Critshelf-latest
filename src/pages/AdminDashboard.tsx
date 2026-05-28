@@ -1,13 +1,31 @@
-import React, { useState } from 'react';
-import { db } from '../lib/firebase';
-import { collection, getDocs, updateDoc, doc, query, limit, startAfter } from 'firebase/firestore';
-import { Database, Search } from 'lucide-react';
-import { cn } from '../lib/utils';
-import { useUser } from '../contexts/UserContext';
-import { Navigate } from 'react-router-dom';
+import React, { useState } from "react";
+import { db } from "../lib/firebase";
+import {
+  collection,
+  getDocs,
+  updateDoc,
+  doc,
+  query,
+  limit,
+  startAfter,
+  where,
+  writeBatch,
+} from "firebase/firestore";
+import { Database, Search } from "lucide-react";
+import { cn } from "../lib/utils";
+import { useUser } from "../contexts/UserContext";
+import { Navigate } from "react-router-dom";
 
 // Sub-component for individual item row isolation
-const EditableRow = React.memo(function EditableRow({ game, columns, onUpdateSuccess }: { game: Record<string, any>; columns: string[]; onUpdateSuccess: (g: Record<string, any>) => void }) {
+const EditableRow = React.memo(function EditableRow({
+  game,
+  columns,
+  onUpdateSuccess,
+}: {
+  game: Record<string, any>;
+  columns: string[];
+  onUpdateSuccess: (g: Record<string, any>) => void;
+}) {
   const [draftState, setDraftState] = useState(game);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
@@ -16,13 +34,15 @@ const EditableRow = React.memo(function EditableRow({ game, columns, onUpdateSuc
     setSavingId(draftState.id);
     try {
       const payload: Record<string, any> = {};
-      columns.forEach(col => {
-        if (col === 'id') return;
+      columns.forEach((col) => {
+        if (col === "id") return;
         let val = draftState[col];
-        if (typeof val === 'string') {
+        if (typeof val === "string") {
           const trimmed = val.trim();
-          if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || 
-              (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+          if (
+            (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+            (trimmed.startsWith("[") && trimmed.endsWith("]"))
+          ) {
             try {
               val = JSON.parse(trimmed);
             } catch (e) {
@@ -32,69 +52,74 @@ const EditableRow = React.memo(function EditableRow({ game, columns, onUpdateSuc
         }
         payload[col] = val;
       });
-      
-      const ref = doc(db, 'games', draftState.id);
+
+      const ref = doc(db, "games", draftState.id);
       await updateDoc(ref, payload);
-      
+
       setSavedId(draftState.id);
       setTimeout(() => setSavedId(null), 2000);
       onUpdateSuccess(draftState);
     } catch (error) {
-      console.error('Error updating doc', error);
-      alert('Failed to update document');
+      console.error("Error updating doc", error);
+      alert("Failed to update document");
     } finally {
       setSavingId(null);
     }
   };
 
   const handleChange = (field: string, value: any) => {
-    setDraftState(prev => ({ ...prev, [field]: value }));
+    setDraftState((prev) => ({ ...prev, [field]: value }));
   };
 
   const renderCellInput = (col: string) => {
-    if (col === 'id') {
+    if (col === "id") {
       return (
-        <span className="text-white/50 font-mono text-xs max-w-[100px] overflow-hidden text-ellipsis block" title={draftState.id}>
+        <span
+          className="text-white/50 font-mono text-xs max-w-[100px] overflow-hidden text-ellipsis block"
+          title={draftState.id}
+        >
           {draftState.id}
         </span>
       );
     }
-    
+
     let val = draftState[col];
-    
+
     // Convert undefined to empty string to keep inputs controlled
     if (val === undefined || val === null) {
-      val = '';
+      val = "";
     }
-    
-    if (typeof val === 'boolean') {
+
+    if (typeof val === "boolean") {
       return (
-        <input 
-          type="checkbox" 
-          checked={val} 
+        <input
+          type="checkbox"
+          checked={val}
           onChange={(e) => handleChange(col, e.target.checked)}
           className="w-4 h-4 rounded bg-black/20 border-white/20 text-indigo-500 focus:ring-indigo-500 mx-auto block"
         />
       );
     }
-    
-    if (typeof val === 'number') {
+
+    if (typeof val === "number") {
       return (
-        <input 
-          type="number" 
-          value={val} 
+        <input
+          type="number"
+          value={val}
           onChange={(e) => handleChange(col, Number(e.target.value))}
           className="bg-black/20 border border-white/10 rounded px-2 py-1 w-full max-w-[100px] text-white focus:border-indigo-500 focus:outline-none"
         />
       );
     }
 
-    const isJsonLike = typeof val === 'string' && (val.trim().startsWith('{') || val.trim().startsWith('['));
-    
-    if (isJsonLike || (typeof val === 'string' && val.includes('\n'))) {
+    const isJsonLike =
+      typeof val === "string" &&
+      (val.trim().startsWith("{") || val.trim().startsWith("["));
+
+    if (isJsonLike || (typeof val === "string" && val.includes("\n"))) {
       return (
-        <textarea 
-          value={val} 
+        <textarea
+          value={val}
           onChange={(e) => handleChange(col, e.target.value)}
           className="bg-black/20 border border-white/10 rounded px-2 py-1 w-full min-w-[200px] text-white focus:border-indigo-500 focus:outline-none font-mono text-xs"
           rows={3}
@@ -103,9 +128,9 @@ const EditableRow = React.memo(function EditableRow({ game, columns, onUpdateSuc
     }
 
     return (
-      <input 
-        type="text" 
-        value={val} 
+      <input
+        type="text"
+        value={val}
         onChange={(e) => handleChange(col, e.target.value)}
         className="bg-black/20 border border-white/10 rounded px-2 py-1 w-full min-w-[150px] text-white focus:border-indigo-500 focus:outline-none"
       />
@@ -125,14 +150,18 @@ const EditableRow = React.memo(function EditableRow({ game, columns, onUpdateSuc
           disabled={savingId === draftState.id}
           className={cn(
             "px-4 py-1.5 rounded font-bold text-sm transition-colors",
-            savedId === draftState.id 
-              ? "bg-emerald-500 text-white" 
+            savedId === draftState.id
+              ? "bg-emerald-500 text-white"
               : savingId === draftState.id
                 ? "bg-white/10 text-white/40"
-                : "bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500 hover:text-white"
+                : "bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500 hover:text-white",
           )}
         >
-          {savedId === draftState.id ? 'Saved!' : savingId === draftState.id ? '...' : 'Update'}
+          {savedId === draftState.id
+            ? "Saved!"
+            : savingId === draftState.id
+              ? "..."
+              : "Update"}
         </button>
       </td>
     </tr>
@@ -144,7 +173,7 @@ export default function AdminDashboard() {
   const [games, setGames] = useState<Record<string, any>[]>([]);
   const [columns, setColumns] = useState<string[]>([]);
   const [fetching, setFetching] = useState(false);
-  const [searchFilter, setSearchFilter] = useState('');
+  const [searchFilter, setSearchFilter] = useState("");
   const [lastVisible, setLastVisible] = useState<any>(null);
   const [hideCompleted, setHideCompleted] = useState(true);
 
@@ -156,9 +185,23 @@ export default function AdminDashboard() {
   const loadData = async (isNext = false) => {
     setFetching(true);
     try {
-      let q = query(collection(db, 'games'), limit(50));
+      let q = hideCompleted
+        ? query(
+            collection(db, "games"),
+            where("isDataComplete", "==", false),
+            limit(50),
+          )
+        : query(collection(db, "games"), limit(50));
+
       if (isNext && lastVisible) {
-        q = query(collection(db, 'games'), startAfter(lastVisible), limit(50));
+        q = hideCompleted
+          ? query(
+              collection(db, "games"),
+              where("isDataComplete", "==", false),
+              startAfter(lastVisible),
+              limit(50),
+            )
+          : query(collection(db, "games"), startAfter(lastVisible), limit(50));
       }
       const snap = await getDocs(q);
 
@@ -166,48 +209,49 @@ export default function AdminDashboard() {
         setFetching(false);
         return;
       }
-      
+
       setLastVisible(snap.docs[snap.docs.length - 1]);
-      
+
       const allKeys = new Set<string>(columns);
-      snap.docs.forEach(d => {
-        Object.keys(d.data()).forEach(k => {
-          if (k !== 'id') allKeys.add(k);
+      snap.docs.forEach((d) => {
+        Object.keys(d.data()).forEach((k) => {
+          if (k !== "id") allKeys.add(k);
         });
       });
-      allKeys.add('isDataComplete');
-      const columnsArray = ['id', ...Array.from(allKeys).filter(k => k !== 'id')];
+      allKeys.add("isDataComplete");
+      const columnsArray = [
+        "id",
+        ...Array.from(allKeys).filter((k) => k !== "id"),
+      ];
       setColumns(columnsArray);
 
-      const data = snap.docs.map(d => {
+      const data = snap.docs.map((d) => {
         const raw = d.data();
         const row: Record<string, any> = { id: d.id };
-        columnsArray.forEach(k => {
-          if (k === 'id') return;
+        columnsArray.forEach((k) => {
+          if (k === "id") return;
           const val = raw[k];
-          if (val !== null && typeof val === 'object') {
-             row[k] = JSON.stringify(val, null, 2);
-          } else if (k === 'isDataComplete' && val === undefined) {
-             row[k] = false;
+          if (val !== null && typeof val === "object") {
+            row[k] = JSON.stringify(val, null, 2);
+          } else if (k === "isDataComplete" && val === undefined) {
+            row[k] = false;
           } else if (val === undefined) {
-             row[k] = '';
+            row[k] = "";
           } else {
-             row[k] = val;
+            row[k] = val;
           }
         });
         return row;
       });
-      
-      const filteredData = hideCompleted ? data.filter(g => g.isDataComplete !== true) : data;
 
       if (isNext) {
-        setGames(prev => [...prev, ...filteredData]);
+        setGames((prev) => [...prev, ...data]);
       } else {
-        setGames(filteredData);
+        setGames(data);
       }
     } catch (error) {
-      console.error('Error fetching games', error);
-      alert('Error fetching games');
+      console.error("Error fetching games", error);
+      alert("Error fetching games");
     } finally {
       setFetching(false);
     }
@@ -216,35 +260,48 @@ export default function AdminDashboard() {
   const fetchGames = async () => {
     await loadData(false);
   };
-  
+
   const fetchMoreGames = async () => {
     await loadData(true);
   };
 
   const handleRowUpdate = (updatedRow: Record<string, any>) => {
     if (hideCompleted && updatedRow.isDataComplete === true) {
-      setGames(prev => prev.filter(g => g.id !== updatedRow.id));
+      setGames((prev) => prev.filter((g) => g.id !== updatedRow.id));
     } else {
-      setGames(prev => prev.map(g => g.id === updatedRow.id ? updatedRow : g));
+      setGames((prev) =>
+        prev.map((g) => (g.id === updatedRow.id ? updatedRow : g)),
+      );
     }
   };
 
-  const filteredGames = games.filter(g => 
-    (g.title || '').toString().toLowerCase().includes(searchFilter.toLowerCase()) || 
-    (g.id || '').toString().toLowerCase().includes(searchFilter.toLowerCase())
+  const filteredGames = games.filter(
+    (g) =>
+      (g.title || "")
+        .toString()
+        .toLowerCase()
+        .includes(searchFilter.toLowerCase()) ||
+      (g.id || "")
+        .toString()
+        .toLowerCase()
+        .includes(searchFilter.toLowerCase()),
   );
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-7xl">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-black text-white tracking-tight">Admin CMS</h1>
-          <p className="text-white/60 mt-2">Manual game database overrides. Caution: Live Data.</p>
+          <h1 className="text-3xl font-black text-white tracking-tight">
+            Admin CMS
+          </h1>
+          <p className="text-white/60 mt-2">
+            Manual game database overrides. Caution: Live Data.
+          </p>
         </div>
         <div className="flex items-center gap-6">
           <label className="flex items-center gap-2 text-white cursor-pointer select-none font-medium">
-            <input 
-              type="checkbox" 
+            <input
+              type="checkbox"
               checked={hideCompleted}
               onChange={(e) => setHideCompleted(e.target.checked)}
               className="w-5 h-5 rounded bg-black/20 border-white/20 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-gray-900 cursor-pointer"
@@ -257,7 +314,7 @@ export default function AdminDashboard() {
             className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 px-6 py-3 rounded-xl font-bold transition-colors disabled:opacity-50"
           >
             <Database className="w-5 h-5" />
-            {fetching ? 'Fetching...' : 'Fetch Database'}
+            {fetching ? "Fetching..." : "Fetch Database"}
           </button>
         </div>
       </div>
@@ -280,27 +337,37 @@ export default function AdminDashboard() {
               <thead className="bg-black/40 sticky top-0 z-10 backdrop-blur-md">
                 <tr>
                   {columns.map((col) => (
-                    <th key={col} className="p-4 font-bold text-white border-b border-white/10 capitalize">
+                    <th
+                      key={col}
+                      className="p-4 font-bold text-white border-b border-white/10 capitalize"
+                    >
                       {col}
                     </th>
                   ))}
-                  <th className="p-4 font-bold text-white border-b border-white/10 w-32 text-right">Actions</th>
+                  <th className="p-4 font-bold text-white border-b border-white/10 w-32 text-right">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {filteredGames.map((game) => (
-                  <EditableRow key={game.id} game={game} columns={columns} onUpdateSuccess={handleRowUpdate} />
+                  <EditableRow
+                    key={game.id}
+                    game={game}
+                    columns={columns}
+                    onUpdateSuccess={handleRowUpdate}
+                  />
                 ))}
               </tbody>
             </table>
-            
+
             {filteredGames.length === 0 && (
               <div className="p-8 text-center text-white/40">
                 No games found matching filter.
               </div>
             )}
           </div>
-          
+
           {lastVisible && (
             <div className="mt-4 flex justify-center">
               <button
@@ -308,7 +375,7 @@ export default function AdminDashboard() {
                 disabled={fetching}
                 className="bg-white/10 hover:bg-white/20 text-white px-6 py-2 rounded-lg font-bold transition-colors disabled:opacity-50"
               >
-                {fetching ? '...' : 'Load Next 50'}
+                {fetching ? "..." : "Load Next 50"}
               </button>
             </div>
           )}

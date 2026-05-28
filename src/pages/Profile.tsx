@@ -166,9 +166,16 @@ export default function Profile() {
           limit(10),
         );
         const snapshot = await getDocs(q);
-        const results = snapshot.docs.map(
-          (doc) => ({ id: doc.id, ...doc.data() }) as Game,
-        );
+        const results = snapshot.docs.map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            coverImage: data.coverImage || data.thumbnail || "",
+            customImageApproved:
+              data.customImageApproved || data.isApproved || false,
+          } as unknown as Game;
+        });
         setSearchResults(results);
       } catch (error) {
         console.error("Search failed:", error);
@@ -288,11 +295,13 @@ export default function Profile() {
       // Wins Count
       const winsQ = query(
         collection(db, "plays"),
-        where("winnerIds", "array-contains", userId)
+        where("winnerIds", "array-contains", userId),
       );
       const winsSnap = await getCountFromServer(winsQ);
       setWinsCount(winsSnap.data().count);
-      console.log("Wins count fetched successfully (may require composite index if modified to add other filters).");
+      console.log(
+        "Wins count fetched successfully (may require composite index if modified to add other filters).",
+      );
     } catch (error) {
       console.error("Error fetching profile stats:", error);
     }
@@ -421,9 +430,10 @@ export default function Profile() {
 
   const fetchRecentActivities = async (userId: string) => {
     try {
+      console.warn("Firestore index warning: If 'Recent Activity' fails to load, ensure you have created a composite index for collection 'activities' with: userIds (Array) and timestamp (Descending) in the Firebase console.");
       const q = query(
         collection(db, "activities"),
-        where("userId", "==", userId),
+        where("userIds", "array-contains", userId),
         orderBy("timestamp", "desc"),
         limit(3),
       );
@@ -939,7 +949,7 @@ export default function Profile() {
               The Top Shelf
             </h2>
           </div>
-          
+
           <div className="grid grid-cols-3 gap-4 md:gap-6">
             {[0, 1, 2].map((index) => {
               const favorite = favorites[index];
@@ -958,7 +968,7 @@ export default function Profile() {
                         alt=""
                         className={cn(
                           "absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-150",
-                          (favorite.customImageApproved || favorite.isApproved)
+                          favorite.customImageApproved || favorite.isApproved
                             ? "opacity-100 filter-none"
                             : "blur-2xl scale-125",
                         )}
@@ -968,7 +978,7 @@ export default function Profile() {
                       <div
                         className={cn(
                           "absolute inset-0 transition-colors",
-                          (favorite.customImageApproved || favorite.isApproved)
+                          favorite.customImageApproved || favorite.isApproved
                             ? "bg-gradient-to-t from-gray-900/80 via-transparent to-transparent group-hover:bg-gray-900/20"
                             : "bg-gray-900/60 group-hover:bg-gray-900/40",
                         )}
@@ -977,7 +987,9 @@ export default function Profile() {
 
                     {/* Foreground Content (Centered Title, only show if no art) */}
                     <div className="relative z-10 flex flex-col items-center justify-center h-full p-6 text-center pointer-events-none">
-                      {!(favorite.customImageApproved || favorite.isApproved) && (
+                      {!(
+                        favorite.customImageApproved || favorite.isApproved
+                      ) && (
                         <h3 className="text-sm md:text-base font-black text-white uppercase tracking-tighter leading-tight line-clamp-3 drop-shadow-lg max-w-[80%]">
                           {favorite.gameTitle}
                         </h3>

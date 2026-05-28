@@ -63,7 +63,16 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({ isOpen, onClose, gr
           limit(5)
         );
         const snap = await getDocs(q);
-        setSearchResults(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const results = snap.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          coverImage: data.coverImage || data.thumbnail || '',
+          customImageApproved: data.customImageApproved || data.isApproved || false
+        } as any;
+      });
+      setSearchResults(results);
       } catch (e) {
         console.error(e);
       } finally {

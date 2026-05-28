@@ -1,8 +1,9 @@
-import { db } from '../lib/firebase';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { Game } from '../components/GameCard';
+import { db } from "../lib/firebase";
+import { doc, setDoc, getDoc } from "firebase/firestore";
+import { Game } from "../components/GameCard";
 
-const WIKIDATA_SEARCH_URL = "https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${query}&language=en&format=json&origin=*";
+const WIKIDATA_SEARCH_URL =
+  "https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${query}&language=en&format=json&origin=*";
 const WIKIDATA_SPARQL_URL = "https://query.wikidata.org/sparql";
 
 export interface WikidataSearchResult {
@@ -12,9 +13,11 @@ export interface WikidataSearchResult {
   isWikidataItem: true;
 }
 
-export async function searchWikidata(query: string): Promise<WikidataSearchResult[]> {
+export async function searchWikidata(
+  query: string,
+): Promise<WikidataSearchResult[]> {
   if (!query || query.length < 3) return [];
-  
+
   const sparqlQuery = `
     SELECT DISTINCT ?item ?itemLabel ?itemDescription WHERE {
       SERVICE wikibase:mwapi {
@@ -44,20 +47,20 @@ export async function searchWikidata(query: string): Promise<WikidataSearchResul
   try {
     const url = `${WIKIDATA_SPARQL_URL}?query=${encodeURIComponent(sparqlQuery)}`;
     const response = await fetch(url, {
-      headers: { 
-        "Accept": "application/sparql-results+json",
-        "User-Agent": "CritShelf/1.0 (coreykern2040@gmail.com)"
-      }
+      headers: {
+        Accept: "application/sparql-results+json",
+        "User-Agent": "CritShelf/1.0 (coreykern2040@gmail.com)",
+      },
     });
 
     if (!response.ok) return [];
-    
+
     const data = await response.json();
     return data.results.bindings.map((result: any) => ({
-      id: result.item.value.split('/entity/')[1],
+      id: result.item.value.split("/entity/")[1],
       label: result.itemLabel.value,
       description: result.itemDescription?.value || "No description provided.",
-      isWikidataItem: true
+      isWikidataItem: true,
     }));
   } catch (error) {
     console.error("Wikidata search error:", error);
@@ -65,15 +68,17 @@ export async function searchWikidata(query: string): Promise<WikidataSearchResul
   }
 }
 
-export async function importWikidataGameToFirestore(qid: string): Promise<string> {
+export async function importWikidataGameToFirestore(
+  qid: string,
+): Promise<string> {
   const deterministicId = `wikidata_${qid}`;
-  
+
   // Check if it already exists in Firestore first
-  const existingDoc = await getDoc(doc(db, 'games', deterministicId));
+  const existingDoc = await getDoc(doc(db, "games", deterministicId));
   if (existingDoc.exists()) return deterministicId;
 
   console.log(`🚀 Triggering Just-In-Time Import for Wikidata ID: ${qid}...`);
-  
+
   const sparqlQuery = `
     SELECT ?title ?description ?image ?minPlayers ?maxPlayers ?minAge ?pubDate ?parentGame ?parentTitle ?parentImage
            (GROUP_CONCAT(DISTINCT ?publisherLabel; separator="|") AS ?publishers)
@@ -134,37 +139,47 @@ export async function importWikidataGameToFirestore(qid: string): Promise<string
   try {
     const url = `${WIKIDATA_SPARQL_URL}?query=${encodeURIComponent(sparqlQuery)}`;
     const response = await fetch(url, {
-      headers: { 
-        "Accept": "application/sparql-results+json",
-        "User-Agent": "CritShelf/1.0 (coreykern2040@gmail.com)"
-      }
+      headers: {
+        Accept: "application/sparql-results+json",
+        "User-Agent": "CritShelf/1.0 (coreykern2040@gmail.com)",
+      },
     });
-    
+
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`Wikidata SPARQL error (${response.status}):`, errorText);
-      throw new Error(`Wikidata SPARQL error: ${response.status} ${response.statusText}`);
+      throw new Error(
+        `Wikidata SPARQL error: ${response.status} ${response.statusText}`,
+      );
     }
-    
+
     const data = await response.json();
     const result = data.results.bindings[0];
 
     if (!result) {
-      console.warn(`⚠️ Item ${qid} was rejected by tabletop filters (likely a video game or non-game item).`);
+      console.warn(
+        `⚠️ Item ${qid} was rejected by tabletop filters (likely a video game or non-game item).`,
+      );
       throw new Error("Game rejected: Does not match tabletop criteria.");
     }
 
     const title = result.title ? result.title.value : "Unknown Game";
-    const description = result.description ? result.description.value : "No description available from Wikidata.";
-    const genres = result.genres?.value ? result.genres.value.split('|') : [];
-    
+    const description = result.description
+      ? result.description.value
+      : "No description available from Wikidata.";
+    const genres = result.genres?.value ? result.genres.value.split("|") : [];
+
     const isExpansion = !!result.parentGame;
-    const minPlayers = result.minPlayers ? parseInt(result.minPlayers.value) : 0;
-    const maxPlayers = result.maxPlayers ? parseInt(result.maxPlayers.value) : 0;
-    
+    const minPlayers = result.minPlayers
+      ? parseInt(result.minPlayers.value)
+      : 0;
+    const maxPlayers = result.maxPlayers
+      ? parseInt(result.maxPlayers.value)
+      : 0;
+
     // UI Safety Fallback: Flag if player counts are missing
     const needsVerification = minPlayers === 0 || maxPlayers === 0;
-    
+
     const gameData = {
       title: title,
       name_lowercase: title.toLowerCase(),
@@ -176,24 +191,32 @@ export async function importWikidataGameToFirestore(qid: string): Promise<string
       ageRange: result.minAge ? `${result.minAge.value}+` : "10+",
       playTime: "0",
       rating: 0,
-      isApproved: false, // JIT imported games start as unverified
+      isApproved: true, // Auto-approve JIT imported games
       isExpansion: isExpansion,
-      baseGameId: isExpansion ? `wikidata_${result.parentGame.value.split('/entity/')[1]}` : null,
+      baseGameId: isExpansion
+        ? `wikidata_${result.parentGame.value.split("/entity/")[1]}`
+        : null,
       wikidataId: qid,
-      publishers: result.publishers?.value ? result.publishers.value.split('|') : [],
-      designers: result.designers?.value ? result.designers.value.split('|') : [],
+      publishers: result.publishers?.value
+        ? result.publishers.value.split("|")
+        : [],
+      designers: result.designers?.value
+        ? result.designers.value.split("|")
+        : [],
       categories: genres,
       publishingYear: result.pubDate ? parseInt(result.pubDate.value) : 0,
-      status: 'published',
+      status: "published",
       isVerified: true,
       needsVerification: needsVerification,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      isWikidataItem: false 
+      isWikidataItem: false,
     };
 
-    await setDoc(doc(db, 'games', deterministicId), gameData);
-    console.log(`✅ JIT Import Complete: ${title} saved with ID ${deterministicId}`);
+    await setDoc(doc(db, "games", deterministicId), gameData);
+    console.log(
+      `✅ JIT Import Complete: ${title} saved with ID ${deterministicId}`,
+    );
     return deterministicId;
   } catch (error) {
     console.error("JIT Wikidata Save Error:", error);
@@ -228,17 +251,17 @@ export async function fetchWikidataExpansions(qid: string): Promise<Game[]> {
   try {
     const url = `${WIKIDATA_SPARQL_URL}?query=${encodeURIComponent(sparqlQuery)}`;
     const response = await fetch(url, {
-      headers: { 
-        "Accept": "application/sparql-results+json",
-        "User-Agent": "CritShelf/1.0 (coreykern2040@gmail.com)"
-      }
+      headers: {
+        Accept: "application/sparql-results+json",
+        "User-Agent": "CritShelf/1.0 (coreykern2040@gmail.com)",
+      },
     });
-    
+
     if (!response.ok) return [];
-    
+
     const data = await response.json();
     return data.results.bindings.map((result: any) => {
-      const expansionId = result.item.value.split('/entity/')[1];
+      const expansionId = result.item.value.split("/entity/")[1];
       return {
         id: expansionId, // Use raw QID for JIT potential
         title: result.itemLabel.value,
@@ -246,7 +269,7 @@ export async function fetchWikidataExpansions(qid: string): Promise<Game[]> {
         thumbnail: result.image ? result.image.value : "",
         isWikidataItem: true,
         isExpansion: true,
-        baseGameId: `wikidata_${qid}`
+        baseGameId: `wikidata_${qid}`,
       } as Game;
     });
   } catch (error) {

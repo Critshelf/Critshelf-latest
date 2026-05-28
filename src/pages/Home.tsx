@@ -109,16 +109,13 @@ export default function Home() {
     // REDUCED TO 50 TO PREVENT READ LEAKS
     console.warn(
       "Firestore index warning: If 'Heavy Rotation' (Home page) fails to load, ensure you have " +
-        "created a composite index for collection 'plays' with: participantIds (Array) and " +
+        "created a composite index for collection 'plays' with: userIds (Array) and " +
         "playDate (Ascending/Descending) in the Firebase console.",
     );
     const qPlays = query(
       collection(db, "plays"),
       and(
-        or(
-          where("participantIds", "array-contains", user.uid),
-          where("userId", "==", user.uid),
-        ),
+        where("userIds", "array-contains", user.uid),
         where("playDate", ">=", oneYearAgo),
       ),
       limit(50),

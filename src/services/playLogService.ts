@@ -1,9 +1,9 @@
-import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { 
-  doc, 
-  runTransaction, 
-  serverTimestamp, 
-  collection, 
+import { db, handleFirestoreError, OperationType } from "../lib/firebase";
+import {
+  doc,
+  runTransaction,
+  serverTimestamp,
+  collection,
   addDoc,
   query,
   where,
@@ -14,9 +14,10 @@ import {
   increment,
   or,
   and,
-  limit
-} from 'firebase/firestore';
-import { calculateBaseDC, calculateFinalDC } from '../lib/dcUtils';
+  limit,
+} from "firebase/firestore";
+import { calculateBaseDC, calculateFinalDC } from "../lib/dcUtils";
+import { sendNotification } from "./notificationService";
 
 export interface PlayLogPayload {
   gameId: string;
@@ -46,45 +47,50 @@ async function calculateAndStoreAttackClass(userId: string) {
 
     // 1. Get plays from the last 12 months
     const playsQuery = query(
-      collection(db, 'plays'),
+      collection(db, "plays"),
       and(
-        or(where('participantIds', 'array-contains', userId), where('userId', '==', userId)),
-        where('playDate', '>=', oneYearAgo)
+        where("userIds", "array-contains", userId),
+        where("playDate", ">=", oneYearAgo),
       ),
-      limit(200)
+      limit(200),
     );
     const playsSnap = await getDocs(playsQuery);
-    
+
     if (playsSnap.empty) {
-      await updateDoc(doc(db, 'users', userId), { attackClass: 0 });
+      await updateDoc(doc(db, "users", userId), { attackClass: 0 });
       return;
     }
 
     // 2. Extract unique game IDs directly from plays (cap at 20 to prevent quota death)
-    const rawGameIds = Array.from(new Set(playsSnap.docs.map(d => d.data().gameId))).slice(0, 20);
+    const rawGameIds = Array.from(
+      new Set(playsSnap.docs.map((d) => d.data().gameId)),
+    ).slice(0, 20);
 
     // 3. For each unique game, get a quick mock base DC (don't query reviews to save immense quota)
     const gameDCPromises = rawGameIds.map(async (gameId) => {
-      const gameDoc = await getDoc(doc(db, 'games', gameId));
+      const gameDoc = await getDoc(doc(db, "games", gameId));
       if (!gameDoc.exists()) return null;
-      
+
       const gameData = { id: gameDoc.id, ...gameDoc.data() };
       return calculateBaseDC(gameData);
     });
 
-    const gameDCs = (await Promise.all(gameDCPromises)).filter((dc): dc is number => dc !== null);
+    const gameDCs = (await Promise.all(gameDCPromises)).filter(
+      (dc): dc is number => dc !== null,
+    );
 
     if (gameDCs.length === 0) {
-      await updateDoc(doc(db, 'users', userId), { attackClass: 0 });
+      await updateDoc(doc(db, "users", userId), { attackClass: 0 });
       return;
     }
 
     // 4. Calculate average and round
-    const averageAC = gameDCs.reduce((acc, val) => acc + val, 0) / gameDCs.length;
+    const averageAC =
+      gameDCs.reduce((acc, val) => acc + val, 0) / gameDCs.length;
     const finalAC = Math.round(averageAC);
 
     // 5. Store in user profile
-    await updateDoc(doc(db, 'users', userId), { attackClass: finalAC });
+    await updateDoc(doc(db, "users", userId), { attackClass: finalAC });
   } catch (error) {
     console.error("Firebase Query Error:", error);
   }
@@ -95,32 +101,37 @@ async function calculateAndStoreAttackClass(userId: string) {
  * This handles calculating the proprietary "Group D20 Average" and aggregating "Vibe Tags".
  */
 export async function submitPlayLog(payload: PlayLogPayload) {
-  const { 
-    gameId, 
-    groupId, 
-    rating, 
-    vibeTag, 
-    userId, 
-    userName, 
-    userAvatar, 
-    gameTitle, 
+  const {
+    gameId,
+    groupId,
+    rating,
+    vibeTag,
+    userId,
+    userName,
+    userAvatar,
+    gameTitle,
     gameCover,
     players,
     location,
     date,
-    includedExpansions
+    includedExpansions,
   } = payload;
 
   try {
     // 1. Convert to writeBatch for atomic updates
-    const sessionPath = 'plays';
-    const isWinner = players.some(p => p.userId === userId && p.isWinner);
-    const winnerIds = players.filter(p => p.isWinner).map(p => p.userId).filter(Boolean);
-    const participantIds = Array.from(new Set([userId, ...players.map(p => p.userId).filter(Boolean)]));
+    const sessionPath = "plays";
+    const isWinner = players.some((p) => p.userId === userId && p.isWinner);
+    const winnerIds = players
+      .filter((p) => p.isWinner)
+      .map((p) => p.userId)
+      .filter(Boolean);
+    const userIds = Array.from(
+      new Set([userId, ...players.map((p) => p.userId).filter(Boolean)]),
+    );
 
     const batch = writeBatch(db);
 
-    // Action A: Create the main play document with participantIds
+    // Action A: Create the main play document with userIds
     const playDocRef = doc(collection(db, sessionPath));
     batch.set(playDocRef, {
       userId,
@@ -130,7 +141,7 @@ export async function submitPlayLog(payload: PlayLogPayload) {
       playDate: new Date(date), // true Firestore Timestamp
       location,
       players,
-      participantIds, // Array of ALL participant IDs
+      userIds, // Array of ALL participant IDs
       isWinner,
       winnerIds,
       rating,
@@ -138,19 +149,37 @@ export async function submitPlayLog(payload: PlayLogPayload) {
       createdAt: serverTimestamp(),
       gameCover,
       isArtApproved: payload.isArtApproved ?? false,
-      includedExpansions: includedExpansions || []
+      includedExpansions: includedExpansions || [],
     });
 
     // Action B: Increment totalWins for every player marked as a "winner"
-    winnerIds.forEach(winnerId => {
-      const userRef = doc(db, 'users', winnerId);
+    winnerIds.forEach((winnerId) => {
+      const userRef = doc(db, "users", winnerId);
       batch.update(userRef, {
-        totalWins: increment(1)
+        totalWins: increment(1),
       });
     });
 
     // Commit the batch
     await batch.commit();
+
+    // Fire off notifications to all tagged participants (excluding the actor)
+    players.forEach((p) => {
+      if (p.userId && p.userId !== userId) {
+        sendNotification(
+          p.userId,
+          "TAGGED_IN_PLAY",
+          "Tagged in Play",
+          `${userName} tagged you in a play of ${gameTitle}!`,
+          {
+            gameId,
+            playId: playDocRef.id,
+            actorId: userId,
+            actionUrl: `/game/${gameId}`,
+          },
+        ).catch((err) => console.error("Failed to send tag notification", err));
+      }
+    });
 
     // 3. Update Attack Class (Rolling 12-Month)
     // We do this after logging the play so the new play is included
@@ -160,7 +189,7 @@ export async function submitPlayLog(payload: PlayLogPayload) {
     // Only execute if a group is linked to this session
     if (groupId) {
       // Target the specific game document within the group: Groups/{LinkedGroupID}/GroupGames/{GameID}
-      const groupGameRef = doc(db, 'groups', groupId, 'GroupGames', gameId);
+      const groupGameRef = doc(db, "groups", groupId, "GroupGames", gameId);
 
       await runTransaction(db, async (transaction) => {
         const groupGameDoc = await transaction.get(groupGameRef);
@@ -172,23 +201,24 @@ export async function submitPlayLog(payload: PlayLogPayload) {
             total_d20_score: rating,
             rating_count: 1,
             average_d20: rating,
-            vibe_counts: { [vibeTag]: 1 }
+            vibe_counts: { [vibeTag]: 1 },
           });
         } else {
           // Update Existing Data: If it does exist, calculate the new aggregated data.
           const data = groupGameDoc.data();
-          
+
           // Math Logic:
           // 1. Increment rating_count by 1
           const newRatingCount = (data.rating_count || 0) + 1;
-          
+
           // 2. Add the new D20_Rating to the existing total_d20_score
           const newTotalScore = (data.total_d20_score || 0) + rating;
-          
+
           // 3. Calculate the new average: (total_d20_score / rating_count)
           // Round this to one decimal place and save it as average_d20
-          const newAverage = Math.round((newTotalScore / newRatingCount) * 10) / 10;
-          
+          const newAverage =
+            Math.round((newTotalScore / newRatingCount) * 10) / 10;
+
           // 4. Update the vibe_counts map
           const newVibeCounts = { ...(data.vibe_counts || {}) };
           if (newVibeCounts[vibeTag]) {
@@ -203,7 +233,7 @@ export async function submitPlayLog(payload: PlayLogPayload) {
             total_d20_score: newTotalScore,
             rating_count: newRatingCount,
             average_d20: newAverage,
-            vibe_counts: newVibeCounts
+            vibe_counts: newVibeCounts,
           });
         }
       });
@@ -213,9 +243,9 @@ export async function submitPlayLog(payload: PlayLogPayload) {
   } catch (error) {
     // Use the custom error handler to provide context for debugging security rules or other issues
     handleFirestoreError(
-      error, 
-      OperationType.WRITE, 
-      groupId ? `groups/${groupId}/GroupGames/${gameId}` : 'gameSessions'
+      error,
+      OperationType.WRITE,
+      groupId ? `groups/${groupId}/GroupGames/${gameId}` : "gameSessions",
     );
     return { success: false, error };
   }

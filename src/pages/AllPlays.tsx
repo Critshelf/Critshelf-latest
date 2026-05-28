@@ -44,12 +44,12 @@ export default function AllPlays() {
     try {
       console.warn(
         "Firestore index warning: If 'All Plays' fails to load, ensure you have created " +
-        "a composite index for collection 'plays' with: participantIds (Array) and " +
+        "a composite index for collection 'plays' with: userIds (Array) and " +
         "createdAt (Descending) in the Firebase console."
       );
       const q = query(
         collection(db, path), 
-        or(where('participantIds', 'array-contains', userId), where('userId', '==', userId)),
+        where('userIds', 'array-contains', userId),
         orderBy('createdAt', 'desc'),
         limit(50)
       );
