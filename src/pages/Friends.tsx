@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Search, UserPlus, Check, Users, History, ChevronRight, UserSearch as UserSearchIcon } from 'lucide-react';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, documentId } from 'firebase/firestore';
 import { cn } from '../lib/utils';
 import { useNavigate, Link } from 'react-router-dom';
 import ACBadge from '../components/ACBadge';
@@ -36,17 +36,24 @@ export default function Friends() {
     try {
       const q = query(collection(db, path), where('userIds', 'array-contains', userId));
       const snapshot = await getDocs(q);
-      const friendIds = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return data.userIds.find((id: string) => id !== userId);
-      });
-
-      const friendProfiles = await Promise.all(
-        friendIds.map(async (id) => {
-          const userDoc = await getDoc(doc(db, 'users', id));
-          return { uid: id, ...userDoc.data() } as UserProfile;
+      const friendIds = snapshot.docs
+        .map(doc => {
+          const data = doc.data();
+          return data.userIds.find((id: string) => id !== userId);
         })
-      );
+        .filter((id): id is string => !!id);
+
+      const friendProfiles: UserProfile[] = [];
+      for (let i = 0; i < friendIds.length; i += 10) {
+        const chunk = friendIds.slice(i, i + 10);
+        if (chunk.length > 0) {
+          const qUsers = query(collection(db, 'users'), where(documentId(), 'in', chunk));
+          const usersSnap = await getDocs(qUsers);
+          usersSnap.docs.forEach(uDoc => {
+            friendProfiles.push({ uid: uDoc.id, ...uDoc.data() } as UserProfile);
+          });
+        }
+      }
       setFriends(friendProfiles);
     } catch (error) {
       handleFirestoreError(error, OperationType.LIST, path);

@@ -287,7 +287,7 @@ export default function Profile() {
   }, [targetUserId, profile, isOwnProfile]);
 
   useEffect(() => {
-    if (targetUserId && viewingProfile) {
+    if (targetUserId) {
       setLoadingContent(true);
       // Trigger a passive recalculation of AC when viewing a profile to catch group plays
       calculateAndStoreAttackClass(targetUserId).catch(console.error);
@@ -304,7 +304,7 @@ export default function Profile() {
       setGroupsCount("-");
       setWinsCount("-");
     }
-  }, [targetUserId, viewingProfile]);
+  }, [targetUserId]);
 
   const fetchStats = async (userId: string) => {
     try {
@@ -464,19 +464,40 @@ export default function Profile() {
   const fetchRecentActivities = async (userId: string) => {
     try {
       console.warn(
-        "Firestore index warning: If 'Recent Activity' fails to load, ensure you have created a composite index for collection 'activities' with: userIds (Array) and timestamp (Descending) in the Firebase console.",
+        "Firestore index warning: If 'Recent Activity' fails to load, ensure you have created a composite index for collection 'activities' with: actorId (Ascending) and timestamp (Descending) in the Firebase console.",
       );
+      // Fallback for older activities with userIds, and new activities with actorId
+      // For personal profile, we just want activities performed BY this user
+      // so actorId == userId.
       const q = query(
         collection(db, "activities"),
-        where("userIds", "array-contains", userId),
+        where("actorId", "==", userId),
         orderBy("timestamp", "desc"),
         limit(3),
       );
-      const snapshot = await getDocs(q);
-      const activityListRaw = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      let snapshot = await getDocs(q);
+      
+      // Fallback: If no new activities, try fetching old activities
+      if (snapshot.empty) {
+        const qOld = query(
+          collection(db, "activities"),
+          where("userIds", "array-contains", userId),
+          orderBy("timestamp", "desc"),
+          limit(3),
+        );
+        snapshot = await getDocs(qOld);
+      }
+
+      const activityListRaw = snapshot.docs.map((doc) => {
+        const d = doc.data();
+        return {
+          id: doc.id,
+          userId: d.actorId || d.userId, // Normalize for ActivityItem
+          userName: d.actorName || d.userName, // Normalize for ActivityItem
+          avatarSeed: d.actorId || d.userId, // Use ID as avatar seed if it was missing 
+          ...d,
+        };
+      });
 
       // Fetch fresh game data to enrich activities
       const gameIds = activityListRaw

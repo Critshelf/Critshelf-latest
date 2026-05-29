@@ -56,6 +56,7 @@ const ActivityItem: React.FC<ActivityItemProps> = ({
   const renderContent = () => {
     switch (type) {
       case "play_logged":
+      case "LOG_PLAY":
         return (
           <>
             logged a play of{" "}
@@ -65,6 +66,7 @@ const ActivityItem: React.FC<ActivityItemProps> = ({
           </>
         );
       case "game_added":
+      case "COLLECTION_ADD":
         return (
           <>
             added{" "}
@@ -73,9 +75,8 @@ const ActivityItem: React.FC<ActivityItemProps> = ({
             </span>{" "}
             to their{" "}
             <span className="text-gold-accent font-black">
-              {metadata.shelf}
-            </span>{" "}
-            collection
+              {metadata.shelf || 'collection'}
+            </span>
           </>
         );
       case "new_member":
@@ -97,6 +98,7 @@ const ActivityItem: React.FC<ActivityItemProps> = ({
           </>
         );
       case "event_created":
+      case "SESSION_SCHEDULED":
         return (
           <>
             scheduled a new event{" "}
@@ -115,6 +117,7 @@ const ActivityItem: React.FC<ActivityItemProps> = ({
           </>
         );
       case "game_brought":
+      case "GAME_REQUESTED":
         return (
           <>
             is bringing{" "}
@@ -125,11 +128,13 @@ const ActivityItem: React.FC<ActivityItemProps> = ({
           </>
         );
       case "review_added":
+      case "REVIEW_GAME":
+      case "RATE_GAME":
         return (
           <>
             rated{" "}
             <span className="text-gold-accent font-black tracking-tight uppercase underline decoration-gold-accent/30 decoration-2 underline-offset-4">
-              {metadata.gameTitle}
+              {metadata.gameTitle || metadata.targetName}
             </span>{" "}
             <span className="text-gold-accent font-black">
               {Math.round(metadata.score || 0)}/20

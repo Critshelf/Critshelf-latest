@@ -58,8 +58,6 @@ const GameCardSkeleton: React.FC<{ className?: string }> = ({ className }) => (
 import GameCard, { Game } from "../components/GameCard";
 import { useUser } from "../contexts/UserContext";
 import ActivityItem from "../components/ActivityItem";
-// import logo from '../assets/logo.png';
-const logo = "/logo.png?v=3"; // Adding version parameter to force refresh of updated asset
 
 interface RotationGame extends Game {
   playCount: number;
@@ -191,29 +189,29 @@ export default function Home() {
   }, [user?.uid]);
 
   useEffect(() => {
-    // 3. Friends Reviews (One-time fetch, depends on following list)
-    const following = (profile as any)?.following || [];
-    if (!user || following.length === 0) {
+    // 3. Friends' Recent Plays (Personal Dashboard View)
+    if (!user) {
       setFriendReviews([]);
       setLoadingReviews(false);
       return;
     }
 
-    const fetchFriendsReviews = async () => {
-      const qFriends = query(
+    const fetchFriendsPlays = async () => {
+      const qPlays = query(
         collection(db, "activities"),
-        where("type", "==", "review_added"),
-        where("userId", "in", following.slice(0, 10)),
-        orderBy("timestamp", "desc"),
-        limit(3),
+        where("audienceIds", "array-contains", user.uid),
+        where("type", "==", "LOG_PLAY"),
+        orderBy("createdAt", "desc"),
+        limit(5)
       );
 
       try {
-        const snap = await getDocs(qFriends);
-        const activityListRaw = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        
-        // Extract gameIds
-        const gameIds = activityListRaw.map((a: any) => a.metadata?.gameId).filter(Boolean);
+        const snap = await getDocs(qPlays);
+        const reviewsRaw = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }));
+
+        // Extract gameIds to fetch current game metadata
+        const gameIds = reviewsRaw.map((r: any) => r.targetId).filter(Boolean);
         const uniqueGameIds = Array.from(new Set(gameIds)).slice(0, 10);
         
         const gamesMap = new Map();
@@ -223,30 +221,102 @@ export default function Home() {
           gamesSnap.docs.forEach((doc) => gamesMap.set(doc.id, doc.data()));
         }
         
-        const activityList = activityListRaw.map((a: any) => {
-          if (a.metadata?.gameId) {
-            const gameData = gamesMap.get(a.metadata.gameId) || {};
-            return {
-              ...a,
-              metadata: {
-                ...a.metadata,
-                ...gameData
-              }
-            };
-          }
-          return a;
+        const activityList = reviewsRaw.map((r: any) => {
+          const gameData = gamesMap.get(r.targetId) || {};
+          console.log(`DEBUG: Mapping activity ${r.id}, RAW metadata in firestore:`, r.metadata);
+          return {
+            id: r.id,
+            userId: r.actorId,
+            userName: r.actorName,
+            avatarSeed: r.actorId,
+            type: 'LOG_PLAY',
+            timestamp: r.createdAt,
+            metadata: {
+              ...r.metadata,
+              gameId: r.targetId,
+              playId: r.metadata?.playId,
+              gameTitle: gameData.title || r.targetName || "Unknown Game",
+              coverImage: gameData.coverImage || "",
+              gameCover: gameData.coverImage || "",
+              isApproved: gameData.isArtApproved || false,
+              customImageApproved: gameData.isArtApproved,
+              score: r.metadata?.score,
+              text: r.metadata?.text,
+              location: r.metadata?.location,
+              players: r.metadata?.players,
+            }
+          };
         });
 
         setFriendReviews(activityList);
+        console.log("DEBUG: Bypassed Index Data:", activityList);
       } catch (error) {
-        console.error("Friends Reviews Fetch Error:", error);
+        console.error("Friends Plays Fetch Error:", error);
+        // Try fallback without type equality if composite index fails
+        try {
+            console.log("Trying fallback query for friends plays");
+            const qPlaysFallback = query(
+                collection(db, "activities"),
+                where("audienceIds", "array-contains", user.uid),
+                orderBy("createdAt", "desc"),
+                limit(10)
+            );
+            const fallbackSnap = await getDocs(qPlaysFallback);
+            const reviewsRaw = fallbackSnap.docs
+                .map((d) => ({ id: d.id, ...d.data() }))
+                .filter((r: any) => r.type === "LOG_PLAY")
+                .slice(0, 5);
+
+            // Fetch game data
+            const gameIds = reviewsRaw.map((r: any) => r.targetId).filter(Boolean);
+            const uniqueGameIds = Array.from(new Set(gameIds)).slice(0, 10);
+            
+            const gamesMap = new Map();
+            if (uniqueGameIds.length > 0) {
+                const gamesQ = query(collection(db, "games"), where(documentId(), "in", uniqueGameIds));
+                const gamesSnap = await getDocs(gamesQ);
+                gamesSnap.docs.forEach((doc) => gamesMap.set(doc.id, doc.data()));
+            }
+
+            const activityList = reviewsRaw.map((r: any) => {
+                const gameData = gamesMap.get(r.targetId) || {};
+                console.log(`DEBUG: Mapping activity ${r.id}, RAW metadata in firestore:`, r.metadata);
+                return {
+                    id: r.id,
+                    userId: r.actorId,
+                    userName: r.actorName,
+                    avatarSeed: r.actorId,
+                    type: 'LOG_PLAY',
+                    timestamp: r.createdAt,
+                    metadata: {
+                        ...r.metadata,
+                        gameId: r.targetId,
+                        playId: r.metadata?.playId,
+                        gameTitle: gameData.title || r.targetName || "Unknown Game",
+                        coverImage: gameData.coverImage || "",
+                        gameCover: gameData.coverImage || "",
+                        isApproved: gameData.isArtApproved || false,
+                        customImageApproved: gameData.isArtApproved,
+                        score: r.metadata?.score,
+                        text: r.metadata?.text,
+                        location: r.metadata?.location,
+                        players: r.metadata?.players,
+                    }
+                };
+            });
+            setFriendReviews(activityList);
+            console.log("DEBUG: Bypassed Index Data:", activityList);
+        } catch (fallbackError) {
+             console.error("Fallback Friends Plays Fetch Error:", fallbackError);
+             setLoadingReviews(false);
+        }
       } finally {
         setLoadingReviews(false);
       }
     };
 
-    fetchFriendsReviews();
-  }, [user?.uid, (profile as any)?.following?.join(",")]);
+    fetchFriendsPlays();
+  }, [user?.uid]);
 
   useEffect(() => {
     if (rotationGames.length > 0 && rotationIndex >= rotationGames.length) {
@@ -257,32 +327,8 @@ export default function Home() {
   // Removed global loading check to allow shell to render instantly
 
   return (
-    <div className="min-h-screen bg-charcoal pt-12 pb-32 px-4 sm:px-6">
+    <div className="min-h-screen bg-charcoal pt-4 pb-32 px-4 sm:px-6">
       <div className="max-w-4xl mx-auto space-y-12">
-        {/* App Header / Logo */}
-        <header className="flex flex-col items-center justify-center py-8">
-          <Link
-            to="/"
-            className="flex flex-col items-center gap-3 group transition-transform hover:scale-105 duration-300"
-          >
-            <div className="relative w-24 h-24 flex items-center justify-center bg-white rounded-3xl shadow-inner overflow-hidden border border-white/10">
-              <img
-                src={logo}
-                alt="CritShelf Logo"
-                loading="eager"
-                style={{ mixBlendMode: "multiply" as any }}
-                className="w-full h-full object-contain contrast-[1.1]"
-              />
-            </div>
-            <h1 className="text-4xl md:text-5xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-emerald-accent to-gold-accent drop-shadow-sm">
-              CritShelf
-            </h1>
-          </Link>
-          <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.3em] mt-2">
-            Your Tabletop Legacy
-          </p>
-        </header>
-
         {/* Step 1: The "Heavy Rotation" Section */}
         <section>
           <div className="flex items-center justify-between mb-6 px-2">
@@ -518,152 +564,69 @@ export default function Home() {
         <section>
           <div className="flex items-center justify-between mb-8 px-2">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-gold-accent/10 rounded-lg flex items-center justify-center border border-gold-accent/20">
-                <Star className="w-4 h-4 text-gold-accent fill-gold-accent" />
+              <div className="w-8 h-8 bg-emerald-accent/10 rounded-lg flex items-center justify-center border border-emerald-accent/20">
+                <Dices className="w-4 h-4 text-emerald-accent" />
               </div>
               <h2 className="text-xl font-black text-white tracking-tight uppercase tracking-widest text-[10px]">
-                Recent Ratings
+                Friends' Recent Plays
               </h2>
             </div>
           </div>
 
-          <div className="space-y-6 mb-8">
+          <div className="flex flex-row overflow-x-auto snap-x snap-mandatory gap-4 pb-4 items-stretch px-2 no-scrollbar mb-8">
             {!user ? (
-              <div className="bg-white/5 border border-white/10 rounded-[2rem] p-8 text-center">
-                <MessageCircle className="w-10 h-10 text-emerald-accent/20 mx-auto mb-3" />
+              <div className="w-full bg-white/5 border border-white/10 rounded-[2rem] p-8 text-center shrink-0 snap-center">
+                <Users className="w-10 h-10 text-emerald-accent/20 mx-auto mb-3" />
                 <h3 className="text-lg font-black text-white mb-2">
-                  Join the Community
+                  See Friends' Plays
                 </h3>
                 <p className="text-white/40 text-sm font-medium mb-6">
-                  See what your friends are playing and reviewing.
+                  Log in to see what your friends are playing.
                 </p>
                 <button
                   onClick={() => navigate("/auth")}
-                  className="w-full py-3 rounded-xl border border-emerald-accent/20 text-emerald-accent font-black text-[10px] uppercase tracking-widest hover:bg-emerald-accent hover:text-charcoal transition-all"
+                  className="w-full max-w-xs mx-auto py-3 rounded-xl border border-emerald-accent/20 text-emerald-accent font-black text-[10px] uppercase tracking-widest hover:bg-emerald-accent hover:text-charcoal transition-all block"
                 >
-                  Login to see reviews
+                  Login to view
                 </button>
               </div>
             ) : loadingReviews ? (
               [1, 2, 3].map((i) => (
                 <div
                   key={i}
-                  className="animate-pulse bg-white/5 border border-white/10 rounded-[2.5rem] p-6 h-32 shadow-xl"
+                  className="min-w-[280px] w-full max-w-[320px] shrink-0 snap-start animate-pulse bg-white/5 border border-white/10 rounded-[2.5rem] p-6 h-32 shadow-xl"
                 />
               ))
             ) : friendReviews.length > 0 ? (
               friendReviews.map((activity) => (
-                <motion.div
-                  key={activity.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="bg-white/5 border border-white/10 rounded-[2.5rem] p-6 shadow-xl relative group hover:bg-white/[0.07] transition-all"
-                >
-                  <div className="flex flex-col md:flex-row gap-6">
-                    {/* Character/Friend Column */}
-                    <div className="flex flex-row md:flex-col items-center gap-4 shrink-0">
-                      <UserAvatar
-                        user={{
-                          uid: activity.userId,
-                          avatarSeed: activity.avatarSeed,
-                        }}
-                        size="md"
-                        className="rounded-2xl border-2 border-white/10 shadow-lg group-hover:border-gold-accent/30 transition-all"
-                      />
-                      <div className="text-left md:text-center">
-                        <span className="text-sm font-black text-white block truncate max-w-[100px]">
-                          {activity.userName}
-                        </span>
-                        <span className="text-[8px] font-black text-white/20 uppercase tracking-widest">
-                          Friend
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Content Column */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-4 mb-4">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-16 rounded-xl overflow-hidden border border-white/10 shadow-lg flex-shrink-0 relative">
-                            <img
-                              src={activity.metadata.coverImage || activity.metadata.gameCover || null}
-                              alt={activity.metadata.gameTitle}
-                              className={cn(
-                                "w-full h-full object-cover transition-transform group-hover:scale-110",
-                                (activity.metadata.customImageApproved || activity.metadata.isApproved) ? "" : "blur-md opacity-50 grayscale"
-                              )}
-                              referrerPolicy="no-referrer"
-                            />
-                            {!(activity.metadata.customImageApproved || activity.metadata.isApproved) && (
-                              <div className="absolute inset-0 flex items-center justify-center p-1 text-center bg-gray-900/60 font-black">
-                                <span className="text-[6px] uppercase leading-tight text-white/50 tracking-tighter break-all line-clamp-3">{activity.metadata.gameTitle}</span>
-                              </div>
-                            )}
-                          </div>
-                          <div>
-                            <h3 className="text-lg font-black text-white leading-tight uppercase tracking-tight line-clamp-1">
-                              {activity.metadata.gameTitle}
-                            </h3>
-                            <div className="flex items-center gap-2 mt-1">
-                              <MessageCircle className="w-3 h-3 text-gold-accent/50" />
-                              <span className="text-[9px] font-black text-white/20 uppercase tracking-tighter">
-                                Review Posted
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="shrink-0">
-                          <D20Die
-                            value={activity.metadata.score}
-                            theme="gold"
-                            size="sm"
-                            className="drop-shadow-[0_0_10px_rgba(251,191,36,0.2)]"
-                          />
-                        </div>
-                      </div>
-
-                      {activity.metadata.text ? (
-                        <div className="relative">
-                          <Quote className="absolute -top-1 -left-2 w-4 h-4 text-white/5" />
-                          <p className="text-white/60 text-sm italic leading-relaxed line-clamp-2 pl-4">
-                            "{activity.metadata.text}"
-                          </p>
-                        </div>
-                      ) : (
-                        <p className="text-white/20 text-[10px] font-bold uppercase tracking-widest mt-2 ml-4">
-                          Rated without a comment
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
+                <div key={activity.id} className="min-w-[280px] w-full max-w-[320px] shrink-0 snap-start">
+                  <ActivityItem activity={activity} compact={false} />
+                </div>
               ))
             ) : (
-              <div className="text-center py-16 bg-white/5 rounded-[3rem] border-2 border-dashed border-white/10">
-                <Users className="w-12 h-12 text-white/10 mx-auto mb-4" />
+              <div className="w-full text-center py-16 bg-white/5 rounded-[3rem] border-2 border-dashed border-white/10 shrink-0 snap-center">
+                <Dices className="w-12 h-12 text-white/10 mx-auto mb-4" />
                 <h3 className="text-lg font-black text-white mb-2">
-                  No Reviews from Friends
+                  No Recent Plays
                 </h3>
                 <p className="text-white/30 text-sm font-bold max-w-xs mx-auto">
-                  Follow some fellow gamers or get your friends to share their
-                  thoughts!
+                  Follow some fellow gamers or wait for them to log their next session!
                 </p>
                 <button
-                  onClick={() => navigate("/search-users")}
+                  onClick={() => navigate("/browse")}
                   className="mt-6 text-gold-accent font-black text-[10px] uppercase tracking-widest hover:underline"
                 >
-                  Discover new friends
+                  Discover new games
                 </button>
               </div>
             )}
           </div>
 
           <button
-            onClick={() => navigate("/friend-reviews")}
+            onClick={() => navigate("/social")}
             className="w-full py-4 rounded-2xl border-2 border-white/10 text-white/40 font-black text-xs uppercase tracking-widest hover:bg-white/5 hover:text-white transition-all flex items-center justify-center gap-2 group"
           >
-            See All Friend Reviews
+            See Full Social Hub
             <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </button>
         </section>

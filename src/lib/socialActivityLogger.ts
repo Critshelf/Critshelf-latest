@@ -44,30 +44,41 @@ export async function logSocialActivity({
 
     let actorAC = 0;
 
-    // Fetch actor's follows array
-    const userDocRef = doc(db, "users", actorId);
-    const userDoc = await getDoc(userDocRef);
-    if (userDoc.exists()) {
-      const userData = userDoc.data();
-      const follows = userData.follows || [];
-      follows.forEach((id: string) => audienceIds.add(id));
-      actorAC = userData.attackClass || 0;
+    try {
+      // Fetch actor's data
+      const userDocRef = doc(db, "users", actorId);
+      const userDoc = await getDoc(userDocRef);
+      if (userDoc.exists()) {
+        actorAC = userDoc.data().attackClass || 0;
+      }
+
+      // Find users who follow the actor
+      const followersSnap = await getDocs(
+        query(collection(db, "users"), where("following", "array-contains", actorId))
+      );
+      followersSnap.docs.forEach((d) => audienceIds.add(d.id));
+    } catch (err) {
+      console.error("Error fetching followers for audienceIds:", err);
     }
 
     const groupIds: string[] = [];
 
-    // Fetch all groups the actor is in and add all members
-    const groupsSnap = await getDocs(
-      query(
-        collection(db, "groups"),
-        where("memberIds", "array-contains", actorId),
-      ),
-    );
-    groupsSnap.docs.forEach((d) => {
-      groupIds.push(d.id);
-      const memberIds = d.data().memberIds || [];
-      memberIds.forEach((m: string) => audienceIds.add(m));
-    });
+    try {
+      // Fetch all groups the actor is in and add all members
+      const groupsSnap = await getDocs(
+        query(
+          collection(db, "groups"),
+          where("memberIds", "array-contains", actorId),
+        ),
+      );
+      groupsSnap.docs.forEach((d) => {
+        groupIds.push(d.id);
+        const memberIds = d.data().memberIds || [];
+        memberIds.forEach((m: string) => audienceIds.add(m));
+      });
+    } catch (err) {
+      console.error("Error fetching groups for audienceIds:", err);
+    }
 
     const finalAudience = [...audienceIds];
 

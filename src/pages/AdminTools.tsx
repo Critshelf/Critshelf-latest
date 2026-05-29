@@ -89,6 +89,236 @@ export default function AdminTools() {
   // Stats
   const [totalGamesCount, setTotalGamesCount] = useState<number | null>(null);
 
+  // Patch audienceIds using following array
+  const [patchLoading, setPatchLoading] = useState(false);
+  const [patchStatus, setPatchStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
+
+  const [selfInvitePatchLoading, setSelfInvitePatchLoading] = useState(false);
+  const [selfInvitePatchStatus, setSelfInvitePatchStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
+
+  const scanMissingPlayIds = async () => {
+    try {
+      const snap = await getDocs(query(collection(db, 'activities'), where('type', '==', 'LOG_PLAY'), limit(10)));
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() as any }));
+      console.log('LOG_PLAY ACTIVITIES DUMP:', docs.map(d => ({
+        id: d.id,
+        targetId: d.targetId,
+        metadata: d.metadata
+      })));
+      alert(`Found ${docs.length} LOG_PLAY. Check console.`);
+    } catch(e: any) {
+      alert("Error: " + e.message);
+    }
+  };
+
+  const [playBackfillLoading, setPlayBackfillLoading] = useState(false);
+  const [playBackfillStatus, setPlayBackfillStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
+
+  const runPlayIdBackfill = async () => {
+    if (playBackfillLoading) return;
+    setPlayBackfillLoading(true);
+    setPlayBackfillStatus({ type: null, message: 'Finding missing playIds...' });
+
+    try {
+      // 1. Fetch activities with missing playId
+      const actSnap = await getDocs(query(collection(db, 'activities'), where('type', '==', 'LOG_PLAY')));
+      const actsToFix = actSnap.docs.filter(d => !d.data()?.metadata?.playId);
+
+      if (actsToFix.length === 0) {
+        setPlayBackfillStatus({ type: 'success', message: 'No missing playIds found.' });
+        setPlayBackfillLoading(false);
+        return;
+      }
+
+      setPlayBackfillStatus({ type: null, message: `Found ${actsToFix.length} activities. Matching with plays...` });
+
+      let batch = writeBatch(db);
+      let operationCount = 0;
+      let totalPatched = 0;
+
+      // Match plays for each activity
+      for (const actDoc of actsToFix) {
+        const actData = actDoc.data();
+        
+        // Find a matching play
+        const playsSnap = await getDocs(query(
+            collection(db, 'plays'), 
+            where('userId', '==', actData.actorId),
+            where('gameId', '==', actData.targetId),
+            limit(1)
+        ));
+
+        if (!playsSnap.empty) {
+            const playDoc = playsSnap.docs[0];
+            const correctPlayId = playDoc.id;
+            
+            // Reconstruct metadata
+            const oldMetadata = actData.metadata || {};
+            const newMetadata = { ...oldMetadata, playId: correctPlayId };
+            
+            batch.update(actDoc.ref, { metadata: newMetadata });
+            operationCount++;
+            totalPatched++;
+        }
+
+        if (operationCount >= 400) {
+            await batch.commit();
+            batch = writeBatch(db);
+            operationCount = 0;
+            console.log(`Committed chunk... total patched: ${totalPatched}`);
+        }
+      }
+
+      if (operationCount > 0) {
+          await batch.commit();
+      }
+
+      setPlayBackfillStatus({ type: 'success', message: `Patch complete! Linked ${totalPatched} activities to plays.` });
+    } catch(err: any) {
+        console.error("Backfill Error:", err);
+        setPlayBackfillStatus({ type: 'error', message: err?.message || 'Failed to backfill.' });
+    } finally {
+        setPlayBackfillLoading(false);
+    }
+  };
+
+  const runSelfInvitePatch = async () => {
+    if (selfInvitePatchLoading) return;
+    setSelfInvitePatchLoading(true);
+    setSelfInvitePatchStatus({ type: null, message: 'Running self-invite patch...' });
+
+    try {
+      setSelfInvitePatchStatus({ type: null, message: 'Fetching activities...' });
+      const activitiesSnap = await getDocs(collection(db, 'activities'));
+      
+      if (activitiesSnap.empty) {
+        setSelfInvitePatchStatus({ type: 'success', message: 'No activities found.' });
+        setSelfInvitePatchLoading(false);
+        return;
+      }
+
+      let batch = writeBatch(db);
+      let operationCount = 0;
+      let totalPatched = 0;
+      
+      setSelfInvitePatchStatus({ type: null, message: 'Patching activities...' });
+
+      for (const actDoc of activitiesSnap.docs) {
+        const actData = actDoc.data();
+        const actorId = actData.actorId;
+        const audienceIds = actData.audienceIds || [];
+        
+        if (actorId && !audienceIds.includes(actorId)) {
+          const correctedAudienceIds = [...new Set([actorId, ...audienceIds])];
+
+          batch.update(actDoc.ref, { audienceIds: correctedAudienceIds });
+          operationCount++;
+          totalPatched++;
+        }
+
+        // Commit every 400 operations
+        if (operationCount >= 400) {
+          await batch.commit();
+          batch = writeBatch(db);
+          operationCount = 0;
+          console.log(`Committed self-invite chunk... total patched so far: ${totalPatched}`);
+        }
+      }
+
+      if (operationCount > 0) {
+        await batch.commit();
+      }
+
+      console.log(`Self-Invite Patch Complete. Total patched: ${totalPatched}`);
+      setSelfInvitePatchStatus({ type: 'success', message: `Patch complete! Successfully updated ${totalPatched} activities.` });
+    } catch (err: any) {
+      console.error("Self-Invite Patch Error:", err);
+      setSelfInvitePatchStatus({ type: 'error', message: err?.message || 'Self-Invite Patch Failed.' });
+    } finally {
+      setSelfInvitePatchLoading(false);
+    }
+  };
+  
+  const runAudiencePatch = async () => {
+    if (patchLoading) return;
+    setPatchLoading(true);
+    setPatchStatus({ type: null, message: 'Running audience patch...' });
+
+    try {
+      // 1. Fetch all users to build follower map
+      setPatchStatus({ type: null, message: 'Fetching users...' });
+      const usersSnap = await getDocs(collection(db, 'users'));
+      const followerMap: Record<string, string[]> = {};
+      
+      usersSnap.docs.forEach(doc => {
+        const data = doc.data();
+        const userId = doc.id;
+        const following = data.following || [];
+        
+        // If User A follows User B, add User A to User B's follower list
+        following.forEach((followedId: string) => {
+          if (!followerMap[followedId]) {
+            followerMap[followedId] = [];
+          }
+          followerMap[followedId].push(userId);
+        });
+      });
+
+      // 2. Fetch all activities
+      setPatchStatus({ type: null, message: 'Fetching activities...' });
+      const activitiesSnap = await getDocs(collection(db, 'activities'));
+      
+      if (activitiesSnap.empty) {
+        setPatchStatus({ type: 'success', message: 'No activities found.' });
+        setPatchLoading(false);
+        return;
+      }
+
+      // 3. Batched execution
+      let batch = writeBatch(db);
+      let operationCount = 0;
+      let totalPatched = 0;
+      
+      setPatchStatus({ type: null, message: 'Patching activities...' });
+
+      for (const actDoc of activitiesSnap.docs) {
+        const actData = actDoc.data();
+        const actorId = actData.actorId;
+        
+        // Sometimes actorId may be null if it's very old, handle if it exists
+        if (actorId) {
+          const followers = followerMap[actorId] || [];
+          const correctedAudienceIds = [...new Set([actorId, ...followers])];
+
+          batch.update(actDoc.ref, { audienceIds: correctedAudienceIds });
+          operationCount++;
+          totalPatched++;
+        }
+
+        // Commit every 400 operations to stay well within the 500 limit
+        if (operationCount >= 400) {
+          await batch.commit();
+          batch = writeBatch(db); // Create a new batch
+          operationCount = 0;
+          console.log(`Committed chunk... total patched so far: ${totalPatched}`);
+        }
+      }
+
+      // Commit any remaining
+      if (operationCount > 0) {
+        await batch.commit();
+      }
+
+      console.log(`Audience Patch Complete. Total patched: ${totalPatched}`);
+      setPatchStatus({ type: 'success', message: `Patch complete! Successfully updated ${totalPatched} activities.` });
+    } catch (err: any) {
+      console.error("Audience Patch Error:", err);
+      setPatchStatus({ type: 'error', message: err?.message || 'Audience Patch Failed.' });
+    } finally {
+      setPatchLoading(false);
+    }
+  };
+
   // Initialize bookmark from localStorage
   useEffect(() => {
     const initBookmark = async () => {
@@ -545,6 +775,103 @@ export default function AdminTools() {
         </div>
 
         <div className="grid grid-cols-1 gap-8">
+          {/* Audience Patch Card */}
+          <div className="bg-white/5 border border-white/10 rounded-[3rem] p-12 shadow-2xl backdrop-blur-xl">
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h2 className="text-2xl font-black text-white mb-2">Patch Audience IDs</h2>
+                <p className="text-white/60 font-medium max-w-lg leading-relaxed">
+                  Retroactively fixes `audienceIds` in the `activities` collection. 
+                  <span className="text-emerald-accent"> Includes fixing missing actor IDs and repairing previous backfills.</span>
+                </p>
+              </div>
+              <Shield className="w-12 h-12 text-emerald-accent/20" />
+            </div>
+
+            <div className="flex flex-col gap-6">
+              <button
+                onClick={runSelfInvitePatch}
+                disabled={selfInvitePatchLoading}
+                className="w-full flex items-center justify-center gap-3 bg-amber-500/20 border border-amber-500/30 text-amber-400 font-black py-6 rounded-2xl hover:bg-amber-500/30 hover:text-amber-300 transition-all disabled:opacity-50 group"
+              >
+                {selfInvitePatchLoading ? (
+                  <>
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                    <span>Processing Self-Invites Updates...</span>
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-6 h-6" />
+                    <span>Run Self-Invite Patch Script</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={runPlayIdBackfill}
+                disabled={playBackfillLoading}
+                className="w-full flex items-center justify-center gap-3 bg-blue-500/20 border border-blue-500/30 text-blue-400 font-black py-4 rounded-2xl hover:bg-blue-500/30 hover:text-blue-300 transition-all group disabled:opacity-50"
+              >
+                {playBackfillLoading ? 'Processing...' : 'Backfill Missing Play IDs'}
+              </button>
+              {playBackfillStatus.type && (
+                <div className={`p-6 rounded-2xl font-bold flex items-center gap-4 ${
+                  playBackfillStatus.type === 'success' 
+                    ? 'bg-emerald-accent/10 border border-emerald-accent/20 text-emerald-accent' 
+                    : 'bg-rose-500/10 border border-rose-500/20 text-rose-500'
+                }`}>
+                  {playBackfillStatus.message}
+                </div>
+              )}
+
+              <button
+                onClick={scanMissingPlayIds}
+                className="w-full flex items-center justify-center gap-3 bg-fuchsia-500/20 border border-fuchsia-500/30 text-fuchsia-400 font-black py-4 rounded-2xl hover:bg-fuchsia-500/30 hover:text-fuchsia-300 transition-all group"
+              >
+                Scan Activities (Console Dump)
+              </button>
+
+              {selfInvitePatchStatus.type && (
+                <div className={`p-6 rounded-2xl font-bold flex items-center gap-4 ${
+                  selfInvitePatchStatus.type === 'success' 
+                    ? 'bg-emerald-accent/10 border border-emerald-accent/20 text-emerald-accent' 
+                    : 'bg-rose-500/10 border border-rose-500/20 text-rose-500'
+                }`}>
+                  {selfInvitePatchStatus.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <Loader2 className="w-5 h-5 animate-spin" />}
+                  {selfInvitePatchStatus.message}
+                </div>
+              )}
+              <button
+                onClick={runAudiencePatch}
+                disabled={patchLoading}
+                className="w-full flex items-center justify-center gap-3 bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 font-black py-6 rounded-2xl hover:bg-indigo-500/30 hover:text-indigo-300 transition-all disabled:opacity-50 group"
+              >
+                {patchLoading ? (
+                  <>
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                    <span>Processing Audience Updates...</span>
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-6 h-6" />
+                    <span>Run Audience Patch Script</span>
+                  </>
+                )}
+              </button>
+
+              {patchStatus.type && (
+                <div className={`p-6 rounded-2xl font-bold flex items-center gap-4 ${
+                  patchStatus.type === 'success' 
+                    ? 'bg-emerald-accent/10 border border-emerald-accent/20 text-emerald-accent' 
+                    : 'bg-rose-500/10 border border-rose-500/20 text-rose-500'
+                }`}>
+                  {patchStatus.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <Loader2 className="w-5 h-5 animate-spin" />}
+                  {patchStatus.message}
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Bulk Verify Card */}
           <div className="bg-white/5 border border-white/10 rounded-[3rem] p-12 shadow-2xl backdrop-blur-xl">
             <div className="flex items-center justify-between mb-8">

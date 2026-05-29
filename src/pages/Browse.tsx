@@ -208,14 +208,14 @@ export default function Browse() {
     searchWikidata(debouncedSearch)
       .then(async (results) => {
         // Query local Firestore for these Wikidata IDs to merge coverImage
-        const wikidataIds = results.map((r) => r.id);
+        const wikidataLocalIds = results.map((r) => `wikidata_${r.id}`);
         const localGamesMap = new Map<string, any>();
 
-        if (wikidataIds.length > 0) {
+        if (wikidataLocalIds.length > 0) {
           try {
             const chunkSize = 10;
-            for (let i = 0; i < wikidataIds.length; i += chunkSize) {
-              const chunk = wikidataIds.slice(i, i + chunkSize);
+            for (let i = 0; i < wikidataLocalIds.length; i += chunkSize) {
+              const chunk = wikidataLocalIds.slice(i, i + chunkSize);
               // using documentId() to match doc IDs
               const localQ = query(
                 collection(db, "games"),
@@ -230,13 +230,14 @@ export default function Browse() {
         }
 
         const mapped = results.map((res) => {
-          const localData = localGamesMap.get(res.id);
+          const localId = `wikidata_${res.id}`;
+          const localData = localGamesMap.get(localId);
           const localCover = localData?.coverImage || localData?.thumbnail;
           const localApproved =
             localData?.customImageApproved || localData?.isApproved;
 
           return {
-            id: res.id,
+            id: localId,
             title: res.label,
             name_lowercase: res.label.toLowerCase(),
             description: res.description,

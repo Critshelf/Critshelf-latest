@@ -113,7 +113,11 @@ export async function calculateAndStoreAttackClass(userId: string) {
     });
 
     if (validDocs.length === 0) {
-      await updateDoc(doc(db, "users", userId), { attackClass: 0 });
+      const userRef = doc(db, "users", userId);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists() && userSnap.data().attackClass !== 0) {
+        await updateDoc(userRef, { attackClass: 0 });
+      }
       return;
     }
 
@@ -136,7 +140,11 @@ export async function calculateAndStoreAttackClass(userId: string) {
     );
 
     if (gameDCs.length === 0) {
-      await updateDoc(doc(db, "users", userId), { attackClass: 0 });
+      const userRef = doc(db, "users", userId);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists() && userSnap.data().attackClass !== 0) {
+        await updateDoc(userRef, { attackClass: 0 });
+      }
       return;
     }
 
@@ -145,8 +153,12 @@ export async function calculateAndStoreAttackClass(userId: string) {
       gameDCs.reduce((acc, val) => acc + val, 0) / gameDCs.length;
     const finalAC = Math.round(averageAC);
 
-    // 5. Store in user profile
-    await updateDoc(doc(db, "users", userId), { attackClass: finalAC });
+    // 5. Store in user profile only if the Attack Class has changed
+    const userRef = doc(db, "users", userId);
+    const userSnap = await getDoc(userRef);
+    if (userSnap.exists() && userSnap.data().attackClass !== finalAC) {
+      await updateDoc(userRef, { attackClass: finalAC });
+    }
   } catch (error) {
     console.error("Firebase Query Error:", error);
   }

@@ -431,10 +431,12 @@ export default function GamePage() {
           }
         } else {
           // JIT Import Logic: If the ID doesn't exist, check if it's a Wikidata QID
-          if (id.startsWith('Q') && !id.startsWith('wikidata_')) {
+          const qidMatch = id.match(/^(?:wikidata_)?(Q\d+)$/);
+          if (qidMatch) {
             try {
-              console.log(`🔍 JIT Import triggered for ${id}`);
-              const savedId = await importWikidataGameToFirestore(id);
+              const qid = qidMatch[1];
+              console.log(`🔍 JIT Import triggered for ${qid}`);
+              const savedId = await importWikidataGameToFirestore(qid);
               navigate(`/game/${savedId}`, { replace: true });
             } catch (err) {
               console.error("JIT Import failed:", err);

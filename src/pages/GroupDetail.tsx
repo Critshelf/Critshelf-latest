@@ -271,7 +271,7 @@ export default function GroupDetail() {
       group.memberIds ||
       group.members.map((m: any) => (typeof m === "string" ? m : m.userId));
     fetchMembers(memberIds);
-  }, [group?.memberIds, id]);
+  }, [group ? (group.memberIds || group.members.map((m: any) => typeof m === "string" ? m : m.userId)).join(',') : '', id]);
 
   useEffect(() => {
     if (!id || !user) return;

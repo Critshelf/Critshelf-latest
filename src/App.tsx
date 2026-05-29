@@ -25,6 +25,8 @@ import PlayDetails from "./pages/PlayDetails";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { UserProvider, useUser } from "./contexts/UserContext";
 import { Loader2 } from "lucide-react";
+import ScrollToTop from "./components/ScrollToTop";
+import Header from "./components/Header";
 
 function AppContent() {
   const { loading } = useUser();
@@ -39,9 +41,11 @@ function AppContent() {
 
   return (
     <Router>
+      <ScrollToTop />
       <div className="min-h-screen bg-charcoal font-sans text-white flex flex-col">
         <Navbar />
         <main className="flex-1">
+          <Header />
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/browse" element={<Browse />} />
