@@ -70,7 +70,7 @@ export default function GroupFeed({ groupId }: GroupFeedProps) {
       }
     };
     fetchFeed();
-  }, [user, groupId]);
+  }, [user?.uid, groupId]);
 
   const loadMore = async () => {
     if (!user || !lastDoc || loadingMore || !hasMore || !groupId) return;

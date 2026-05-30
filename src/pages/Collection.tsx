@@ -241,7 +241,7 @@ export default function Collection() {
       
       // 3. Search Filter (Can search by title even without hydrated data)
       const query = searchTerm.toLowerCase();
-      const matchesTitle = item.gameTitle.toLowerCase().includes(query);
+      const matchesTitle = (item.gameTitle || "").toLowerCase().includes(query);
       if (query && !matchesTitle) return false;
 
       // The following filters require hydrated metadata

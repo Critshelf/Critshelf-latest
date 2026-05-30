@@ -29,7 +29,7 @@ export default function Friends() {
     if (user) {
       fetchFriends(user.uid);
     }
-  }, [user]);
+  }, [user?.uid]);
 
   const fetchFriends = async (userId: string) => {
     const path = 'friendships';

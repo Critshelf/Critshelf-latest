@@ -56,7 +56,7 @@ export default function UserSearchView() {
     if (profile) {
       setFollowing(profile.following || []);
     }
-  }, [profile]);
+  }, [profile?.following?.length]); // Guard against complex object reference
 
   // Search logic
   useEffect(() => {

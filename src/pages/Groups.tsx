@@ -48,7 +48,7 @@ export default function Groups() {
       fetchUnifiedFeed();
       return () => unsubscribeGroups();
     }
-  }, [user]);
+  }, [user?.uid]);
 
   const fetchGroups = (userId: string) => {
     const path = 'groups';

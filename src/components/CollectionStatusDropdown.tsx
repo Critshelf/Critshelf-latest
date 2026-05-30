@@ -54,7 +54,7 @@ export default function CollectionStatusDropdown({
       setLoading(false);
     });
     return () => unsub();
-  }, [user, gameId]);
+  }, [user?.uid, gameId]);
 
   const shelves = [
     { id: 'owned', label: 'Owned', color: 'bg-emerald-500' },

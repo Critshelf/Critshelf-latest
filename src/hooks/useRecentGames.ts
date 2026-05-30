@@ -42,7 +42,7 @@ export function useRecentGames() {
             collection(db, 'games'),
             where('isExpansion', '==', false),
             orderBy('createdAt', 'desc'),
-            limit(10)
+            limit(5)
           );
           const snap = await getDocs(qStrict);
           games = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
@@ -56,7 +56,7 @@ export function useRecentGames() {
             const qFallback = query(
               collection(db, 'games'),
               orderBy('createdAt', 'desc'),
-              limit(10)
+              limit(5)
             );
             const snap = await getDocs(qFallback);
             games = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
@@ -68,7 +68,7 @@ export function useRecentGames() {
         // Level 3: Absolute Fallback (Just any 10 games)
         if (games.length === 0) {
           try {
-            const qAbsolute = query(collection(db, 'games'), limit(10));
+            const qAbsolute = query(collection(db, 'games'), limit(5));
             const snap = await getDocs(qAbsolute);
             games = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
           } catch (err: any) {

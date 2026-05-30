@@ -199,7 +199,7 @@ export default function GroupDetail() {
     });
 
     return () => unsubscribe();
-  }, [id, user]);
+  }, [id, user?.uid]);
 
   const handlePollToEvent = (poll: Poll, optionIndex: number) => {
     if (!poll.options[optionIndex]) return;
@@ -260,7 +260,7 @@ export default function GroupDetail() {
     );
 
     return () => unsubscribe();
-  }, [id, user, navigate]);
+  }, [id, user?.uid, navigate]);
 
   // Secondary fetches - only run when relevant data changes or initially
   useEffect(() => {
@@ -283,7 +283,7 @@ export default function GroupDetail() {
     fetchFollowing();
 
     return () => {};
-  }, [id, user]);
+  }, [id, user?.uid]);
 
   const fetchGroupData = async (groupId: string) => {
     const path = "groups";

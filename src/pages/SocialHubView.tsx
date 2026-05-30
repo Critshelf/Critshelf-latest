@@ -206,7 +206,7 @@ export default function SocialHubView() {
     };
 
     fetchData();
-  }, [user, profile]);
+  }, [user?.uid, profile?.following?.length]); // Destructured to primitive dependencies
 
   const loadMore = async () => {
     if (!user || !profile || loadingMore || !hasMore) return;

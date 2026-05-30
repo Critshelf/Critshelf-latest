@@ -65,7 +65,7 @@ export default function SocialHubFeed() {
       }
     };
     fetchFeed();
-  }, [user]);
+  }, [user?.uid]);
 
   const loadMore = async () => {
     if (!user || !lastDoc || loadingMore || !hasMore) return;

@@ -85,12 +85,6 @@ export default function Browse() {
   const buildBaseQuery = (level: number) => {
     let q = query(collection(db, "games"));
 
-    if (level === 1) {
-      q = query(q, where("isExpansion", "==", false));
-    } else if (level === 2) {
-      q = query(q, where("isExpansion", "==", false));
-    }
-
     if (selectedGenres.length > 0) {
       // Use the first selected genre for server-side filtering
       q = query(q, where("categories", "array-contains", selectedGenres[0]));
@@ -238,8 +232,8 @@ export default function Browse() {
 
           return {
             id: localId,
-            title: res.label,
-            name_lowercase: res.label.toLowerCase(),
+            title: res.label || "Untitled",
+            name_lowercase: (res.label || "").toLowerCase(),
             description: res.description,
             isWikidataItem: true,
             coverImage:
@@ -262,18 +256,18 @@ export default function Browse() {
   const filteredGames = useMemo(() => {
     // Deduplicate Firestore and Wikidata results by ID first, then by Title
     const seenIds = new Set(games.map((g) => g.id));
-    const seenTitles = new Set(games.map((g) => g.title.toLowerCase()));
+    const seenTitles = new Set(games.map((g) => (g.title || "").toLowerCase()));
 
     // Add Firestore results to sets already
     // Filter Wikidata results against seen IDs and Titles
     const uniqueWikidata = wikidataResults.filter((wg) => {
       const isNewId = !seenIds.has(wg.id);
-      const isNewTitle = !seenTitles.has(wg.title.toLowerCase());
+      const isNewTitle = !seenTitles.has((wg.title || "").toLowerCase());
 
       // If we keep it, update seen sets to prevent internal Wikidata duplicates
       if (isNewId && isNewTitle) {
         seenIds.add(wg.id);
-        seenTitles.add(wg.title.toLowerCase());
+        seenTitles.add((wg.title || "").toLowerCase());
         return true;
       }
       return false;

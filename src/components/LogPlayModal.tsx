@@ -173,7 +173,7 @@ export default function LogPlayModal({
       fetchFriends();
       fetchGroups(user.uid);
     }
-  }, [user, profile]);
+  }, [user?.uid, (profile as any)?.following?.length]);
 
   const fetchFriends = async () => {
     try {
@@ -466,23 +466,27 @@ export default function LogPlayModal({
       });
 
       if (result.success) {
-        // Log Activity
-        logSocialActivity({
-          actorId: user.uid,
-          actorName: user.displayName || "Anonymous",
-          type: "LOG_PLAY",
-          targetId: selectedGame.id,
-          targetName: selectedGame.title,
-          metadata: {
-            playId: result.playId,
-            gameCover: selectedGame.coverImage,
-            isArtApproved: selectedGame.isArtApproved,
-            score: finalPlayers.find((p) => p.userId === user.uid)?.score,
-            winners: finalPlayers.filter((p) => p.isWinner).map((p) => p.name),
-            groupId: selectedGroupId || undefined,
-            groupName: groups.find((g) => g.id === selectedGroupId)?.name,
-          },
-        });
+        try {
+          // Log Activity
+          await logSocialActivity({
+            actorId: user.uid,
+            actorName: user.displayName || "Anonymous",
+            type: "LOG_PLAY",
+            targetId: selectedGame.id,
+            targetName: selectedGame.title,
+            metadata: {
+              playId: result.playId,
+              gameCover: selectedGame.coverImage,
+              isArtApproved: selectedGame.isArtApproved,
+              score: rating,
+              winners: finalPlayers.filter((p) => p.isWinner).map((p) => p.name),
+              groupId: selectedGroupId || undefined,
+              groupName: groups.find((g) => g.id === selectedGroupId)?.name,
+            },
+          });
+        } catch (error) {
+          console.error("DEBUG: Nav Menu Log Play Failed: ", error);
+        }
 
         onClose();
         setStep(1);

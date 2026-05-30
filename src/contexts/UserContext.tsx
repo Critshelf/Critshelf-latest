@@ -139,15 +139,22 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
             const data = snap.data() as UserProfile;
             
             // Trigger AC init if it's completely missing
-            if (data.attackClass === undefined) {
+            if (data.attackClass === undefined || data.attackClass === null) {
               import('../services/playLogService').then(({ calculateAndStoreAttackClass }) => {
                 calculateAndStoreAttackClass(currentUser.uid).catch(console.error);
               });
             }
 
-            setProfile({
-              ...data,
-              notificationPreferences: data.notificationPreferences || DEFAULT_NOTIFICATION_PREFERENCES
+            // Only update profile state if something actually changed (prevents re-render loops)
+            setProfile(prevProfile => {
+              const newProfile = {
+                ...data,
+                notificationPreferences: data.notificationPreferences || DEFAULT_NOTIFICATION_PREFERENCES
+              };
+              if (JSON.stringify(prevProfile) === JSON.stringify(newProfile)) {
+                return prevProfile;
+              }
+              return newProfile;
             });
           } else {
             // First time login - initialize profile if not existing

@@ -257,8 +257,8 @@ service cloud.firestore {
     // Activities
     match /activities/{activityId} {
       allow read: if true; // Social feed is public
-      allow create: if isAuthenticated() && (request.auth.uid == request.resource.data.userId || isAdmin());
-      allow update, delete: if isAuthenticated() && (request.auth.uid == resource.data.userId || isAdmin());
+      allow create: if isAuthenticated() && ((request.auth.uid == request.resource.data.userId) || (request.auth.uid == request.resource.data.actorId) || isAdmin());
+      allow update, delete: if isAuthenticated() && ((request.auth.uid == resource.data.userId) || (request.auth.uid == resource.data.actorId) || isAdmin());
     }
 
     // Groups

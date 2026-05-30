@@ -37,7 +37,7 @@ export default function AllPlays() {
     } else {
       navigate('/profile');
     }
-  }, [user, navigate]);
+  }, [user?.uid, navigate]);
 
   const fetchSessions = async (userId: string) => {
     const path = 'plays';

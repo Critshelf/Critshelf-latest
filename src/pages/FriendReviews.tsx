@@ -42,7 +42,7 @@ export default function FriendReviews() {
 
   useEffect(() => {
     fetchReviews();
-  }, [profile]);
+  }, [profile?.following?.length]);
 
   const fetchReviews = async (isLoadMore = false) => {
     if (!profile) return;

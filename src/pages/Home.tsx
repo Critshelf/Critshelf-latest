@@ -530,17 +530,17 @@ export default function Home() {
 
           <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory no-scrollbar pb-6 px-2 items-stretch">
             {loadingRecent ? (
-              Array.from({ length: 3 }).map((_, i) => (
+              Array.from({ length: 5 }).map((_, i) => (
                 <div
                   key={i}
-                  className="w-full shrink-0 snap-center min-h-[12rem]"
+                  className="min-w-[200px] max-w-[240px] sm:min-w-[240px] shrink-0 snap-start min-h-[12rem] flex-1"
                 >
                   <GameCardSkeleton className="h-full" />
                 </div>
               ))
             ) : recentGames.length > 0 ? (
-              recentGames.map((game) => (
-                <div key={game.id} className="w-full shrink-0 snap-center">
+              recentGames.slice(0, 5).map((game) => (
+                <div key={game.id} className="min-w-[200px] max-w-[240px] sm:min-w-[240px] shrink-0 snap-start flex-1">
                   <GameCard
                     game={game}
                     compact

@@ -22,7 +22,7 @@ export default function Auth() {
     if (user && !loading) {
       navigate('/');
     }
-  }, [user, loading, navigate]);
+  }, [user?.uid, loading, navigate]);
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();

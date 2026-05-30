@@ -25,7 +25,7 @@ export default function AccountSettings() {
       setEmail(user.email || '');
       setLoading(false);
     }
-  }, [user]);
+  }, [user?.uid, user?.displayName, user?.email]);
 
   const handleSave = async () => {
     if (!user) return;

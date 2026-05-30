@@ -166,20 +166,20 @@ const GameCard: React.FC<GameCardProps> = (props) => {
             </div>
 
             {/* Rating Die in corner */}
-            {(displayPersonal && displayPersonal !== '-' || communityRating) ? (
+            {(displayPersonal && displayPersonal !== '-' || (typeof communityRating === 'number' && communityRating > 0)) ? (
               <div className="flex flex-col items-end gap-2 bg-black/60 backdrop-blur-md px-2 py-2 rounded-xl shadow-xl border border-white/10 pointer-events-auto transition-transform hover:scale-105">
-                {displayPersonal && displayPersonal !== '-' && (
+                {displayPersonal && displayPersonal !== '-' ? (
                   <div className="flex flex-col items-center">
                     <span className="text-[8px] font-black text-gold-accent uppercase tracking-widest mb-1">You</span>
                     <D20Die value={displayPersonal} theme="gold" size="sm" />
                   </div>
-                )}
-                {communityRating && (
+                ) : null}
+                {(typeof communityRating === 'number' && communityRating > 0) ? (
                   <div className="flex flex-col items-center">
                     <span className="text-[8px] font-black text-emerald-accent uppercase tracking-widest mb-1">Avg</span>
                     <D20Die value={communityRating} theme="emerald" size="sm" />
                   </div>
-                )}
+                ) : null}
               </div>
             ) : null}
           </div>

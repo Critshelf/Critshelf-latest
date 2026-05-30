@@ -214,7 +214,7 @@ export default function GroupLibrary({ groupId, members }: GroupLibraryProps) {
 
   const filteredGames = libraryGames.filter(game => {
     const query = searchQuery.toLowerCase();
-    const matchesTitle = game.title.toLowerCase().includes(query);
+    const matchesTitle = (game.title || "").toLowerCase().includes(query);
     const matchesDesigners = game.designers?.some(d => d.toLowerCase().includes(query));
     const matchesPublishers = game.publishers?.some(p => p.toLowerCase().includes(query));
     const matchesArtists = game.artists?.some(a => a.toLowerCase().includes(query));

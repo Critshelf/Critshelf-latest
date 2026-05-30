@@ -68,7 +68,7 @@ export default function NotificationTray({
     );
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user?.uid]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

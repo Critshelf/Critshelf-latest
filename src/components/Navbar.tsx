@@ -50,7 +50,7 @@ export default function Navbar() {
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user?.uid]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

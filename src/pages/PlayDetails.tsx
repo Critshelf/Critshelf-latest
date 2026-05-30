@@ -89,14 +89,14 @@ export default function PlayDetails() {
                   {play.location}
                 </div>
               )}
-              {play.rating && (
+              {typeof play.rating === 'number' ? (
                 <div className="bg-gold-accent/10 text-gold-accent px-4 py-2 rounded-xl">
                   <span className="block text-[10px] uppercase font-black tracking-widest text-gold-accent/50">
                     Score
                   </span>
                   <span className="font-bold">{play.rating} / 20</span>
                 </div>
-              )}
+              ) : null}
             </div>
 
             <div className="space-y-4">
@@ -144,11 +144,11 @@ export default function PlayDetails() {
                           </span>
                         )}
                       </div>
-                      {player.score && (
+                      {typeof player.score === 'number' ? (
                         <div className="text-sm text-white/50">
                           Score: {player.score}
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 ))}
