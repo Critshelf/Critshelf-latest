@@ -9,6 +9,7 @@ import {
   limit,
   startAfter,
   QueryDocumentSnapshot,
+  onSnapshot
 } from "firebase/firestore";
 import { useUser } from "../contexts/UserContext";
 import { Loader2, Trophy, MessageCircle, Plus, Star } from "lucide-react";
@@ -42,29 +43,59 @@ export default function SocialHubFeed() {
   useEffect(() => {
     if (!user) return;
 
-    const fetchFeed = async () => {
-      setLoading(true);
-      try {
-        const q = query(
-          collection(db, "activities"),
-          where("audienceIds", "array-contains", user.uid),
-          orderBy("createdAt", "desc"),
-          limit(10),
-        );
-        const snap = await getDocs(q);
-        const activities = snap.docs.map(
-          (doc) => ({ id: doc.id, ...doc.data() }) as Activity,
-        );
-        setFeed(activities);
-        setLastDoc(snap.docs[snap.docs.length - 1] || null);
-        setHasMore(snap.docs.length === 10);
-      } catch (error) {
-        console.error("Error fetching social feed:", error);
-      } finally {
+    setLoading(true);
+    const q = query(
+      collection(db, "activities"),
+      where("audienceIds", "array-contains", user.uid),
+      orderBy("createdAt", "desc"),
+      limit(10),
+    );
+
+    let isSubscribed = true;
+    let unsubscribeFallback: (() => void) | undefined;
+
+    const unsubscribe = onSnapshot(q, (snap) => {
+      if (!isSubscribed) return;
+      const activities = snap.docs.map(
+        (doc) => ({ id: doc.id, ...doc.data({ serverTimestamps: 'estimate' }) }) as Activity,
+      );
+      setFeed(activities);
+      setLastDoc(snap.docs[snap.docs.length - 1] || null);
+      setHasMore(snap.docs.length === 10);
+      setLoading(false);
+    }, (error) => {
+      console.warn("Index missing for Social Feed, using fallback:", error);
+      const qFallback = query(
+        collection(db, "activities"),
+        orderBy("createdAt", "desc"),
+        limit(20),
+      );
+      unsubscribeFallback = onSnapshot(qFallback, (fallbackSnap) => {
+        if (!isSubscribed) return;
+        const activities = fallbackSnap.docs
+          .filter((d) => (d.data().audienceIds || []).includes(user.uid))
+          .map((doc) => ({ id: doc.id, ...doc.data({ serverTimestamps: 'estimate' }) }) as Activity);
+        // Sort in memory
+        activities.sort((a, b) => {
+          const tA = a.createdAt?.toMillis?.() || a.timestamp?.toMillis?.() || 0;
+          const tB = b.createdAt?.toMillis?.() || b.timestamp?.toMillis?.() || 0;
+          return tB - tA;
+        });
+        setFeed(activities.slice(0, 10));
+        setLastDoc(null); // disable pagination for fallback
+        setHasMore(false);
         setLoading(false);
-      }
+      }, (err) => {
+        console.error("Fallback feed error:", err);
+        if (isSubscribed) setLoading(false);
+      });
+    });
+
+    return () => {
+      isSubscribed = false;
+      unsubscribe();
+      if (unsubscribeFallback) unsubscribeFallback();
     };
-    fetchFeed();
   }, [user?.uid]);
 
   const loadMore = async () => {
@@ -81,13 +112,13 @@ export default function SocialHubFeed() {
       );
       const snap = await getDocs(q);
       const newActivities = snap.docs.map(
-        (doc) => ({ id: doc.id, ...doc.data() }) as Activity,
+        (doc) => ({ id: doc.id, ...doc.data({ serverTimestamps: 'estimate' }) }) as Activity,
       );
       setFeed((prev) => [...prev, ...newActivities]);
       setLastDoc(snap.docs[snap.docs.length - 1] || null);
       setHasMore(snap.docs.length === 10);
     } catch (error) {
-      console.error("Error loading more feed items:", error);
+      console.warn("Error loading more feed items:", error);
     } finally {
       setLoadingMore(false);
     }
@@ -182,7 +213,7 @@ export default function SocialHubFeed() {
                 )}
                 {item.metadata?.score !== undefined && (
                   <p className="text-sm text-white/50 mt-1">
-                    Score: {item.metadata.score}
+                    Score: {item.metadata.score}/20
                   </p>
                 )}
               </>
@@ -200,7 +231,7 @@ export default function SocialHubFeed() {
                       {item.actorName}
                     </Link>
                     <ACBadge value={item.actorAC} size="sm" />
-                    <span>reviewed</span>
+                    <span>{item.metadata?.text ? "reviewed" : "rated"}</span>
                     <Link
                       to={`/game/${item.targetId}`}
                       className="font-bold underline decoration-white/20 hover:decoration-white transition-all"
@@ -222,7 +253,7 @@ export default function SocialHubFeed() {
                       size="md"
                     />
                     <span className="text-[8px] uppercase tracking-widest text-gold-accent font-black mt-1">
-                      Score
+                      Score / 20
                     </span>
                   </div>
                 )}

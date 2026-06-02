@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
-import { doc, updateDoc, collection, query, where, getDocs, serverTimestamp, getDoc } from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc, collection, query, where, getDocs, serverTimestamp, getDoc } from 'firebase/firestore';
 import { useUser } from '../contexts/UserContext';
 import { CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { sendNotification } from '../services/notificationService';
@@ -63,17 +63,19 @@ export default function ModerateArt() {
         setIsFetching(false);
 
         if (action === 'approve') {
+          let finalUrl = imageUrl;
+
           // 1. Update game document
           await updateDoc(gameRef, {
-            coverImage: imageUrl,
+            coverImage: finalUrl,
             hasHighResArt: true,
-             customImageApproved: true,
+            customImageApproved: true,
             updatedAt: serverTimestamp()
           });
 
           // 2. Mark pending art as approved and notify user
           const pendingQuery = query(
-            collection(db, 'PendingArt'),
+            collection(db, 'art_approvals'),
             where('gameId', '==', gameId),
             where('status', '==', 'pending')
           );
@@ -81,10 +83,7 @@ export default function ModerateArt() {
           
           for (const d of pendingSnap.docs) {
             const data = d.data();
-            await updateDoc(doc(db, 'PendingArt', d.id), {
-              status: 'approved',
-              updatedAt: serverTimestamp()
-            });
+            await deleteDoc(doc(db, 'art_approvals', d.id));
 
             // Notify submitter
             if (data.submittedBy) {
@@ -106,7 +105,7 @@ export default function ModerateArt() {
         } else if (action === 'reject') {
           // Mark pending art as rejected
           const pendingQuery = query(
-            collection(db, 'PendingArt'),
+            collection(db, 'art_approvals'),
             where('gameId', '==', gameId),
             where('status', '==', 'pending')
           );
@@ -114,10 +113,7 @@ export default function ModerateArt() {
           
           for (const d of pendingSnap.docs) {
             const data = d.data();
-            await updateDoc(doc(db, 'PendingArt', d.id), {
-              status: 'rejected',
-              updatedAt: serverTimestamp()
-            });
+            await deleteDoc(doc(db, 'art_approvals', d.id));
 
             // Notify submitter
             if (data.submittedBy) {

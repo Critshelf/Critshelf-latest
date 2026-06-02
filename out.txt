@@ -1,0 +1,122 @@
+src/components/GroupEvents.tsx:1:import React, { useState, useEffect } from 'react';
+src/components/GroupEvents.tsx:27:  useEffect(() => {
+src/components/CollectionStatusDropdown.tsx:1:import { useState, useEffect } from 'react';
+src/components/CollectionStatusDropdown.tsx:43:  useEffect(() => {
+src/components/SocialHubFeed.tsx:1:import { useState, useEffect } from "react";
+src/components/SocialHubFeed.tsx:43:  useEffect(() => {
+src/components/NewArrivals.tsx:1:import React, { useState, useEffect } from 'react';
+src/components/NewArrivals.tsx:15:  useEffect(() => {
+src/components/ScrollToTop.tsx:1:import { useEffect } from "react";
+src/components/ScrollToTop.tsx:7:  useEffect(() => {
+src/components/GameTitleWithDC.tsx:26:  React.useEffect(() => {
+src/components/LogPlayModal.tsx:1:import { useState, useEffect, useCallback } from "react";
+src/components/LogPlayModal.tsx:171:  useEffect(() => {
+src/components/LogPlayModal.tsx:217:  useEffect(() => {
+src/components/LogPlayModal.tsx:226:  useEffect(() => {
+src/components/LogPlayModal.tsx:257:  useEffect(() => {
+src/components/NotificationTray.tsx:1:import { useState, useEffect, useRef } from "react";
+src/components/NotificationTray.tsx:40:  useEffect(() => {
+src/components/NotificationTray.tsx:73:  useEffect(() => {
+src/components/DiscoverGroupsModal.tsx:1:import React, { useState, useEffect } from 'react';
+src/components/DiscoverGroupsModal.tsx:182:  useEffect(() => {
+src/components/GroupLibrary.tsx:1:import React, { useState, useEffect, useMemo } from 'react';
+src/components/GroupLibrary.tsx:87:  useEffect(() => {
+src/components/GroupLibrary.tsx:176:  useEffect(() => {
+src/components/CreateEventModal.tsx:30:import { useEffect } from "react";
+src/components/CreateEventModal.tsx:84:  useEffect(() => {
+src/components/CreateEventModal.tsx:120:  useEffect(() => {
+src/components/GroupChat.tsx:1:import React, { useState, useEffect, useRef } from 'react';
+src/components/GroupChat.tsx:51:  useEffect(() => {
+src/components/GroupChat.tsx:75:  useEffect(() => {
+src/components/BringGameModal.tsx:1:import React, { useState, useEffect } from 'react';
+src/components/BringGameModal.tsx:32:  useEffect(() => {
+src/components/EditGroupAvatarModal.tsx:1:import React, { useState, useEffect } from 'react';
+src/components/EditGroupAvatarModal.tsx:29:  useEffect(() => {
+src/components/ActivePollsModal.tsx:1:import React, { useState, useEffect } from 'react';
+src/components/ActivePollsModal.tsx:19:  useEffect(() => {
+src/components/EventDetailsModal.tsx:1:import React, { useState, useEffect } from 'react';
+src/components/EventDetailsModal.tsx:50:  useEffect(() => {
+src/components/GroupFeed.tsx:1:import { useState, useEffect } from "react";
+src/components/GroupFeed.tsx:48:  useEffect(() => {
+src/components/Navbar.tsx:1:import { useState, useEffect, useRef } from 'react';
+src/components/Navbar.tsx:30:  useEffect(() => {
+src/components/Navbar.tsx:55:  useEffect(() => {
+src/components/Navbar.tsx:69:  useEffect(() => {
+src/components/GameCard.tsx:1:import React, { useState, useEffect } from 'react';
+src/components/RequestGameModal.tsx:1:import React, { useState, useEffect } from "react";
+src/components/RequestGameModal.tsx:57:  useEffect(() => {
+src/components/ManageGroupModal.tsx:1:import React, { useState, useEffect } from 'react';
+src/components/ManageGroupModal.tsx:81:  useEffect(() => {
+src/pages/Auth.tsx:1:import React, { useEffect, useState } from 'react';
+src/pages/Auth.tsx:21:  useEffect(() => {
+src/pages/GamePage.tsx:1:import { useState, useEffect, useMemo } from 'react';
+src/pages/GamePage.tsx:87:  useEffect(() => {
+src/pages/GamePage.tsx:451:  useEffect(() => {
+src/pages/GamePage.tsx:543:  useEffect(() => {
+src/pages/GamePage.tsx:605:  useEffect(() => {
+src/pages/GamePage.tsx:642:  useEffect(() => {
+src/pages/GamePage.tsx:675:  useEffect(() => {
+src/pages/GamePage.tsx:695:  useEffect(() => {
+src/pages/Friends.tsx:1:import { useState, useEffect } from 'react';
+src/pages/Friends.tsx:28:  useEffect(() => {
+src/pages/Home.tsx:1:import React, { useState, useEffect } from "react";
+src/pages/Home.tsx:96:  useEffect(() => {
+src/pages/Home.tsx:175:  useEffect(() => {
+src/pages/Home.tsx:271:  useEffect(() => {
+src/pages/Home.tsx:390:  useEffect(() => {
+src/pages/SocialHubView.tsx:1:import { useState, useEffect, useMemo } from 'react';
+src/pages/SocialHubView.tsx:76:  useEffect(() => {
+src/pages/SocialHubView.tsx:120:  useEffect(() => {
+src/pages/Profile.tsx:1:import React, { useState, useEffect } from "react";
+src/pages/Profile.tsx:147:  useEffect(() => {
+src/pages/Profile.tsx:160:  useEffect(() => {
+src/pages/Profile.tsx:210:  useEffect(() => {
+src/pages/Profile.tsx:265:  useEffect(() => {
+src/pages/Profile.tsx:289:  useEffect(() => {
+src/pages/PlayDetails.tsx:1:import React, { useEffect, useState } from "react";
+src/pages/PlayDetails.tsx:13:  useEffect(() => {
+src/pages/Browse.tsx:1:import { useState, useEffect, useMemo } from "react";
+src/pages/Browse.tsx:61:  useEffect(() => {
+src/pages/Browse.tsx:69:  useEffect(() => {
+src/pages/Browse.tsx:108:  useEffect(() => {
+src/pages/Browse.tsx:195:  useEffect(() => {
+src/pages/ModerateGame.tsx:1:import { useEffect, useState } from 'react';
+src/pages/ModerateGame.tsx:20:  useEffect(() => {
+src/pages/Groups.tsx:1:import { useState, useEffect } from 'react';
+src/pages/Groups.tsx:45:  useEffect(() => {
+src/pages/AccountSettings.tsx:1:import { useState, useEffect } from 'react';
+src/pages/AccountSettings.tsx:22:  useEffect(() => {
+src/pages/PrivacySecurity.tsx:1:import { useState, useEffect } from 'react';
+src/pages/PrivacySecurity.tsx:63:  useEffect(() => {
+src/pages/ModerateArt.tsx:1:import { useEffect, useState } from 'react';
+src/pages/ModerateArt.tsx:22:  useEffect(() => {
+src/pages/AllPlays.tsx:1:import { useState, useEffect } from 'react';
+src/pages/AllPlays.tsx:34:  useEffect(() => {
+src/pages/GroupDetail.tsx:1:import React, { useState, useEffect } from "react";
+src/pages/GroupDetail.tsx:173:  useEffect(() => {
+src/pages/GroupDetail.tsx:185:  useEffect(() => {
+src/pages/GroupDetail.tsx:233:  useEffect(() => {
+src/pages/GroupDetail.tsx:263:  useEffect(() => {
+src/pages/GroupDetail.tsx:273:  useEffect(() => {
+src/pages/Collection.tsx:1:import { useState, useEffect, useMemo } from 'react';
+src/pages/Collection.tsx:64:  useEffect(() => {
+src/pages/Collection.tsx:104:  useEffect(() => {
+src/pages/Collection.tsx:184:  useEffect(() => {
+src/pages/ActivityLog.tsx:1:import { useState, useEffect } from 'react';
+src/pages/ActivityLog.tsx:41:  useEffect(() => {
+src/pages/AdminTools.tsx:1:import { useState, useEffect } from 'react';
+src/pages/AdminTools.tsx:323:  useEffect(() => {
+src/pages/AdminTools.tsx:345:  useEffect(() => {
+src/pages/FriendReviews.tsx:1:import React, { useState, useEffect } from 'react';
+src/pages/FriendReviews.tsx:43:  useEffect(() => {
+src/pages/MyPreferences.tsx:1:import { useState, useEffect } from "react";
+src/pages/MyPreferences.tsx:88:  useEffect(() => {
+src/pages/UserSearchView.tsx:1:import { useState, useEffect } from 'react';
+src/pages/UserSearchView.tsx:55:  useEffect(() => {
+src/pages/UserSearchView.tsx:62:  useEffect(() => {
+src/pages/ArtApprovalPage.tsx:1:import React, { useEffect, useState } from 'react';
+src/pages/ArtApprovalPage.tsx:17:  useEffect(() => {
+src/hooks/useRecentGames.ts:1:import { useState, useEffect } from 'react';
+src/hooks/useRecentGames.ts:10:  useEffect(() => {
+src/contexts/UserContext.tsx:1:import React, { createContext, useContext, useState, useEffect } from 'react';
+src/contexts/UserContext.tsx:123:  useEffect(() => {

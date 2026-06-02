@@ -68,8 +68,12 @@ export default function Groups() {
         setGroups(groupList);
         setLoading(false);
       }
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, path);
+    }, (error: any) => {
+      if (error?.code !== 'resource-exhausted') {
+        handleFirestoreError(error, OperationType.LIST, path);
+      } else {
+         console.warn("Quota exceeded for Groups onSnapshot");
+      }
       setLoading(false);
     });
 

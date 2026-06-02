@@ -29,7 +29,8 @@ import {
   arrayRemove,
   startAfter,
   QueryDocumentSnapshot,
-  documentId
+  documentId,
+  onSnapshot
 } from 'firebase/firestore';
 import { cn } from '../lib/utils';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
@@ -64,11 +65,6 @@ export default function SocialHubView() {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = (searchParams.get('tab') as Tab) || 'activity';
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
-  const [feed, setFeed] = useState<FeedItem[]>([]);
-  const [lastReviewDoc, setLastReviewDoc] = useState<QueryDocumentSnapshot | null>(null);
-  const [lastActivityDoc, setLastActivityDoc] = useState<QueryDocumentSnapshot | null>(null);
-  const [hasMore, setHasMore] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [friends, setFriends] = useState<any[]>([]);
   const [groups, setGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,211 +74,48 @@ export default function SocialHubView() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchData = async () => {
-      if (!user || !profile) {
-        setLoading(false);
-        return;
-      }
-      setLoading(true);
-      try {
-        const following = profile.following || [];
-        setFollowingIds(following);
+    let unsubscribeFriends: (() => void) | undefined;
+    let unsubscribeGroups: (() => void) | undefined;
 
-        // 2. Start all secondary fetches in parallel
-        const friendsPromise = following.length > 0
-          ? getDocs(query(collection(db, 'users'), where('uid', 'in', following.slice(0, 30))))
-          : Promise.resolve({ docs: [] });
-
-        const groupsPromise = getDocs(query(
-          collection(db, 'groups'),
-          where('memberIds', 'array-contains', user.uid)
-        ));
-
-        const reviewsPromise = following.length > 0
-          ? getDocs(query(
-              collection(db, 'reviews'),
-              where('userId', 'in', following.slice(0, 30)),
-              orderBy('createdAt', 'desc'),
-              limit(10)
-            ))
-          : Promise.resolve({ docs: [] });
-
-        // Wait for basic structural data
-        const [friendsSnap, groupsSnap] = await Promise.all([friendsPromise, groupsPromise]);
-        
-        const friendProfiles = friendsSnap.docs.map(d => ({ uid: d.id, ...d.data() }));
-        setFriends(friendProfiles);
-
-        const groupsList = groupsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setGroups(groupsList);
-
-        // Fetch activities using group IDs we just got
-        const groupIds = groupsList.map(g => g.id);
-        const activitiesPromise = groupIds.length > 0
-          ? getDocs(query(
-              collection(db, 'activities'),
-              where('groupId', 'in', groupIds.slice(0, 30)),
-              orderBy('createdAt', 'desc'),
-              limit(10)
-            ))
-          : Promise.resolve({ docs: [] });
-
-        // Resolve Feed Items
-        const [reviewsSnap, activitiesSnap] = await Promise.all([reviewsPromise, activitiesPromise]);
-
-        setLastReviewDoc(reviewsSnap.docs[reviewsSnap.docs.length - 1] || null);
-        setLastActivityDoc(activitiesSnap.docs[activitiesSnap.docs.length - 1] || null);
-        setHasMore(reviewsSnap.docs.length === 10 || activitiesSnap.docs.length === 10);
-
-        let combinedFeed: FeedItem[] = [];
-
-        // Map Reviews
-        const reviewItems: FeedItem[] = reviewsSnap.docs.map(d => {
-          const data = d.data();
-          return {
-            id: d.id,
-            type: 'review' as const,
-            sourceName: data.userName,
-            sourceAvatar: data.userAvatar,
-            title: `rated ${data.gameTitle || 'a game'}`,
-            score: data.score,
-            text: data.text,
-            createdAt: data.createdAt?.toDate() || new Date(),
-            gameCover: data.gameCover,
-            userId: data.userId
-          };
-        });
-
-        // Extract Game IDs to fetch fresh data
-        const activityGameIds = activitiesSnap.docs
-          .map(d => d.data().metadata?.gameId)
-          .filter(Boolean);
-        const uniqueGameIds = Array.from(new Set(activityGameIds)).slice(0, 10);
-        
-        const gamesMap = new Map();
-        if (uniqueGameIds.length > 0) {
-           const gamesQ = query(collection(db, 'games'), where(documentId(), 'in', uniqueGameIds));
-           const gamesSnap = await getDocs(gamesQ);
-           gamesSnap.docs.forEach(doc => gamesMap.set(doc.id, doc.data()));
-        }
-
-        // Map Activities
-        const activityItems: FeedItem[] = activitiesSnap.docs.map(d => {
-          const data = d.data();
-          
-          let updatedMetadata = data.metadata || {};
-          if (updatedMetadata.gameId) {
-             const gameData = gamesMap.get(updatedMetadata.gameId) || {};
-             updatedMetadata = {
-               ...updatedMetadata,
-               ...gameData // Fresh game data overrides stale logged metadata LAST
-             };
-          }
-
-          return {
-            id: d.id,
-            type: 'group_activity' as const,
-            sourceName: data.groupName || 'Group',
-            title: data.details || 'New activity',
-            createdAt: (data.timestamp || data.createdAt)?.toDate() || new Date(),
-            groupId: data.groupId,
-            activity: { 
-              id: d.id, 
-              ...data,
-              metadata: updatedMetadata
-            } // Pass full activity for ActivityItem
-          };
-        });
-
-        combinedFeed = [...reviewItems, ...activityItems];
-        combinedFeed.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-        setFeed(combinedFeed);
-
-      } catch (error) {
-        handleFirestoreError(error, OperationType.LIST, 'social_hub');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [user?.uid, profile?.following?.length]); // Destructured to primitive dependencies
-
-  const loadMore = async () => {
-    if (!user || !profile || loadingMore || !hasMore) return;
-    setLoadingMore(true);
-    try {
-      const following = profile.following || [];
-      const groupIds = groups.map(g => g.id);
-
-      const reviewsPromise = following.length > 0 && lastReviewDoc
-        ? getDocs(query(
-            collection(db, 'reviews'),
-            where('userId', 'in', following.slice(0, 30)),
-            orderBy('createdAt', 'desc'),
-            startAfter(lastReviewDoc),
-            limit(10)
-          ))
-        : Promise.resolve({ docs: [] });
-
-      const activitiesPromise = groupIds.length > 0 && lastActivityDoc
-        ? getDocs(query(
-            collection(db, 'activities'),
-            where('groupId', 'in', groupIds.slice(0, 30)),
-            orderBy('createdAt', 'desc'),
-            startAfter(lastActivityDoc),
-            limit(10)
-          ))
-        : Promise.resolve({ docs: [] });
-
-      const [reviewsSnap, activitiesSnap] = await Promise.all([reviewsPromise, activitiesPromise]);
-
-      const newReviews: FeedItem[] = reviewsSnap.docs.map(d => {
-        const data = d.data();
-        return {
-          id: d.id,
-          type: 'review' as const,
-          sourceName: data.userName,
-          sourceAvatar: data.userAvatar,
-          title: `rated ${data.gameTitle || 'a game'}`,
-          score: data.score,
-          text: data.text,
-          createdAt: data.createdAt?.toDate() || new Date(),
-          gameCover: data.gameCover,
-          userId: data.userId
-        };
-      });
-
-      const newActivities: FeedItem[] = activitiesSnap.docs.map(d => {
-        const data = d.data();
-        return {
-          id: d.id,
-          type: 'group_activity' as const,
-          sourceName: data.groupName || 'Group',
-          title: data.details || 'New activity',
-          createdAt: (data.timestamp || data.createdAt)?.toDate() || new Date(),
-          groupId: data.groupId,
-          activity: { id: d.id, ...data }
-        };
-      });
-
-      const newItems = [...newReviews, ...newActivities];
-      newItems.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-
-      if (newItems.length > 0) {
-        setFeed(prev => [...prev, ...newItems]);
-        setLastReviewDoc(reviewsSnap.docs[reviewsSnap.docs.length - 1] || lastReviewDoc);
-        setLastActivityDoc(activitiesSnap.docs[activitiesSnap.docs.length - 1] || lastActivityDoc);
-        setHasMore(reviewsSnap.docs.length === 10 || activitiesSnap.docs.length === 10);
-      } else {
-        setHasMore(false);
-      }
-    } catch (error) {
-      handleFirestoreError(error, OperationType.LIST, 'social_hub_more');
-    } finally {
-      setLoadingMore(false);
+    if (!user || !profile) {
+      setLoading(false);
+      return;
     }
-  };
+
+    setLoading(true);
+    const following = profile.following || [];
+    setFollowingIds(following);
+
+    if (following.length > 0) {
+      const qFriends = query(collection(db, 'users'), where('uid', 'in', following.slice(0, 30)));
+      unsubscribeFriends = onSnapshot(qFriends, (snap) => {
+        const friendProfiles = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
+        setFriends(friendProfiles);
+      }, (error) => {
+        console.error("Error fetching friends:", error);
+      });
+    } else {
+      setFriends([]);
+    }
+
+    const qGroups = query(
+      collection(db, 'groups'),
+      where('memberIds', 'array-contains', user.uid)
+    );
+    unsubscribeGroups = onSnapshot(qGroups, (snap) => {
+      const groupsList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setGroups(groupsList);
+      setLoading(false);
+    }, (error) => {
+      console.error("Error fetching groups:", error);
+      setLoading(false);
+    });
+
+    return () => {
+      if (unsubscribeFriends) unsubscribeFriends();
+      if (unsubscribeGroups) unsubscribeGroups();
+    };
+  }, [user?.uid, profile?.following?.length]);
 
   useEffect(() => {
     const tab = searchParams.get('tab') as Tab;

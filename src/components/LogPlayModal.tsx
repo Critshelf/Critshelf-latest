@@ -58,7 +58,7 @@ interface Group {
 
 interface Player {
   name: string;
-  score: number;
+  score: number | string;
   isWinner: boolean;
   userId?: string;
   avatar?: string;
@@ -68,7 +68,7 @@ interface Player {
 
 interface Team {
   players: Player[];
-  score: number;
+  score: number | string;
   isWinner: boolean;
 }
 
@@ -120,7 +120,7 @@ export default function LogPlayModal({
   const [players, setPlayers] = useState<Player[]>([
     {
       name: user?.displayName || "Me",
-      score: 0,
+      score: "",
       isWinner: false,
       userId: user?.uid,
       avatar:
@@ -135,7 +135,7 @@ export default function LogPlayModal({
       players: [
         {
           name: user?.displayName || "Me",
-          score: 0,
+          score: "",
           isWinner: false,
           userId: user?.uid,
           avatar:
@@ -143,12 +143,12 @@ export default function LogPlayModal({
             `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.uid}`,
         },
       ],
-      score: 0,
+      score: "",
       isWinner: false,
     },
     {
       players: [],
-      score: 0,
+      score: "",
       isWinner: false,
     },
   ]);
@@ -298,7 +298,7 @@ export default function LogPlayModal({
   const handleAddPlayerToTeam = (friend: UserProfile, teamIdx: number) => {
     const newPlayer = {
       name: friend.displayName,
-      score: 0,
+      score: "",
       isWinner: false,
       userId: friend.uid,
       avatar:
@@ -320,7 +320,7 @@ export default function LogPlayModal({
 
     const newPlayer = {
       name: name.trim(),
-      score: 0,
+      score: "",
       isWinner: false,
       avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${name.trim()}`,
     };
@@ -341,7 +341,7 @@ export default function LogPlayModal({
 
     const newPlayer = {
       name: friend.displayName,
-      score: 0,
+      score: "",
       isWinner: false,
       userId: friend.uid,
       avatar:
@@ -364,7 +364,7 @@ export default function LogPlayModal({
 
     const newPlayer = {
       name: guestNameInput.trim(),
-      score: 0,
+      score: "",
       isWinner: false,
       avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${guestNameInput.trim()}`,
     };
@@ -413,14 +413,14 @@ export default function LogPlayModal({
     setTeams(newTeams);
   };
 
-  const updateTeamScore = (teamIndex: number, score: number) => {
+  const updateTeamScore = (teamIndex: number, score: number | string) => {
     const newTeams = [...teams];
     newTeams[teamIndex].score = score;
     setTeams(newTeams);
   };
 
   const addTeam = () => {
-    setTeams([...teams, { players: [], score: 0, isWinner: false }]);
+    setTeams([...teams, { players: [], score: "", isWinner: false }]);
   };
 
   const handleSubmit = async () => {
@@ -433,13 +433,13 @@ export default function LogPlayModal({
           ? teams.flatMap((t, tIdx) =>
               t.players.map((p) => ({
                 ...p,
-                score: keepScore ? t.score : null, // Apply team score to all players in team if keepScore is true
+                score: keepScore ? (t.score === "" ? 0 : Number(t.score)) : null, // Apply team score to all players in team if keepScore is true
                 isWinner: t.isWinner,
               })),
             )
           : players.map((p) => ({
               ...p,
-              score: keepScore ? p.score : null,
+              score: keepScore ? (p.score === "" ? 0 : Number(p.score)) : null,
             }));
 
       const result = await submitPlayLog({
@@ -451,9 +451,9 @@ export default function LogPlayModal({
         rating,
         vibeTag: vibeCheck || "🎲 Standard Game",
         userId: user.uid,
-        userName: user.displayName || "Anonymous",
+        userName: profile?.displayName || profile?.username || user.displayName || "Anonymous",
         userAvatar:
-          user.photoURL ||
+          profile?.photoURL || user.photoURL ||
           `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.uid}`,
         players: finalPlayers,
         location,
@@ -470,7 +470,7 @@ export default function LogPlayModal({
           // Log Activity
           await logSocialActivity({
             actorId: user.uid,
-            actorName: user.displayName || "Anonymous",
+            actorName: profile?.displayName || profile?.username || user.displayName || "Anonymous",
             type: "LOG_PLAY",
             targetId: selectedGame.id,
             targetName: selectedGame.title,
@@ -480,8 +480,10 @@ export default function LogPlayModal({
               isArtApproved: selectedGame.isArtApproved,
               score: rating,
               winners: finalPlayers.filter((p) => p.isWinner).map((p) => p.name),
-              groupId: selectedGroupId || undefined,
-              groupName: groups.find((g) => g.id === selectedGroupId)?.name,
+              ...(selectedGroupId && {
+                groupId: selectedGroupId,
+                groupName: groups.find((g) => g.id === selectedGroupId)?.name,
+              }),
             },
           });
         } catch (error) {
@@ -495,7 +497,7 @@ export default function LogPlayModal({
         setPlayers([
           {
             name: user?.displayName || "Me",
-            score: 0,
+            score: "",
             isWinner: false,
             userId: user?.uid,
             avatar:
@@ -511,7 +513,7 @@ export default function LogPlayModal({
             players: [
               {
                 name: user?.displayName || "Me",
-                score: 0,
+                score: "",
                 isWinner: false,
                 userId: user?.uid,
                 avatar:
@@ -522,10 +524,10 @@ export default function LogPlayModal({
                 avatarSeed: profile?.avatarSeed || user?.uid,
               },
             ],
-            score: 0,
+            score: "",
             isWinner: false,
           },
-          { players: [], score: 0, isWinner: false },
+          { players: [], score: "", isWinner: false },
         ]);
       }
     } catch (error) {
@@ -977,11 +979,11 @@ export default function LogPlayModal({
                                 type="number"
                                 className="w-full bg-transparent border-none text-right font-black text-white focus:ring-0 text-xl"
                                 placeholder="0"
-                                value={team.score || ""}
+                                value={team.score}
                                 onChange={(e) =>
                                   updateTeamScore(
                                     tIdx,
-                                    parseInt(e.target.value) || 0,
+                                    e.target.value === "" ? "" : Number(e.target.value),
                                   )
                                 }
                               />
@@ -1036,7 +1038,7 @@ export default function LogPlayModal({
                             onChange={(e) => {
                               const newPlayers = [...players];
                               newPlayers[idx].score =
-                                parseInt(e.target.value) || 0;
+                                e.target.value === "" ? "" : Number(e.target.value);
                               setPlayers(newPlayers);
                             }}
                           />
@@ -1171,9 +1173,10 @@ export default function LogPlayModal({
                   <div className="flex-1 w-full space-y-6">
                     <div className="space-y-2">
                       <div className="text-center">
-                        <span className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em]">
+                        <span className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em] block">
                           Rate this Session (Optional)
                         </span>
+                        <span className="text-xs text-white/40 italic block mt-1">Ratings are out of 20</span>
                       </div>
                       <div className="flex justify-between text-[9px] font-black text-white/20 uppercase tracking-widest px-1">
                         <span>Critical Fail</span>

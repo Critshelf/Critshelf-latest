@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, BarChart3, SearchX } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, limit } from 'firebase/firestore';
 import PollCard, { Poll } from './PollCard';
 
 interface ActivePollsModalProps {
@@ -23,7 +23,8 @@ const ActivePollsModal: React.FC<ActivePollsModalProps> = ({ isOpen, onClose, gr
     const q = query(
       collection(db, 'groupPolls'),
       where('groupId', '==', groupId),
-      orderBy('createdAt', 'desc')
+      orderBy('createdAt', 'desc'),
+      limit(50)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -32,6 +33,9 @@ const ActivePollsModal: React.FC<ActivePollsModalProps> = ({ isOpen, onClose, gr
         ...doc.data()
       } as Poll));
       setPolls(pollList);
+      setLoading(false);
+    }, (error) => {
+      console.error("ActivePollsModal query error:", error);
       setLoading(false);
     });
 

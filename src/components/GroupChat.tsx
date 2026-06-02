@@ -65,8 +65,12 @@ export default function GroupChat({ groupId }: GroupChatProps) {
       } else {
         setMessages(msgs);
       }
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'messages');
+    }, (error: any) => {
+      if (error?.code !== 'resource-exhausted') {
+        handleFirestoreError(error, OperationType.LIST, 'messages');
+      } else {
+        console.warn("Quota exceeded for GroupChat onSnapshot");
+      }
     });
 
     return () => unsubscribe();

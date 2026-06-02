@@ -93,6 +93,9 @@ const ManageGroupModal: React.FC<ManageGroupModalProps> = ({
       } as JoinRequest));
       setRequests(reqList);
       setLoadingRequests(false);
+    }, (error) => {
+      console.error("Join requests query error:", error);
+      setLoadingRequests(false);
     });
 
     return () => unsubscribe();

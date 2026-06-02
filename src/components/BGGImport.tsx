@@ -73,7 +73,7 @@ export default function BGGImport({ isOpen, onClose }: BGGImportProps) {
             const gameRef = doc(db, 'games', gameId);
             batch.set(gameRef, {
               title: objectname,
-              name_lowercase: objectname.toLowerCase(),
+              name_lowercase: objectname.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""),
               bggId: bggId,
               isApproved: true, // Auto-approve BGG imports
               status: 'published',
@@ -90,7 +90,7 @@ export default function BGGImport({ isOpen, onClose }: BGGImportProps) {
               userId: user.uid,
               gameId: gameId,
               gameTitle: objectname,
-              gameTitleLowercase: objectname.toLowerCase(),
+              gameTitleLowercase: objectname.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""),
               gameCover: row.image || 'https://images.unsplash.com/photo-1610819013583-67021be397e7?auto=format&fit=crop&q=80&w=400',
               shelf: shelf,
               categories: [], // Placeholder for future data

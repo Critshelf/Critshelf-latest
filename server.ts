@@ -28,9 +28,10 @@ async function startServer() {
     }
 
     try {
-      const { gameId, gameTitle, imageUrl } = req.body;
+      const { documentId, gameId, gameTitle, imageUrl } = req.body;
 
-      const reviewUrl = `${publicAppUrl}/game/${gameId}`;
+      // Point to our new secure Art Approval Portal
+      const reviewUrl = `${publicAppUrl}/admin/art-queue/${documentId}`;
 
       const embed = {
         title: "🖼️ New Box Art Submission",
@@ -172,6 +173,33 @@ async function startServer() {
     } catch (error) {
       console.error("Enrichment error:", error);
       res.status(500).json({ status: "error", message: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.get("/api/wikidata/sparql", async (req, res) => {
+    try {
+      const query = req.query.query;
+      if (!query) return res.status(400).json({ error: 'Missing query' });
+      
+      const WIKIDATA_SPARQL_URL = "https://query.wikidata.org/sparql";
+      const targetUrl = `${WIKIDATA_SPARQL_URL}?query=${encodeURIComponent(query as string)}`;
+      
+      const response = await fetch(targetUrl, {
+        headers: {
+          "Accept": "application/sparql-results+json",
+          "User-Agent": "CritShelf/1.0 (coreykern2040@gmail.com)",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Wikidata Fetch Failed: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      res.json(data);
+    } catch (err: any) {
+      console.error("Wikidata SPARQL error:", err.message);
+      res.status(500).json({ error: err.message });
     }
   });
 

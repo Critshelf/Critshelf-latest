@@ -104,7 +104,7 @@ service cloud.firestore {
              (!('trending' in data) || data.trending is bool) &&
              (!('bggId' in data) || data.bggId is string) &&
              (!('wikidataId' in data) || data.wikidataId is string) &&
-             (!('publishingYear' in data) || data.publishingYear is number) &&
+             (!('publishingYear' in data) || data.publishingYear is number || data.publishingYear is string) &&
              (!('publishers' in data) || data.publishers is list) &&
              (!('designers' in data) || data.designers is list) &&
              (!('artists' in data) || data.artists is list) &&
@@ -193,8 +193,13 @@ service cloud.firestore {
     }
 
     match /PendingArt/{artId} {
-      allow create: if isAuthenticated();
-      allow read, update, delete: if isAdmin();
+      allow read, create: if isAuthenticated();
+      allow update, delete: if isAdmin() || (isAuthenticated() && resource.data.submittedBy == request.auth.uid);
+    }
+
+    match /art_approvals/{approvalId} {
+      allow read, create: if isAuthenticated();
+      allow update, delete: if isAdmin();
     }
 
     match /users/{userId} {
@@ -303,10 +308,7 @@ service cloud.firestore {
 
     // Events
     match /events/{eventId} {
-      allow read: if isAuthenticated() && (
-        isAdmin() || 
-        get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.memberIds.hasAny([request.auth.uid])
-      );
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated() && (
         isAdmin() || 
         get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.memberIds.hasAny([request.auth.uid])
@@ -320,10 +322,7 @@ service cloud.firestore {
 
     // Messages
     match /messages/{messageId} {
-      allow read: if isAuthenticated() && (
-        isAdmin() || 
-        get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.memberIds.hasAny([request.auth.uid])
-      );
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated() && (
         isAdmin() || 
         get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.memberIds.hasAny([request.auth.uid])
@@ -337,10 +336,7 @@ service cloud.firestore {
 
     // Group Requests
     match /groupRequests/{requestId} {
-      allow read: if isAuthenticated() && (
-        isAdmin() || 
-        get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.memberIds.hasAny([request.auth.uid])
-      );
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated() && (
         isAdmin() || 
         get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.memberIds.hasAny([request.auth.uid])
@@ -354,7 +350,7 @@ service cloud.firestore {
 
     // Group Invites
     match /GroupInvites/{inviteId} {
-      allow read: if isAuthenticated() && (request.auth.uid == resource.data.toUserId || request.auth.uid == resource.data.fromUserId || isAdmin());
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated() && request.auth.uid == request.resource.data.fromUserId;
       allow update: if isAuthenticated() && (request.auth.uid == resource.data.toUserId || isAdmin());
       allow delete: if isAuthenticated() && (request.auth.uid == resource.data.toUserId || request.auth.uid == resource.data.fromUserId || isAdmin());
@@ -376,10 +372,7 @@ service cloud.firestore {
 
     // Group Polls
     match /groupPolls/{pollId} {
-      allow read: if isAuthenticated() && (
-        isAdmin() || 
-        get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.memberIds.hasAny([request.auth.uid])
-      );
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated() && 
                     isValidPoll(request.resource.data) && (
         isAdmin() || 
@@ -398,10 +391,7 @@ service cloud.firestore {
 
     // Group Events
     match /groupEvents/{eventId} {
-      allow read: if isAuthenticated() && (
-        isAdmin() || 
-        get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.memberIds.hasAny([request.auth.uid])
-      );
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated() && 
                     isValidGroupEvent(request.resource.data) && (
         isAdmin() || 

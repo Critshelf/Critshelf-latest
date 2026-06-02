@@ -163,7 +163,7 @@ export default function Profile() {
 
       setSearching(true);
       try {
-        const queryTerm = debouncedSearchQuery.toLowerCase();
+        const queryTerm = debouncedSearchQuery.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
         const q = query(
           collection(db, "games"),
           where("name_lowercase", ">=", queryTerm),

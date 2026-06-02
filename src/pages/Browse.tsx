@@ -91,7 +91,7 @@ export default function Browse() {
     }
 
     if (debouncedSearch) {
-      const queryTerm = debouncedSearch.toLowerCase();
+      const queryTerm = debouncedSearch.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       q = query(
         q,
         where("name_lowercase", ">=", queryTerm),

@@ -12,6 +12,7 @@ import {
   doc,
   getDoc,
   updateDoc,
+  onSnapshot,
 } from "firebase/firestore";
 import { useUser } from "../contexts/UserContext";
 import { Loader2, MessageCircle } from "lucide-react";
@@ -45,31 +46,65 @@ export default function GroupFeed({ groupId }: GroupFeedProps) {
   const navigate = useNavigate();
 
   useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
     if (!user || !groupId) return;
 
-    const fetchFeed = async () => {
-      setLoading(true);
-      try {
-        const q = query(
-          collection(db, "activities"),
-          where("groupIds", "array-contains", groupId),
-          orderBy("createdAt", "desc"),
-          limit(10),
-        );
-        const snap = await getDocs(q);
+    setLoading(true);
+    const q = query(
+      collection(db, "activities"),
+      where("groupIds", "array-contains", groupId),
+      orderBy("createdAt", "desc"),
+      limit(10)
+    );
+
+    let isSubscribed = true;
+    let unsubscribeFallback: (() => void) | undefined;
+
+    unsubscribe = onSnapshot(
+      q,
+      (snap) => {
+        if (!isSubscribed) return;
         const activities = snap.docs.map(
-          (doc) => ({ id: doc.id, ...doc.data() }) as Activity,
+          (doc) => ({ id: doc.id, ...doc.data({ serverTimestamps: 'estimate' }) }) as Activity,
         );
         setFeed(activities);
         setLastDoc(snap.docs[snap.docs.length - 1] || null);
         setHasMore(snap.docs.length === 10);
-      } catch (error) {
-        console.error("Error fetching group feed:", error);
-      } finally {
         setLoading(false);
+      },
+      (error) => {
+        console.warn("Index missing for Group Feed, using fallback:", error);
+        const qFallback = query(
+          collection(db, "activities"),
+          orderBy("createdAt", "desc"),
+          limit(20)
+        );
+        unsubscribeFallback = onSnapshot(qFallback, (fallbackSnap) => {
+          if (!isSubscribed) return;
+          const activities = fallbackSnap.docs
+            .filter((d) => (d.data().groupIds || []).includes(groupId))
+            .map((doc) => ({ id: doc.id, ...doc.data({ serverTimestamps: 'estimate' }) }) as Activity);
+          activities.sort((a, b) => {
+            const tA = a.createdAt?.toMillis?.() || a.timestamp?.toMillis?.() || 0;
+            const tB = b.createdAt?.toMillis?.() || b.timestamp?.toMillis?.() || 0;
+            return tB - tA;
+          });
+          setFeed(activities.slice(0, 10));
+          setLastDoc(null);
+          setHasMore(false);
+          setLoading(false);
+        }, (err) => {
+          console.error("Fallback group feed error:", err);
+          if (isSubscribed) setLoading(false);
+        });
       }
+    );
+
+    return () => {
+      isSubscribed = false;
+      if (unsubscribe) unsubscribe();
+      if (unsubscribeFallback) unsubscribeFallback();
     };
-    fetchFeed();
   }, [user?.uid, groupId]);
 
   const loadMore = async () => {
@@ -86,7 +121,7 @@ export default function GroupFeed({ groupId }: GroupFeedProps) {
       );
       const snap = await getDocs(q);
       const newActivities = snap.docs.map(
-        (doc) => ({ id: doc.id, ...doc.data() }) as Activity,
+        (doc) => ({ id: doc.id, ...doc.data({ serverTimestamps: 'estimate' }) }) as Activity,
       );
       setFeed((prev) => [...prev, ...newActivities]);
       setLastDoc(snap.docs[snap.docs.length - 1] || null);

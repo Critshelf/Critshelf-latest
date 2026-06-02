@@ -44,7 +44,7 @@ export async function seedGames() {
       if (!title) continue;
 
       const bggId = record.objectid || 'unknown';
-      const gameId = title.toLowerCase().replace(/[^a-z0-9]/g, '-');
+      const gameId = title.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]/g, '-');
       const docRef = doc(db, 'games', gameId);
       
       const gameData = {
@@ -61,7 +61,7 @@ export async function seedGames() {
         isExpansion: false,
         baseGameId: null,
         status: 'approved',
-        name_lowercase: title.toLowerCase(),
+        name_lowercase: title.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""),
         trending: true,
         wikidataId: getWikidataId(title),
         createdAt: serverTimestamp()

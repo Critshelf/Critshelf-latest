@@ -10,6 +10,8 @@ import {
   startAfter,
   where,
   writeBatch,
+  deleteField,
+  serverTimestamp,
 } from "firebase/firestore";
 import { Database, Search } from "lucide-react";
 import { cn } from "../lib/utils";
@@ -33,10 +35,21 @@ const EditableRow = React.memo(function EditableRow({
   const handleUpdate = async () => {
     setSavingId(draftState.id);
     try {
+      const gameId = draftState.id;
+      if (!gameId) {
+        throw new Error("Missing gameId (document ID)");
+      }
+
       const payload: Record<string, any> = {};
+      const newDraftState: Record<string, any> = { ...draftState };
       columns.forEach((col) => {
         if (col === "id") return;
         let val = draftState[col];
+        if (val === undefined || val === null || val === "") {
+          payload[col] = deleteField();
+          return;
+        }
+
         if (typeof val === "string") {
           const trimmed = val.trim();
           if (
@@ -45,23 +58,35 @@ const EditableRow = React.memo(function EditableRow({
           ) {
             try {
               val = JSON.parse(trimmed);
+              newDraftState[col] = val;
             } catch (e) {
               console.warn(`Failed to parse json for field ${col}`);
             }
           }
         }
-        payload[col] = val;
+        if (val !== undefined && val !== null && val !== "") {
+          payload[col] = val;
+        }
       });
+      
+      if (payload.title && typeof payload.title === "string") {
+        payload.name_lowercase = payload.title.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      }
+      
+      payload.updatedAt = serverTimestamp();
 
-      const ref = doc(db, "games", draftState.id);
+      console.log("DEBUG - Update Payload:", payload);
+
+      const ref = doc(db, "games", gameId);
       await updateDoc(ref, payload);
 
-      setSavedId(draftState.id);
+      setSavedId(gameId);
       setTimeout(() => setSavedId(null), 2000);
-      onUpdateSuccess(draftState);
+      onUpdateSuccess(newDraftState);
+      alert("Game Updated Successfully!");
     } catch (error) {
-      console.error("Error updating doc", error);
-      alert("Failed to update document");
+      console.error("DEBUG - Firestore Write Failed:", error);
+      alert("Error updating game: Check console.");
     } finally {
       setSavingId(null);
     }
@@ -232,7 +257,11 @@ export default function AdminDashboard() {
           if (k === "id") return;
           const val = raw[k];
           if (val !== null && typeof val === "object") {
-            row[k] = JSON.stringify(val, null, 2);
+            if (val.toDate) {
+              row[k] = val.toDate().toISOString();
+            } else {
+              row[k] = JSON.stringify(val, null, 2);
+            }
           } else if (k === "isDataComplete" && val === undefined) {
             row[k] = false;
           } else if (val === undefined) {

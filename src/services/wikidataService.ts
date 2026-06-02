@@ -45,13 +45,8 @@ export async function searchWikidata(
   `;
 
   try {
-    const url = `${WIKIDATA_SPARQL_URL}?query=${encodeURIComponent(sparqlQuery)}`;
-    const response = await fetch(url, {
-      headers: {
-        Accept: "application/sparql-results+json",
-        "User-Agent": "CritShelf/1.0 (coreykern2040@gmail.com)",
-      },
-    });
+    const url = `/api/wikidata/sparql?query=${encodeURIComponent(sparqlQuery)}`;
+    const response = await fetch(url);
 
     if (!response.ok) return [];
 
@@ -80,7 +75,7 @@ export async function importWikidataGameToFirestore(
   console.log(`🚀 Triggering Just-In-Time Import for Wikidata ID: ${qid}...`);
 
   const sparqlQuery = `
-    SELECT ?title ?description ?image ?minPlayers ?maxPlayers ?minAge ?pubDate ?parentGame ?parentTitle ?parentImage
+    SELECT ?title ?description ?minPlayers ?maxPlayers ?minAge ?pubDate ?parentGame ?parentTitle
            (GROUP_CONCAT(DISTINCT ?publisherLabel; separator="|") AS ?publishers)
            (GROUP_CONCAT(DISTINCT ?designerLabel; separator="|") AS ?designers)
            (GROUP_CONCAT(DISTINCT ?genreLabel; separator="|") AS ?genres)
@@ -98,7 +93,6 @@ export async function importWikidataGameToFirestore(
       FILTER(LANG(?title) = "en")
       
       OPTIONAL { ?item schema:description ?description. FILTER(LANG(?description) = "en") }
-      OPTIONAL { ?item wdt:P18 ?image. }
       OPTIONAL { ?item wdt:P1872 ?minPlayers. }
       OPTIONAL { ?item wdt:P1873 ?maxPlayers. }
       OPTIONAL { ?item wdt:P2898 ?minAge. }
@@ -111,7 +105,6 @@ export async function importWikidataGameToFirestore(
         ?item wdt:P8646 ?parentGame. 
         ?parentGame rdfs:label ?parentTitle.
         FILTER(LANG(?parentTitle) = "en")
-        OPTIONAL { ?parentGame wdt:P18 ?parentImage. }
       }
       
       OPTIONAL { 
@@ -132,18 +125,13 @@ export async function importWikidataGameToFirestore(
       # Result of YEAR(?date) is projected here as ?pubDate
       BIND(COALESCE(?year, 0) AS ?pubDate)
     }
-    GROUP BY ?title ?description ?image ?minPlayers ?maxPlayers ?minAge ?pubDate ?parentGame ?parentTitle ?parentImage
+    GROUP BY ?title ?description ?minPlayers ?maxPlayers ?minAge ?pubDate ?parentGame ?parentTitle
     LIMIT 1
   `;
 
   try {
-    const url = `${WIKIDATA_SPARQL_URL}?query=${encodeURIComponent(sparqlQuery)}`;
-    const response = await fetch(url, {
-      headers: {
-        Accept: "application/sparql-results+json",
-        "User-Agent": "CritShelf/1.0 (coreykern2040@gmail.com)",
-      },
-    });
+    const url = `/api/wikidata/sparql?query=${encodeURIComponent(sparqlQuery)}`;
+    const response = await fetch(url);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -180,12 +168,12 @@ export async function importWikidataGameToFirestore(
     // UI Safety Fallback: Flag if player counts are missing
     const needsVerification = minPlayers === 0 || maxPlayers === 0;
 
-    const gameData = {
+    const gameData: any = {
       title: title,
-      name_lowercase: title.toLowerCase(),
+      name_lowercase: title.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""),
       description: description,
-      coverImage: result.image ? result.image.value : "",
-      thumbnail: result.image ? result.image.value : "",
+      coverImage: "",
+      thumbnail: "",
       minPlayers: minPlayers,
       maxPlayers: maxPlayers,
       ageRange: result.minAge ? `${result.minAge.value}+` : "10+",
@@ -226,7 +214,7 @@ export async function importWikidataGameToFirestore(
 
 export async function fetchWikidataExpansions(qid: string): Promise<Game[]> {
   const sparqlQuery = `
-    SELECT DISTINCT ?item ?itemLabel ?image WHERE {
+    SELECT DISTINCT ?item ?itemLabel WHERE {
       # Strict Tabletop Filtering: Must be a board game, tabletop game, card game, or RPG
       ?item wdt:P31/wdt:P279* ?type.
       FILTER(?type IN (wd:Q131436, wd:Q1058221, wd:Q3244175, wd:Q142717, wd:Q150346, wd:Q17277888, wd:Q17154230, wd:Q60474521))
@@ -243,30 +231,26 @@ export async function fetchWikidataExpansions(qid: string): Promise<Game[]> {
       { ?item wdt:P8646 wd:${qid} . }
       
       SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
-      OPTIONAL { ?item wdt:P18 ?image. }
     }
     LIMIT 20
   `;
 
   try {
-    const url = `${WIKIDATA_SPARQL_URL}?query=${encodeURIComponent(sparqlQuery)}`;
-    const response = await fetch(url, {
-      headers: {
-        Accept: "application/sparql-results+json",
-        "User-Agent": "CritShelf/1.0 (coreykern2040@gmail.com)",
-      },
-    });
+    const url = `/api/wikidata/sparql?query=${encodeURIComponent(sparqlQuery)}`;
+    const response = await fetch(url);
 
     if (!response.ok) return [];
 
     const data = await response.json();
     return data.results.bindings.map((result: any) => {
       const expansionId = result.item.value.split("/entity/")[1];
+      const title = result.itemLabel.value;
+      
       return {
         id: expansionId, // Use raw QID for JIT potential
-        title: result.itemLabel.value,
-        coverImage: result.image ? result.image.value : "",
-        thumbnail: result.image ? result.image.value : "",
+        title: title,
+        coverImage: "",
+        thumbnail: "",
         isWikidataItem: true,
         isExpansion: true,
         baseGameId: `wikidata_${qid}`,

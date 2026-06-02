@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { 
   onAuthStateChanged, 
   User as FirebaseUser,
@@ -62,6 +62,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [userGroupIds, setUserGroupIds] = useState<string[]>([]);
   const [groupRatings, setGroupRatings] = useState<Record<string, GroupRating>>({});
   const [loading, setLoading] = useState(true);
+
+  const hasTriggeredAC = useRef(false);
 
   const fetchProfile = async (uid: string, currentUser: any) => {
     const userDocRef = doc(db, 'users', uid);
@@ -139,7 +141,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
             const data = snap.data() as UserProfile;
             
             // Trigger AC init if it's completely missing
-            if (data.attackClass === undefined || data.attackClass === null) {
+            if ((data.attackClass === undefined || data.attackClass === null) && !hasTriggeredAC.current) {
+              hasTriggeredAC.current = true;
               import('../services/playLogService').then(({ calculateAndStoreAttackClass }) => {
                 calculateAndStoreAttackClass(currentUser.uid).catch(console.error);
               });

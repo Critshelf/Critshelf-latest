@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Calendar, MapPin, Users, Plus, Clock, Trash2, X, Shield, History } from 'lucide-react';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
-import { collection, query, where, orderBy, doc, updateDoc, deleteDoc, getDoc, getDocs } from 'firebase/firestore';
+import { collection, query, where, orderBy, doc, updateDoc, deleteDoc, getDoc, getDocs, limit } from 'firebase/firestore';
 import { cn } from '../lib/utils';
 import CreateEventModal from './CreateEventModal';
 import EventDetailsModal from './EventDetailsModal';
@@ -32,7 +32,8 @@ const GroupEvents: React.FC<GroupEventsProps> = ({ groupId, groupOwnerId }) => {
       collection(db, 'groupEvents'),
       where('groupId', '==', groupId),
       where('dateTime', '>=', now),
-      orderBy('dateTime', 'asc')
+      orderBy('dateTime', 'asc'),
+      limit(50)
     );
 
     const fetchEvents = async () => {

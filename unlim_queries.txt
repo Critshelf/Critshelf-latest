@@ -1,0 +1,17 @@
+src/components/GroupLibrary.tsx:187:        const q = query(collection(db, 'games'), where('__name__', 'in', chunk));
+src/components/GameTitleWithDC.tsx:30:        const q = query(collection(db, 'reviews'), where('gameId', '==', game.id || game.gameId));
+src/components/EventDetailsModal.tsx:63:          const q = query(collection(db, 'users'), where('__name__', 'in', chunk));
+src/lib/socialActivityLogger.ts:57:        query(collection(db, "users"), where("following", "array-contains", actorId))
+src/pages/Home.tsx:118:        const myActivitiesQ = query(collection(db, "activities"), where("actorId", "==", user.uid));
+src/pages/Home.tsx:303:          const gamesQ = query(collection(db, "games"), where(documentId(), "in", uniqueGameIds));
+src/pages/Collection.tsx:208:          const q = query(collection(db, 'games'), where('__name__', 'in', chunk));
+src/pages/GamePage.tsx:191:        const allReviewsQ = query(collection(db, 'reviews'), where('gameId', '==', game.id));
+src/pages/GamePage.tsx:519:            const usersSnap = await getDocs(query(collection(db, 'users'), where('uid', 'in', reviewerIds)));
+src/pages/Browse.tsx:86:    let q = query(collection(db, "games"));
+src/pages/GroupDetail.tsx:314:        const q = query(collection(db, "users"), where("uid", "in", chunk));
+src/pages/Friends.tsx:37:      const q = query(collection(db, path), where('userIds', 'array-contains', userId));
+src/pages/Friends.tsx:50:          const qUsers = query(collection(db, 'users'), where(documentId(), 'in', chunk));
+src/pages/FriendReviews.tsx:83:        const gamesQ = query(collection(db, "games"), where(documentId(), "in", uniqueGameIds));
+src/pages/AdminTools.tsx:124:      const actSnap = await getDocs(query(collection(db, 'activities'), where('type', '==', 'LOG_PLAY')));
+src/pages/SocialHubView.tsx:90:      const qFriends = query(collection(db, 'users'), where('uid', 'in', following.slice(0, 30)));
+src/contexts/UserContext.tsx:174:            const qGroups = query(collection(db, 'groups'), where('memberIds', 'array-contains', currentUser.uid));

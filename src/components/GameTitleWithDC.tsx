@@ -3,7 +3,7 @@ import { cn } from '../lib/utils';
 import DCShield from './DCShield';
 import { calculateBaseDC, calculateFinalDC } from '../lib/dcUtils';
 import { db } from '../lib/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, limit } from 'firebase/firestore';
 
 interface GameTitleWithDCProps {
   game: any;
@@ -27,7 +27,11 @@ export default function GameTitleWithDC({
     const fetchDC = async () => {
       const baseDC = calculateBaseDC(game);
       try {
-        const q = query(collection(db, 'reviews'), where('gameId', '==', game.id || game.gameId));
+        const q = query(
+          collection(db, 'reviews'), 
+          where('gameId', '==', game.id || game.gameId),
+          limit(20)
+        );
         const snapshot = await getDocs(q);
         const reviews = snapshot.docs.map(doc => doc.data());
         const difficultyRatings = reviews

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { 
@@ -22,10 +22,11 @@ import {
   X,
   Layers,
   Smile,
-  Flag
+  Flag,
+  Settings
 } from 'lucide-react';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
-import { doc, getDoc, collection, query, getDocs, limit, where, setDoc, updateDoc, serverTimestamp, addDoc, orderBy, startAt, endAt, onSnapshot, documentId } from 'firebase/firestore';
+import { doc, getDoc, collection, query, getDocs, limit, where, setDoc, updateDoc, deleteDoc, serverTimestamp, addDoc, orderBy, startAt, endAt, onSnapshot, documentId } from 'firebase/firestore';
 import { Game } from '../components/GameCard';
 import { cn, formatPlayTime } from '../lib/utils';
 import { AnimatePresence } from 'motion/react';
@@ -186,14 +187,30 @@ export default function GamePage() {
 
       const docRef = await addDoc(collection(db, 'reviews'), reviewData);
       
-      // Update aggregate game rating in Firestore for global visibility
-      const allScores = allGameReviews.map(r => r.score).filter(s => typeof s === 'number');
-      const newAllScores = [...allScores, personalScore];
-      const newAverage = Math.round(newAllScores.reduce((a, b) => a + b, 0) / newAllScores.length);
-      
-      await updateDoc(doc(db, 'games', game.id), {
-        rating: newAverage
-      });
+      // Calculate and update aggregate game rating in Firestore
+      try {
+        const allReviewsQ = query(
+          collection(db, 'reviews'), 
+          where('gameId', '==', game.id),
+          limit(100)
+        );
+        const allReviewsSnap = await getDocs(allReviewsQ);
+        
+        const communityScores = allReviewsSnap.docs
+          .map(d => d.data().score)
+          .filter(s => typeof s === 'number');
+          
+        if (communityScores.length > 0) {
+          const newAverageRating = Math.round(communityScores.reduce((a, b) => a + b, 0) / communityScores.length);
+          
+          await updateDoc(doc(db, 'games', game.id), {
+            rating: newAverageRating,
+            totalReviews: communityScores.length
+          });
+        }
+      } catch (err) {
+        console.error('Failed to recalculate game rating:', err);
+      }
 
       // Update user's personal ratings map for global reactivity
       const currentRatings = profile?.ratings || {};
@@ -212,7 +229,7 @@ export default function GamePage() {
       logSocialActivity({
         type: 'REVIEW_GAME',
         actorId: user.uid,
-        actorName: user.displayName || 'Gamer',
+        actorName: profile?.displayName || profile?.username || user.displayName || 'Gamer',
         targetId: game.id,
         targetName: game.title,
         metadata: {
@@ -324,38 +341,27 @@ export default function GamePage() {
     }
   };
 
-  const handleUpdateArt = async (e: any) => {
+  const handleArtSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !game || !newArtUrl.trim()) return;
 
     setIsSubmittingArt(true);
     try {
-      // 1. Write to PendingArt collection for record keeping
-      await addDoc(collection(db, 'PendingArt'), {
+      await addDoc(collection(db, 'art_approvals'), {
         gameId: game.id,
         gameTitle: game.title,
-        proposedImageUrl: newArtUrl.trim(),
+        proposedUrl: newArtUrl.trim(),
         submittedBy: user.uid,
         status: 'pending',
         createdAt: serverTimestamp()
       });
 
-      // 2. Trigger Discord Admin Webhook (Interactive Moderation)
-      fetch('/api/webhooks/art-submission', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          gameId: game.id,
-          gameTitle: game.title,
-          imageUrl: newArtUrl.trim()
-        })
-      }).catch(err => console.error("Admin notification failed:", err));
-
-      alert('Art submitted for review!');
-      setIsUpdateArtModalOpen(false);
+      alert('Art update submitted for review!');
       setNewArtUrl('');
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'PendingArt');
+      setIsUpdateArtModalOpen(false);
+    } catch (error: any) {
+      console.error(error);
+      alert(`Failed: ${error.message || 'Unknown error'}`);
     } finally {
       setIsSubmittingArt(false);
     }
@@ -371,10 +377,7 @@ export default function GamePage() {
         customImageApproved: true,
         updatedAt: serverTimestamp()
       });
-      await updateDoc(doc(db, 'PendingArt', artId), {
-        status: 'approved',
-        updatedAt: serverTimestamp()
-      });
+      await deleteDoc(doc(db, 'art_approvals', artId));
       setPendingArtSubmissions(prev => prev.filter(a => a.id !== artId));
       setGame(prev => prev ? { ...prev, coverImage: url, hasHighResArt: true, customImageApproved: true } : null);
     } catch (error) {
@@ -388,13 +391,10 @@ export default function GamePage() {
     if (profile?.role !== 'admin') return;
     setIsModerating(true);
     try {
-      await updateDoc(doc(db, 'PendingArt', artId), {
-        status: 'rejected',
-        updatedAt: serverTimestamp()
-      });
+      await deleteDoc(doc(db, 'art_approvals', artId));
       setPendingArtSubmissions(prev => prev.filter(a => a.id !== artId));
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, 'PendingArt');
+      handleFirestoreError(error, OperationType.UPDATE, 'art_approvals');
     } finally {
       setIsModerating(false);
     }
@@ -631,7 +631,7 @@ export default function GamePage() {
     }
 
     const fetchPendingArt = async () => {
-      const artQ = query(collection(db, 'PendingArt'), where('gameId', '==', id), where('status', '==', 'pending'), limit(20));
+      const artQ = query(collection(db, 'art_approvals'), where('gameId', '==', id), where('status', '==', 'pending'), limit(20));
       try {
         const snap = await getDocs(artQ);
         setPendingArtSubmissions(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -657,7 +657,7 @@ export default function GamePage() {
         setFriendsRating('-');
       }
     }
-  }, [allGameReviews, user, profile]);
+  }, [allGameReviews, user?.uid, profile?.following?.length]);
 
   if (loading) {
     return (
@@ -892,7 +892,7 @@ export default function GamePage() {
               <Users className="w-6 h-6" />
             </div>
             <span className="text-xs font-black text-white/30 uppercase tracking-widest">Players</span>
-            <span className="font-black text-white">{game.playerCount || '2-4'}</span>
+            <span className="font-black text-white">{game.minPlayers === game.maxPlayers ? game.minPlayers : `${game.minPlayers || '?'}-${game.maxPlayers || '?'}`}</span>
           </div>
           <div className="h-12 w-px bg-white/5 hidden sm:block" />
           <div className="flex flex-col items-center gap-1">
@@ -961,12 +961,12 @@ export default function GamePage() {
 
         {/* Smart Data Grid */}
         <div className="mt-8 grid grid-cols-2 md:grid-cols-3 gap-4">
-          {game.playerCount && (
+          {(game.minPlayers || game.maxPlayers) && (
             <div className="bg-white/5 p-4 rounded-2xl border border-white/10 flex items-center gap-3">
               <Users className="w-5 h-5 text-emerald-accent" />
               <div>
                 <p className="text-[8px] font-black text-white/30 uppercase tracking-widest">Players</p>
-                <p className="text-sm font-bold text-white">{game.playerCount}</p>
+                <p className="text-sm font-bold text-white">{game.minPlayers === game.maxPlayers ? game.minPlayers : `${game.minPlayers || '?'}-${game.maxPlayers || '?'}`}</p>
               </div>
             </div>
           )}
@@ -1017,6 +1017,28 @@ export default function GamePage() {
                 <p className="text-[8px] font-black text-white/30 uppercase tracking-widest">Categories</p>
                 <p className="text-sm font-bold text-white truncate">
                   {Array.isArray(game.categories) ? game.categories.join(', ') : (game.categories || 'Uncategorized')}
+                </p>
+              </div>
+            </div>
+          )}
+          {game.mechanics && game.mechanics.length > 0 && (
+            <div className="bg-white/5 p-4 rounded-2xl border border-white/10 flex items-center gap-3 col-span-2 md:col-span-1">
+              <Settings className="w-5 h-5 text-indigo-400" />
+              <div className="min-w-0">
+                <p className="text-[8px] font-black text-white/30 uppercase tracking-widest">Mechanics</p>
+                <p className="text-sm font-bold text-white truncate">
+                  {Array.isArray(game.mechanics) ? game.mechanics.join(', ') : (game.mechanics || 'Unknown Mechanics')}
+                </p>
+              </div>
+            </div>
+          )}
+          {game.genres && game.genres.length > 0 && (
+            <div className="bg-white/5 p-4 rounded-2xl border border-white/10 flex items-center gap-3 col-span-2 md:col-span-1">
+              <Layers className="w-5 h-5 text-orange-400" />
+              <div className="min-w-0">
+                <p className="text-[8px] font-black text-white/30 uppercase tracking-widest">Genres</p>
+                <p className="text-sm font-bold text-white truncate">
+                  {Array.isArray(game.genres) ? game.genres.join(', ') : (game.genres || 'Unknown Genres')}
                 </p>
               </div>
             </div>
@@ -1136,7 +1158,9 @@ export default function GamePage() {
                     <span className="font-black text-white text-lg">Your Rating</span>
                     <span className="text-[10px] text-white/20 font-bold uppercase tracking-widest">Submitted</span>
                   </div>
-                  <p className="text-white/70 text-lg leading-relaxed italic">"{userReview.text}"</p>
+                  {userReview.text && (
+                    <p className="text-white/70 text-lg leading-relaxed italic">"{userReview.text}"</p>
+                  )}
                 </div>
               </div>
             </motion.div>
@@ -1178,13 +1202,14 @@ export default function GamePage() {
           ) : (
             <div className="bg-white/5 rounded-[2.5rem] p-8 border border-white/10 shadow-2xl">
               <div className="mb-10">
-                <div className="flex items-center justify-between mb-6 px-2">
+                <div className="flex items-center justify-between mb-2 px-2">
                   <label className="text-xs font-black text-white/20 uppercase tracking-widest block">Select Your D20 Score</label>
                   <div className="flex items-center gap-3">
                     <span className="text-3xl font-black text-gold-accent tracking-tighter">{personalScore}</span>
                     <span className="text-[10px] font-black text-white/20 uppercase tracking-widest mt-1">/ 20</span>
                   </div>
                 </div>
+                <span className="text-xs text-white/40 italic block px-2 mb-6">Ratings are out of 20</span>
                 
                 <div className="relative px-2">
                   <input
@@ -1234,7 +1259,8 @@ export default function GamePage() {
 
               {/* DC Shield Input */}
               <div className="mb-10 flex flex-col items-center">
-                <label className="text-xs font-black text-white/20 uppercase tracking-widest mb-6 block text-center">Set the DC (Difficulty Class)</label>
+                <label className="text-xs font-black text-white/20 uppercase tracking-widest mb-1 block text-center">Set the DC (Difficulty Class)</label>
+                <span className="text-xs text-white/40 italic block text-center mb-6">DC scores are out of 20</span>
                 
                 <div className="relative w-24 h-24 flex items-center justify-center group">
                   {/* Polished Metallic Shield SVG */}
@@ -1405,7 +1431,9 @@ export default function GamePage() {
                           <span className="font-black text-gold-accent text-sm">{review.score}/20</span>
                         </div>
                       </div>
-                      <p className="text-white/60 text-sm leading-relaxed line-clamp-3">{review.text}</p>
+                      {review.text && (
+                        <p className="text-white/60 text-sm leading-relaxed line-clamp-3">{review.text}</p>
+                      )}
                     </div>
                   </motion.div>
                 ))}
@@ -1587,10 +1615,9 @@ export default function GamePage() {
         )}
       </AnimatePresence>
 
-      {/* Update Art Modal */}
       <AnimatePresence>
         {isUpdateArtModalOpen && (
-          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 sm:p-6">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -1599,65 +1626,49 @@ export default function GamePage() {
               className="absolute inset-0 bg-black/80 backdrop-blur-md"
             />
             <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-lg bg-charcoal rounded-[3rem] shadow-2xl overflow-hidden border border-white/10"
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative w-full max-w-lg bg-charcoal rounded-[2rem] p-8 border border-white/10 shadow-2xl"
             >
-              <div className="bg-white/5 p-8 text-white relative overflow-hidden border-b border-white/10">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-accent/5 rounded-full -mr-16 -mt-16" />
-                <button 
-                  onClick={() => setIsUpdateArtModalOpen(false)}
-                  className="absolute top-6 right-6 text-white/20 hover:text-white transition-colors p-2 bg-white/5 rounded-xl border border-white/10 z-10"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-                <div className="relative flex items-center gap-4">
-                  <div className="w-12 h-12 bg-emerald-accent/10 rounded-2xl flex items-center justify-center backdrop-blur-md border border-emerald-accent/20">
-                    <ImageIcon className="w-6 h-6 text-emerald-accent" />
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-black tracking-tight">Update Box Art</h2>
-                    <p className="text-white/40 text-xs font-bold uppercase tracking-widest">Help us improve the library</p>
-                  </div>
-                </div>
-              </div>
-
-              <form onSubmit={handleUpdateArt} className="p-8 space-y-6">
-                <div className="space-y-2">
-                  <label className="text-xs font-black text-white/20 uppercase tracking-widest ml-2">New Image URL</label>
+              <button 
+                onClick={() => setIsUpdateArtModalOpen(false)}
+                className="absolute top-6 right-6 text-white/40 hover:text-white"
+              >
+                <X className="w-6 h-6" />
+              </button>
+              
+              <h2 className="text-2xl font-black text-white mb-2">Update Cover Art</h2>
+              <p className="text-white/40 text-sm mb-6">Found better box art? Help improve the database by submitting a high-quality image URL.</p>
+              
+              <form onSubmit={handleArtSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-black uppercase tracking-widest text-white/40 mb-2">Image URL</label>
                   <input
-                    required
                     type="url"
-                    placeholder="https://example.com/image.jpg"
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-6 focus:border-emerald-accent outline-none transition-all font-bold text-white placeholder:text-white/10"
+                    required
                     value={newArtUrl}
-                    onChange={e => setNewArtUrl(e.target.value)}
+                    onChange={(e) => setNewArtUrl(e.target.value)}
+                    placeholder="https://example.com/image.jpg"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/20 focus:outline-none focus:border-emerald-accent/50 focus:ring-1 focus:ring-emerald-accent/50"
                   />
-                  <p className="text-[10px] font-bold text-emerald-accent/60 ml-2 italic">
-                    Note: Art submissions are reviewed by moderators before going live.
-                  </p>
+                  <p className="text-white/30 text-[10px] mt-2 font-medium">Please link directly to the image file (JPG, PNG, WEBP).</p>
                 </div>
-
+                
                 <button
-                  disabled={isSubmittingArt || !newArtUrl.trim()}
                   type="submit"
-                  className="w-full bg-emerald-accent text-charcoal py-5 rounded-2xl font-black text-lg shadow-lg hover:shadow-emerald-accent/20 transition-all flex items-center justify-center gap-3 disabled:opacity-50 active:scale-95"
+                  disabled={isSubmittingArt || !newArtUrl}
+                  className="w-full bg-emerald-accent text-charcoal py-4 rounded-xl font-black text-sm hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  {isSubmittingArt ? (
-                    <Loader2 className="w-6 h-6 animate-spin" />
-                  ) : (
-                    <>
-                      <Send className="w-5 h-5" />
-                      Submit for Review
-                    </>
-                  )}
+                  {isSubmittingArt ? <Loader2 className="w-5 h-5 animate-spin" /> : <ImageIcon className="w-5 h-5" />}
+                  Submit for Approval
                 </button>
               </form>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
+
     </div>
   );
 }

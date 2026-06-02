@@ -47,6 +47,8 @@ export default function Navbar() {
           navigator.clearAppBadge().catch((error: any) => console.error('App badge clear error', error));
         }
       }
+    }, (error) => {
+      console.error("Navbar unread notifications error:", error);
     });
 
     return () => unsubscribe();

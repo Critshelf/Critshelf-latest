@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Search,
@@ -91,6 +91,90 @@ export default function Home() {
 
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const navigate = useNavigate();
+
+  const hasTriggeredBackfill = useRef(false);
+
+  // BACKFILL FIX - RUN ONCE
+  useEffect(() => {
+    if (!user) return;
+    if (hasTriggeredBackfill.current) return;
+    hasTriggeredBackfill.current = true;
+
+    const runBackfill = async () => {
+      const lockKey = "backfill_run_10";
+      if (localStorage.getItem(lockKey)) return;
+      localStorage.setItem(lockKey, "1");
+
+      console.log("Running automatic retro-active backfill for recent plays...");
+      try {
+        // 1. Fetch recent plays
+        const playsRef = collection(db, "plays");
+        const playsSnap = await getDocs(query(playsRef, orderBy("createdAt", "desc"), limit(20)));
+
+        // 2. Fetch actor's followers (users who have actor in their following array)
+        const usersRef = collection(db, "users");
+        const followersQ = query(usersRef, where("following", "array-contains", user.uid));
+        const followersSnap = await getDocs(followersQ);
+        const followerIds = followersSnap.docs.map(d => d.id);
+        const audienceIds = [...new Set([user.uid, ...followerIds])];
+
+        // 2.5 Fix actorName on all past activities just in case they were set to Anonymous or Unknown
+        const correctName = profile?.displayName || profile?.username || user.displayName || "Anonymous";
+        const myActivitiesQ = query(collection(db, "activities"), where("actorId", "==", user.uid));
+        const myActSnap = await getDocs(myActivitiesQ);
+        for (const docSnap of myActSnap.docs) {
+          if (docSnap.data().actorName !== correctName) {
+             const { updateDoc } = await import("firebase/firestore");
+             await updateDoc(docSnap.ref, { actorName: correctName });
+          }
+        }
+
+        for (const pd of playsSnap.docs) {
+          const playData = pd.data();
+          if (playData.userId === user.uid) {
+            // Did this play get an activity?
+            const actRef = collection(db, "activities");
+            const qAct = query(actRef, where("metadata.playId", "==", pd.id), limit(1));
+            const actSnap = await getDocs(qAct);
+            
+            if (actSnap.empty) {
+              console.log("Found missing activity for play:", playData.gameTitle);
+              // Backfill it!
+              const { logSocialActivity } = await import("../lib/socialActivityLogger");
+              await logSocialActivity({
+                type: "LOG_PLAY",
+                actorId: user.uid,
+                actorName: profile?.displayName || profile?.username || user.displayName || "Anonymous",
+                targetId: playData.gameId,
+                targetName: playData.gameTitle,
+                metadata: {
+                  playId: pd.id,
+                  gameCover: playData.gameCover || "",
+                  isArtApproved: playData.isArtApproved || false,
+                  score: playData.rating,
+                  winners: playData.winners || [],
+                },
+              });
+            } else {
+               // Update audienceIds on existing activity
+               const actDoc = actSnap.docs[0];
+               const actData = actDoc.data();
+               const currentAuds = actData.audienceIds || [];
+               if (actData.actorId === user.uid && (!currentAuds.includes(user.uid) || currentAuds.length < audienceIds.length)) {
+                 const { updateDoc } = await import("firebase/firestore");
+                 await updateDoc(actDoc.ref, { audienceIds });
+               }
+            }
+          }
+        }
+      } catch (err: any) {
+        console.error("Backfill failed:", err?.message || err);
+        console.error("Backfill failed code:", err?.code);
+      }
+    };
+    runBackfill();
+  }, [user?.uid]);
+
 
   useEffect(() => {
     // 2. Plays -> Rotation (Real-time, depends on user)
@@ -196,21 +280,25 @@ export default function Home() {
       return;
     }
 
-    const fetchFriendsPlays = async () => {
-      const qPlays = query(
-        collection(db, "activities"),
-        where("audienceIds", "array-contains", user.uid),
-        where("type", "==", "LOG_PLAY"),
-        orderBy("createdAt", "desc"),
-        limit(5)
-      );
+    let unsubscribeFallback: (() => void) | undefined;
+    let isSubscribed = true;
 
+    const qPlays = query(
+      collection(db, "activities"),
+      where("audienceIds", "array-contains", user.uid),
+      where("type", "==", "LOG_PLAY"),
+      orderBy("createdAt", "desc"),
+      limit(5)
+    );
+
+    const mapSnapToReviews = async (snap: any, isFallback = false) => {
       try {
-        const snap = await getDocs(qPlays);
-        const reviewsRaw = snap.docs
-          .map((d) => ({ id: d.id, ...d.data() }));
+        let reviewsRaw = snap.docs.map((d: any) => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }) }));
 
-        // Extract gameIds to fetch current game metadata
+        if (isFallback) {
+          reviewsRaw = reviewsRaw.filter((r: any) => r.type === "LOG_PLAY").slice(0, 5);
+        }
+
         const gameIds = reviewsRaw.map((r: any) => r.targetId).filter(Boolean);
         const uniqueGameIds = Array.from(new Set(gameIds)).slice(0, 10);
         
@@ -220,10 +308,9 @@ export default function Home() {
           const gamesSnap = await getDocs(gamesQ);
           gamesSnap.docs.forEach((doc) => gamesMap.set(doc.id, doc.data()));
         }
-        
+
         const activityList = reviewsRaw.map((r: any) => {
           const gameData = gamesMap.get(r.targetId) || {};
-          console.log(`DEBUG: Mapping activity ${r.id}, RAW metadata in firestore:`, r.metadata);
           return {
             id: r.id,
             userId: r.actorId,
@@ -235,11 +322,11 @@ export default function Home() {
               ...r.metadata,
               gameId: r.targetId,
               playId: r.metadata?.playId,
-              gameTitle: gameData.title || r.targetName || "Unknown Game",
-              coverImage: gameData.coverImage || "",
-              gameCover: gameData.coverImage || "",
-              isApproved: gameData.isArtApproved || false,
-              customImageApproved: gameData.isArtApproved,
+              gameTitle: gameData.title || r.targetName || r.metadata?.gameTitle || "Unknown Game",
+              coverImage: gameData.coverImage || r.metadata?.gameCover || r.metadata?.coverImage || "",
+              gameCover: gameData.coverImage || r.metadata?.gameCover || r.metadata?.coverImage || "",
+              isApproved: gameData.isApproved ?? true,
+              customImageApproved: gameData.customImageApproved ?? true,
               score: r.metadata?.score,
               text: r.metadata?.text,
               location: r.metadata?.location,
@@ -248,74 +335,60 @@ export default function Home() {
           };
         });
 
-        setFriendReviews(activityList);
-        console.log("DEBUG: Bypassed Index Data:", activityList);
-      } catch (error) {
-        console.error("Friends Plays Fetch Error:", error);
-        // Try fallback without type equality if composite index fails
-        try {
-            console.log("Trying fallback query for friends plays");
-            const qPlaysFallback = query(
-                collection(db, "activities"),
-                where("audienceIds", "array-contains", user.uid),
-                orderBy("createdAt", "desc"),
-                limit(10)
-            );
-            const fallbackSnap = await getDocs(qPlaysFallback);
-            const reviewsRaw = fallbackSnap.docs
-                .map((d) => ({ id: d.id, ...d.data() }))
-                .filter((r: any) => r.type === "LOG_PLAY")
-                .slice(0, 5);
+        console.log("FRIENDS PLAYS ACTIVITY LIST:", activityList);
 
-            // Fetch game data
-            const gameIds = reviewsRaw.map((r: any) => r.targetId).filter(Boolean);
-            const uniqueGameIds = Array.from(new Set(gameIds)).slice(0, 10);
-            
-            const gamesMap = new Map();
-            if (uniqueGameIds.length > 0) {
-                const gamesQ = query(collection(db, "games"), where(documentId(), "in", uniqueGameIds));
-                const gamesSnap = await getDocs(gamesQ);
-                gamesSnap.docs.forEach((doc) => gamesMap.set(doc.id, doc.data()));
-            }
-
-            const activityList = reviewsRaw.map((r: any) => {
-                const gameData = gamesMap.get(r.targetId) || {};
-                console.log(`DEBUG: Mapping activity ${r.id}, RAW metadata in firestore:`, r.metadata);
-                return {
-                    id: r.id,
-                    userId: r.actorId,
-                    userName: r.actorName,
-                    avatarSeed: r.actorId,
-                    type: 'LOG_PLAY',
-                    timestamp: r.createdAt,
-                    metadata: {
-                        ...r.metadata,
-                        gameId: r.targetId,
-                        playId: r.metadata?.playId,
-                        gameTitle: gameData.title || r.targetName || "Unknown Game",
-                        coverImage: gameData.coverImage || "",
-                        gameCover: gameData.coverImage || "",
-                        isApproved: gameData.isArtApproved || false,
-                        customImageApproved: gameData.isArtApproved,
-                        score: r.metadata?.score,
-                        text: r.metadata?.text,
-                        location: r.metadata?.location,
-                        players: r.metadata?.players,
-                    }
-                };
-            });
-            setFriendReviews(activityList);
-            console.log("DEBUG: Bypassed Index Data:", activityList);
-        } catch (fallbackError) {
-             console.error("Fallback Friends Plays Fetch Error:", fallbackError);
-             setLoadingReviews(false);
+        if (isSubscribed) {
+          setFriendReviews(activityList);
+          setLoadingReviews(false);
         }
-      } finally {
-        setLoadingReviews(false);
+      } catch (err) {
+        console.error("Error processing friends plays:", err);
+        if (isSubscribed) setLoadingReviews(false);
       }
     };
 
-    fetchFriendsPlays();
+    const unsubscribe = onSnapshot(
+      qPlays,
+      (snap) => {
+        mapSnapToReviews(snap, false);
+      },
+      (error) => {
+        console.error("Friends Plays Fetch Error, falling back:", error);
+        
+        const qPlaysFallback = query(
+          collection(db, "activities"),
+          orderBy("createdAt", "desc"),
+          limit(20)
+        );
+
+        unsubscribeFallback = onSnapshot(
+          qPlaysFallback,
+          (fallbackSnap) => {
+            // Sort in memory to avoid missing index on audienceIds + timestamp
+            const filteredDocs = fallbackSnap.docs.filter((d) => {
+              const aud = d.data().audienceIds || [];
+              return aud.includes(user.uid);
+            });
+            const docs = filteredDocs.sort((a, b) => {
+               const tA = a.data({ serverTimestamps: 'estimate' }).createdAt?.toMillis?.() || a.data({ serverTimestamps: 'estimate' }).timestamp?.toMillis?.() || 0;
+               const tB = b.data({ serverTimestamps: 'estimate' }).createdAt?.toMillis?.() || b.data({ serverTimestamps: 'estimate' }).timestamp?.toMillis?.() || 0;
+               return tB - tA;
+            }).slice(0, 5);
+            mapSnapToReviews({ docs }, true);
+          },
+          (fallbackError) => {
+            console.error("Fallback Friends Plays Fetch Error:", fallbackError);
+            if (isSubscribed) setLoadingReviews(false);
+          }
+        );
+      }
+    );
+
+    return () => {
+      isSubscribed = false;
+      unsubscribe();
+      if (unsubscribeFallback) unsubscribeFallback();
+    };
   }, [user?.uid]);
 
   useEffect(() => {

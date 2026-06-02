@@ -47,7 +47,7 @@ const AddGameModal: React.FC<AddGameModalProps> = ({ isOpen, onClose, initialTit
       const path = 'games';
       const gameData = {
         ...formData,
-        name_lowercase: formData.title.toLowerCase(),
+        name_lowercase: formData.title.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""),
         playTime: formData.playTime.toString(),
         createdAt: serverTimestamp(),
         submittedBy: user.uid,
@@ -290,8 +290,8 @@ const AddGameModal: React.FC<AddGameModalProps> = ({ isOpen, onClose, initialTit
                                       const q = query(
                                         collection(db, 'games'),
                                         where('isExpansion', '==', false),
-                                        where('name_lowercase', '>=', search.toLowerCase()),
-                                        where('name_lowercase', '<=', search.toLowerCase() + '\uf8ff'),
+                                        where('name_lowercase', '>=', search.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")),
+                                        where('name_lowercase', '<=', search.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "") + '\uf8ff'),
                                         limit(5)
                                       );
                                       const snap = await getDocs(q);

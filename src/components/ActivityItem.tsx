@@ -240,13 +240,13 @@ const ActivityItem: React.FC<ActivityItemProps> = ({
             alt={metadata.gameTitle}
             className={cn(
               "w-full h-full object-cover transition-transform duration-300",
-              metadata.customImageApproved || metadata.isApproved
-                ? ""
-                : "blur-md opacity-50 grayscale",
+              (metadata.customImageApproved === false || metadata.isApproved === false)
+                ? "blur-md opacity-50 grayscale"
+                : "",
             )}
             referrerPolicy="no-referrer"
           />
-          {!(metadata.customImageApproved || metadata.isApproved) && (
+          {(metadata.customImageApproved === false || metadata.isApproved === false) && (
             <div className="absolute inset-0 flex items-center justify-center p-1 text-center bg-gray-900/60 font-black">
               <span className="text-[6px] uppercase leading-tight text-white/50 tracking-tighter break-all line-clamp-3">
                 {metadata.gameTitle}

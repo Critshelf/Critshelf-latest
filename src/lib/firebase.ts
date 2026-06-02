@@ -80,6 +80,15 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   }
+  
+  const isResourceExhausted = typeof error === 'object' && error !== null && 'code' in error && (error as any).code === 'resource-exhausted';
+  
+  if (isResourceExhausted) {
+    console.warn('Firestore Quota Exceeded (resource-exhausted)', errInfo);
+    // Don't throw for quota errors to prevent app crashes in snapshot listeners
+    return;
+  }
+  
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }

@@ -47,7 +47,7 @@ export default function AdminTools() {
           batch.update(gameDoc.ref, { 
             isApproved: true,
             needsVerification: false,
-            name_lowercase: (data.title || '').toLowerCase(),
+            name_lowercase: (data.title || '').toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""),
             updatedAt: serverTimestamp()
           });
         });
@@ -428,9 +428,9 @@ export default function AdminTools() {
         const batch = writeBatch(db);
         snapshot.docs.forEach(gameDoc => {
           const data = gameDoc.data();
-          const title = (data.title || '').toLowerCase();
-          const desc = (data.description || '').toLowerCase();
-          const categories = (data.categories || []).map((c: string) => c.toLowerCase());
+          const title = (data.title || '').toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+          const desc = (data.description || '').toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+          const categories = (data.categories || []).map((c: string) => c.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""));
           
           let flagReason = "";
           
@@ -535,9 +535,9 @@ export default function AdminTools() {
       GROUP BY ?year ?wikipediaUrl ?wikidataDescription
       LIMIT 1
     `;
-    const url = `https://query.wikidata.org/sparql?query=${encodeURIComponent(sparqlQuery)}&format=json`;
+    const url = `/api/wikidata/sparql?query=${encodeURIComponent(sparqlQuery)}&format=json`;
     try {
-      const response = await fetch(url, { headers: { 'Accept': 'application/sparql-results+json' } });
+      const response = await fetch(url);
       if (!response.ok) return null;
       const data = await response.json();
       return data.results.bindings[0];
@@ -665,7 +665,7 @@ export default function AdminTools() {
           const data = gameDoc.data();
           if (!data.name_lowercase) {
             batch.update(gameDoc.ref, {
-              name_lowercase: (data.title || '').toLowerCase(),
+              name_lowercase: (data.title || '').toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""),
               updatedAt: serverTimestamp()
             });
           }
@@ -718,7 +718,7 @@ export default function AdminTools() {
           if (gameSnap.exists()) {
             const gameData = gameSnap.data();
             batch.update(itemDoc.ref, {
-              gameTitleLowercase: (itemData.gameTitle || '').toLowerCase(),
+              gameTitleLowercase: (itemData.gameTitle || '').toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""),
               categories: gameData.categories || [],
               minPlayers: gameData.minPlayers || null,
               maxPlayers: gameData.maxPlayers || null,

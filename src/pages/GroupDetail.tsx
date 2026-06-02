@@ -138,9 +138,6 @@ export default function GroupDetail() {
   const [searchParams] = useSearchParams();
   const [group, setGroup] = useState<Group | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
-  const [events, setEvents] = useState<GameNightEvent[]>([]);
-  const [requests, setRequests] = useState<GroupRequest[]>([]);
-  const [activities, setActivities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorState, setErrorState] = useState<"none" | "permission">("none");
   const [isAcceptingInvite, setIsAcceptingInvite] = useState(false);
@@ -196,6 +193,8 @@ export default function GroupDetail() {
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setActivePollsCount(snapshot.size);
+    }, (error) => {
+      console.error("Active polls error:", error);
     });
 
     return () => unsubscribe();
@@ -276,10 +275,6 @@ export default function GroupDetail() {
   useEffect(() => {
     if (!id || !user) return;
 
-    // Setup listeners for feed and events (once per group visit)
-    fetchEvents(id);
-    fetchRequests(id);
-    fetchActivities(id);
     fetchFollowing();
 
     return () => {};
@@ -298,9 +293,6 @@ export default function GroupDetail() {
               typeof m === "string" ? m : m.userId,
             ),
         );
-        fetchEvents(groupId);
-        fetchRequests(groupId);
-        fetchActivities(groupId);
         fetchFollowing();
       }
     } catch (error) {
@@ -343,103 +335,6 @@ export default function GroupDetail() {
       setMembers(finalProfiles);
     } catch (error) {
       console.error("Error fetching members:", error);
-    }
-  };
-
-  const fetchEvents = async (groupId: string) => {
-    const now = new Date();
-    const q = query(
-      collection(db, "groupEvents"),
-      where("groupId", "==", groupId),
-      where("dateTime", ">=", now),
-      orderBy("dateTime", "asc"),
-      limit(5),
-    );
-
-    try {
-      const snapshot = await getDocs(q);
-      const eventList = snapshot.docs.map(
-        (doc) =>
-          ({ id: doc.id, ...doc.data(), type: "event" }) as GameNightEvent & {
-            type: "event";
-          },
-      );
-      setEvents(eventList);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.LIST, "groupEvents");
-    }
-  };
-
-  const fetchRequests = async (groupId: string) => {
-    const q = query(
-      collection(db, "groupRequests"),
-      where("groupId", "==", groupId),
-      orderBy("createdAt", "desc"),
-      limit(10),
-    );
-
-    try {
-      const snapshot = await getDocs(q);
-      const requestList = snapshot.docs
-        .map(
-          (doc) =>
-            ({ id: doc.id, ...doc.data(), type: "request" }) as GroupRequest,
-        )
-        .filter((r) => r.status === "pending");
-
-      // Add mock request for Friday Night Dice
-      if (
-        groupId === "friday_night_dice" &&
-        !requestList.some((r) => r.id === "mock_request")
-      ) {
-        requestList.push({
-          id: "mock_request",
-          groupId: "friday_night_dice",
-          userId: "natasha_id",
-          userName: "Natasha",
-          userAvatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Natasha",
-          gameId: "worker-removal-proto",
-          gameTitle: "Worker Removal Prototype",
-          gameCover:
-            "https://images.unsplash.com/photo-1553481187-be93c21490a9?auto=format&fit=crop&q=80&w=400",
-          owners: [{ uid: "corey_id", displayName: "Corey" }],
-          createdAt: { seconds: Date.now() / 1000 },
-          status: "pending",
-          type: "request",
-        });
-      }
-
-      setRequests(requestList);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.LIST, "groupRequests");
-    }
-  };
-
-  const fetchActivities = async (groupId: string) => {
-    // WARNING: Ensure you have built the composite index for the 'activities' collection:
-    // groupIds (Arrays) DESC/ASC | timestamp DESC
-    console.warn(
-      "DEVELOPER REMINDER: Build composite index for collection 'activities': groupIds (array-contains) + timestamp (desc)",
-    );
-
-    const q = query(
-      collection(db, "activities"),
-      where("groupIds", "array-contains", groupId),
-      orderBy("timestamp", "desc"),
-      limit(20),
-    );
-
-    try {
-      const snapshot = await getDocs(q);
-      const activityList = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        type: "activity",
-        activityType: doc.data().type,
-      }));
-      setActivities(activityList);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.LIST, "activities");
     }
   };
 
@@ -591,19 +486,6 @@ export default function GroupDetail() {
       setIsSearchingUsers(false);
     }
   };
-
-  const feedItems: FeedItem[] = [
-    ...events.map((e) => ({ ...e, type: "event" as const })),
-    ...requests,
-    ...activities,
-  ].sort((a, b) => {
-    // Some are .timestamp and some are .createdAt
-    const getTime = (item: any) => {
-      const time = item.timestamp || item.createdAt;
-      return time?.seconds || 0;
-    };
-    return getTime(b) - getTime(a);
-  });
 
   const seedMockEvent = async (groupId: string) => {
     if (!user) return;
