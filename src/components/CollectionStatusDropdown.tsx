@@ -101,34 +101,6 @@ export default function CollectionStatusDropdown({
       if (refreshProfile) await refreshProfile();
       setShowMenu(false);
 
-      // Fire and forget BGG image proxy to Cloudinary
-      if (gameCover && (gameCover.includes('geekdo-images') || gameCover.includes('boardgamegeek.com'))) {
-        fetch('/api/images/bgg-to-cloudinary', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ gameId, bggImageUrl: gameCover })
-        })
-        .then(res => res.json())
-        .then(async (data) => {
-          if (data.status === 'success' && data.secure_url) {
-            import('firebase/firestore').then(({ updateDoc }) => {
-              // Update Game Document
-              updateDoc(doc(db, 'games', gameId), {
-                coverImage: data.secure_url,
-                thumbnail: data.secure_url,
-                isApproved: true,
-                customImageApproved: true
-              }).catch(console.error);
-              
-              // Update User Collection Document
-              updateDoc(doc(db, 'userCollections', `${user.uid}_${gameId}`), {
-                gameCover: data.secure_url
-              }).catch(console.error);
-            });
-          }
-        })
-        .catch(console.error);
-      }
 
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `userCollections/${user.uid}_${gameId}`);
