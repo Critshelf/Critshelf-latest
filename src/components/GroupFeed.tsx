@@ -203,14 +203,7 @@ export default function GroupFeed({ groupId }: GroupFeedProps) {
             {item.type === "LOG_PLAY" && (
               <>
                 <p className="text-white text-lg">
-                  <Link
-                    to={`/profile/${item.actorId}`}
-                    onClick={(e) => e.stopPropagation()}
-                    className="font-bold text-emerald-accent hover:underline"
-                  >
-                    {item.actorName}
-                  </Link>{" "}
-                  logged a play of{" "}
+                  The group played{" "}
                   <Link
                     to={`/game/${item.targetId}`}
                     className="font-bold underline decoration-white/20 hover:decoration-white transition-all"

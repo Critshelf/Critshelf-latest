@@ -376,11 +376,17 @@ service cloud.firestore {
       allow create: if isAuthenticated() && 
                     isValidPoll(request.resource.data) && (
         isAdmin() || 
-        get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.memberIds.hasAny([request.auth.uid])
+        (
+          'memberIds' in get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data &&
+          request.auth.uid in get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.memberIds
+        )
       );
       allow update: if isAuthenticated() && (
         isAdmin() || 
-        get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.memberIds.hasAny([request.auth.uid])
+        (
+          'memberIds' in get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data &&
+          request.auth.uid in get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.memberIds
+        ) || request.auth.uid == resource.data.creatorId
       );
       allow delete: if isAuthenticated() && (
         isAdmin() || 
@@ -395,16 +401,17 @@ service cloud.firestore {
       allow create: if isAuthenticated() && 
                     isValidGroupEvent(request.resource.data) && (
         isAdmin() || 
-        get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.memberIds.hasAny([request.auth.uid])
+        (
+          'memberIds' in get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data &&
+          request.auth.uid in get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.memberIds
+        )
       );
       allow update: if isAuthenticated() && (
         isAdmin() || 
         (
-          get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.memberIds.hasAny([request.auth.uid]) &&
-          // More complex checks for removing games could go here, but for now we follow general member update permission
-          // The UI will handle the logic of only showing 'X' for owners
-          true 
-        )
+          'memberIds' in get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data &&
+          request.auth.uid in get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.memberIds
+        ) || request.auth.uid == resource.data.creatorId
       );
       allow delete: if isAuthenticated() && (
         isAdmin() || 

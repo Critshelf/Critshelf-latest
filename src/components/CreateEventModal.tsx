@@ -25,11 +25,13 @@ import {
   where,
   getDocs,
   limit,
+  getDoc,
 } from "firebase/firestore";
 import { useUser } from "../contexts/UserContext";
 import { useEffect } from "react";
 import { cn } from "../lib/utils";
 import { logGroupActivity } from "../lib/socialActivityLogger";
+import { sendNotification } from "../services/notificationService";
 
 export interface EventAttendee {
   userId: string;
@@ -197,6 +199,29 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
           dateTime: dateTime,
         },
       });
+
+      // Send Notifications to group members
+      try {
+        const groupDoc = await getDoc(doc(db, "groups", groupId));
+        if (groupDoc.exists()) {
+          const groupData = groupDoc.data();
+          const targetIds = groupData.memberIds || groupData.members?.map((m: any) => typeof m === "string" ? m : m.userId) || [];
+          
+          targetIds.forEach((memberId: string) => {
+            if (memberId !== user.uid) {
+               sendNotification(
+                 memberId,
+                 "groups",
+                 "New Group Event",
+                 `${user.displayName || "Someone"} scheduled an event: ${title.trim()}${groupName ? ` in ${groupName}` : ""}`,
+                 { groupId }
+               ).catch(console.error);
+            }
+          });
+        }
+      } catch (err) {
+        console.error("Failed to send event notifications", err);
+      }
 
       // If this was created from a poll, close the poll
       if (initialData?.sourcePollId) {

@@ -28,6 +28,7 @@ import {
   or,
   and,
   documentId,
+  updateDoc,
 } from "firebase/firestore";
 import { cn } from "../lib/utils";
 import D20Die from "../components/D20Die";
@@ -101,11 +102,31 @@ export default function Home() {
     hasTriggeredBackfill.current = true;
 
     const runBackfill = async () => {
-      const lockKey = "backfill_run_10";
+      const lockKey = "backfill_run_groups_11_and_plays_2";
       if (localStorage.getItem(lockKey)) return;
       localStorage.setItem(lockKey, "1");
 
-      console.log("Running automatic retro-active backfill for recent plays...");
+      console.log("Running automatic retro-active backfills...");
+      
+      try {
+        const groupsRef = collection(db, "groups");
+        const groupsSnap = await getDocs(groupsRef);
+        let count = 0;
+        
+        for (const groupDoc of groupsSnap.docs) {
+          const data = groupDoc.data();
+          if (!data.memberIds && data.members) {
+            console.log("Fixing group:", groupDoc.id);
+            const memberIds = data.members.map((m: any) => typeof m === "string" ? m : m.userId);
+            await updateDoc(groupDoc.ref, { memberIds });
+            count++;
+          }
+        }
+        console.log(`Backfilled ${count} groups with memberIds.`);
+      } catch (err) {
+        console.error("Group memberIds backfill failed:", err);
+      }
+
       try {
         // 1. Fetch recent plays
         const playsRef = collection(db, "plays");
