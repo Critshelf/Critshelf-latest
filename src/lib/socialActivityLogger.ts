@@ -82,6 +82,10 @@ export async function logSocialActivity({
 
     const finalAudience = [...audienceIds];
 
+    const cleanMetadata = Object.fromEntries(
+      Object.entries(metadata).filter(([_, v]) => v !== undefined)
+    );
+
     const activityRef = collection(db, "activities");
     await addDoc(activityRef, {
       type,
@@ -92,7 +96,7 @@ export async function logSocialActivity({
       targetName,
       audienceIds: finalAudience,
       groupIds,
-      metadata,
+      metadata: cleanMetadata,
       createdAt: serverTimestamp(),
       timestamp: serverTimestamp(),
     });
@@ -143,6 +147,10 @@ export async function logGroupActivity({
 
     const finalAudience = [...audienceIds];
 
+    const cleanMetadata = Object.fromEntries(
+      Object.entries({ ...metadata, groupId }).filter(([_, v]) => v !== undefined)
+    );
+
     const activityRef = collection(db, "activities");
     await addDoc(activityRef, {
       type,
@@ -153,7 +161,7 @@ export async function logGroupActivity({
       targetName,
       audienceIds: finalAudience,
       groupIds: [groupId],
-      metadata: { ...metadata, groupId },
+      metadata: cleanMetadata,
       createdAt: serverTimestamp(),
       timestamp: serverTimestamp(),
     });

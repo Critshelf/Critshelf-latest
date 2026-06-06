@@ -32,6 +32,43 @@ const AddGameModal: React.FC<AddGameModalProps> = ({ isOpen, onClose, initialTit
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
+  const handleImageCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const img = document.createElement('img');
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 800;
+        const MAX_HEIGHT = 800;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        setFormData({ ...formData, coverImage: dataUrl });
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -58,7 +95,8 @@ const AddGameModal: React.FC<AddGameModalProps> = ({ isOpen, onClose, initialTit
         isExpansion: formData.isExpansion,
         baseGameId: formData.isExpansion ? formData.baseGameId : null,
         status: 'pending',
-        hasHighResArt: formData.coverImage ? true : false
+        hasHighResArt: formData.coverImage ? true : false,
+        bannerImage: formData.coverImage ? formData.coverImage : null
       };
       
       const docRef = await addDoc(collection(db, path), gameData);
@@ -220,18 +258,22 @@ const AddGameModal: React.FC<AddGameModalProps> = ({ isOpen, onClose, initialTit
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs font-black text-white/20 uppercase tracking-widest ml-2">Image URL</label>
+                    <label className="text-xs font-black text-white/20 uppercase tracking-widest ml-2">Game Image (Optional Camera/Upload)</label>
                     <div className="relative">
                       <ImageIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
                       <input
-                        required
-                        type="url"
-                        placeholder="https://..."
-                        className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-6 focus:border-emerald-accent outline-none transition-all font-bold text-white placeholder:text-white/10"
-                        value={formData.coverImage}
-                        onChange={e => setFormData({ ...formData, coverImage: e.target.value })}
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-6 focus:border-emerald-accent outline-none transition-all font-bold text-white placeholder:text-white/10 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-black file:bg-emerald-accent file:text-charcoal hover:file:bg-emerald-accent/80"
+                        onChange={handleImageCapture}
                       />
                     </div>
+                    {formData.coverImage && (
+                      <div className="mt-4 flex justify-center">
+                        <img src={formData.coverImage} alt="Preview" className="h-32 object-contain rounded-xl shadow-lg border border-white/10" />
+                      </div>
+                    )}
                   </div>
 
                   {/* Expansion Toggle */}

@@ -532,6 +532,7 @@ export default function LogPlayModal({
       }
     } catch (error) {
       console.error("Submission failed:", error);
+      alert("There was an error saving your play. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

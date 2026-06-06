@@ -197,6 +197,8 @@ export async function submitPlayLog(payload: PlayLogPayload) {
       new Set([userId, ...players.map((p) => p.userId).filter(Boolean)]),
     );
 
+    const cleanPlayers = players.map(p => Object.fromEntries(Object.entries(p).filter(([_, v]) => v !== undefined)));
+
     const batch = writeBatch(db);
 
     // Action A: Create the main play document with userIds
@@ -208,7 +210,7 @@ export async function submitPlayLog(payload: PlayLogPayload) {
       date, // string date for display
       playDate: new Date(date), // true Firestore Timestamp
       location,
-      players,
+      players: cleanPlayers,
       userIds, // Array of ALL participant IDs
       isWinner,
       winnerIds,

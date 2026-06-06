@@ -27,9 +27,9 @@ export async function notifyNewGameSubmission(gameData: {
           { name: "Submitted By", value: `${gameData.submittedBy}`, inline: true },
           { name: "User ID", value: gameData.userId, inline: true },
           { name: "Firestore ID", value: `\`${gameData.id}\``, inline: false },
-          { name: "Image URL", value: gameData.coverImage || "No image provided" }
+          { name: "Image URL", value: gameData.coverImage ? (gameData.coverImage.startsWith('data:image') ? 'Base64 Image Uploaded' : gameData.coverImage) : "No image provided" }
         ],
-        image: { url: gameData.coverImage || undefined },
+        image: { url: (gameData.coverImage && !gameData.coverImage.startsWith('data:image')) ? gameData.coverImage : undefined },
         timestamp: new Date().toISOString(),
         footer: { text: "Dice-20 Moderation Bot" }
       }
