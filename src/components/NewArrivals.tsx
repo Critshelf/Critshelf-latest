@@ -89,7 +89,6 @@ export default function NewArrivals() {
                     "absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-125",
                     !game.bannerImage ? "blur-xl opacity-40" : "opacity-60"
                   )}
-                  style={game.bannerImage ? game.bannerStyles : undefined}
                   referrerPolicy="no-referrer"
                 />
                 

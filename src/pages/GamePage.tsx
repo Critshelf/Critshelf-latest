@@ -649,7 +649,8 @@ export default function GamePage() {
       // We need to fetch following from a static place or state
       // profile comes from UserContext, might be better to use profile since it's already in context
       const following = (profile as any)?.following || [];
-      const friendsReviews = allGameReviews.filter(r => following.includes(r.userId));
+      const friendsAndMe = [user.uid, ...following];
+      const friendsReviews = allGameReviews.filter(r => friendsAndMe.includes(r.userId));
       if (friendsReviews.length > 0) {
         const total = friendsReviews.reduce((acc, r) => acc + r.score, 0);
         setFriendsRating(Math.round(total / friendsReviews.length));
@@ -688,13 +689,12 @@ export default function GamePage() {
         {/* Vibe Blur Background */}
         <div className="absolute inset-0 overflow-hidden">
           <img 
-            src={game.customImageApproved ? game.coverImage : (game.bannerImage || game.coverImage || game.thumbnail || null)} 
+            src={game.bannerImage || (game.customImageApproved ? game.coverImage : (game.coverImage || game.thumbnail || null))} 
             alt="" 
             className={cn(
               "w-full h-full object-cover scale-110 transition-all duration-700",
-              (!game.bannerImage && !(game.customImageApproved && game.coverImage)) ? "blur-2xl opacity-30" : "opacity-40"
+              !game.bannerImage ? "blur-2xl opacity-30" : "opacity-40"
             )}
-            style={game.bannerImage ? game.bannerStyles : undefined}
             referrerPolicy="no-referrer"
           />
         </div>

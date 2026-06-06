@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Calendar, MapPin, Users, Dices, Plus, Trash2, Loader2, Clock } from 'lucide-react';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
-import { doc, updateDoc, arrayRemove, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, updateDoc, arrayRemove, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import { useUser } from '../contexts/UserContext';
 import { cn } from '../lib/utils';
 import ACBadge from './ACBadge';
@@ -46,12 +46,34 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({ isOpen, onClose, 
   const [attendeeProfiles, setAttendeeProfiles] = useState<Record<string, any>>({});
   const [isBringModalOpen, setIsBringModalOpen] = useState(false);
   const [isRemoving, setIsRemoving] = useState<string | null>(null);
+  const [localEvent, setLocalEvent] = useState<GroupEvent | null>(event);
 
   useEffect(() => {
-    if (!isOpen || !event) return;
+    setLocalEvent(event);
+  }, [event]);
+
+  useEffect(() => {
+    if (!isOpen || !event?.id) return;
+
+    let unsubscribe: () => void;
+    // Listen to real-time updates for the event
+    const eventRef = doc(db, 'groupEvents', event.id);
+    unsubscribe = onSnapshot(eventRef, (snap) => {
+      if (snap.exists()) {
+        setLocalEvent({ id: snap.id, ...snap.data() } as GroupEvent);
+      }
+    });
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [isOpen, event?.id]);
+
+  useEffect(() => {
+    if (!isOpen || !localEvent) return;
 
     const fetchAttendeeData = async () => {
-      const uids = event.attendees.map(a => a.userId);
+      const uids = localEvent.attendees.map(a => a.userId);
       if (uids.length === 0) return;
 
       const results: Record<string, any> = {};
@@ -81,13 +103,13 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({ isOpen, onClose, 
     };
 
     fetchAttendeeData();
-  }, [event?.attendees, isOpen]);
+  }, [localEvent?.attendees, isOpen]);
 
   const handleRemoveGame = async (game: BroughtGame) => {
-    if (isRemoving || !event) return;
+    if (isRemoving || !localEvent) return;
     setIsRemoving(game.gameId);
     try {
-      const eventRef = doc(db, 'groupEvents', event.id);
+      const eventRef = doc(db, 'groupEvents', localEvent.id);
       await updateDoc(eventRef, {
         gamesBrought: arrayRemove(game)
       });
@@ -118,10 +140,10 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({ isOpen, onClose, 
     });
   };
 
-  if (!event) return null;
+  if (!localEvent) return null;
 
-  const goingAttendees = event.attendees.filter(a => a.status === 'going');
-  const maybeAttendees = event.attendees.filter(a => a.status === 'maybe');
+  const goingAttendees = localEvent.attendees.filter(a => a.status === 'going');
+  const maybeAttendees = localEvent.attendees.filter(a => a.status === 'maybe');
 
   return (
     <AnimatePresence mode="wait">
@@ -139,10 +161,10 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({ isOpen, onClose, 
             initial={{ opacity: 0, scale: 0.95, y: 30 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 30 }}
-            className="relative w-full max-w-4xl bg-charcoal rounded-[3.5rem] shadow-2xl overflow-hidden border border-white/10 flex flex-col max-h-[90vh]"
+            className="relative w-full max-w-4xl bg-charcoal rounded-[3.5rem] shadow-2xl overflow-y-auto no-scrollbar border border-white/10 flex flex-col max-h-[90vh]"
           >
             {/* Header / Hero Section */}
-            <div className="relative bg-white/5 p-10 md:p-12 text-white border-b border-white/10 shrink-0">
+            <div className="relative bg-white/5 p-10 md:p-12 text-white border-b border-white/10">
               <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-accent/5 rounded-full -mr-32 -mt-32" />
               <button 
                 onClick={onClose}
@@ -160,11 +182,11 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({ isOpen, onClose, 
 
                 <div>
                   <h2 className="text-4xl md:text-5xl font-black tracking-tighter mb-4 leading-none">
-                    {event.title}
+                    {localEvent.title}
                   </h2>
-                  {event.description && (
+                  {localEvent.description && (
                     <p className="text-white/40 text-lg font-medium max-w-2xl leading-relaxed">
-                      {event.description}
+                      {localEvent.description}
                     </p>
                   )}
                 </div>
@@ -174,7 +196,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({ isOpen, onClose, 
                     <Calendar className="w-5 h-5 text-emerald-accent" />
                     <div className="space-y-0.5">
                       <p className="text-[10px] font-black text-white/20 uppercase tracking-widest">Date</p>
-                      <p className="text-sm font-black text-white">{formatDate(event.dateTime)}</p>
+                      <p className="text-sm font-black text-white">{formatDate(localEvent.dateTime)}</p>
                     </div>
                   </div>
 
@@ -182,7 +204,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({ isOpen, onClose, 
                     <Clock className="w-5 h-5 text-emerald-accent" />
                     <div className="space-y-0.5">
                       <p className="text-[10px] font-black text-white/20 uppercase tracking-widest">Time</p>
-                      <p className="text-sm font-black text-white">{formatTime(event.dateTime)}</p>
+                      <p className="text-sm font-black text-white">{formatTime(localEvent.dateTime)}</p>
                     </div>
                   </div>
 
@@ -190,7 +212,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({ isOpen, onClose, 
                     <MapPin className="w-5 h-5 text-emerald-accent" />
                     <div className="space-y-0.5">
                       <p className="text-[10px] font-black text-white/20 uppercase tracking-widest">Where</p>
-                      <p className="text-sm font-black text-white">{event.location}</p>
+                      <p className="text-sm font-black text-white">{localEvent.location}</p>
                     </div>
                   </div>
                 </div>
@@ -198,7 +220,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({ isOpen, onClose, 
             </div>
 
             {/* Scrollable Content */}
-            <div className="flex-1 overflow-y-auto no-scrollbar p-10 md:p-12 space-y-12">
+            <div className="p-10 md:p-12 space-y-12">
               
               {/* Games Section */}
               <section className="space-y-6">
@@ -221,8 +243,8 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({ isOpen, onClose, 
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {event.gamesBrought && event.gamesBrought.length > 0 ? (
-                    event.gamesBrought.map((game, idx) => (
+                  {localEvent.gamesBrought && localEvent.gamesBrought.length > 0 ? (
+                    localEvent.gamesBrought.map((game, idx) => (
                       <motion.div 
                         initial={{ opacity: 0, scale: 0.9 }}
                         animate={{ opacity: 1, scale: 1 }}
@@ -321,7 +343,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({ isOpen, onClose, 
           <BringGameModal 
             isOpen={isBringModalOpen}
             onClose={() => setIsBringModalOpen(false)}
-            eventId={event.id}
+            eventId={localEvent.id}
           />
         </div>
       )}

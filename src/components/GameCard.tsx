@@ -60,6 +60,7 @@ interface GameCardProps {
   compact?: boolean;
   personalRating?: number | string;
   groupRating?: number | string;
+  friendsRating?: number | string;
   groupName?: string;
   isRecentPlay?: boolean;
   playCount?: number;
@@ -72,6 +73,7 @@ const GameCard: React.FC<GameCardProps> = (props) => {
     compact = false, 
     personalRating,
     groupRating,
+    friendsRating,
     groupName,
     isRecentPlay,
     playCount,
@@ -84,6 +86,7 @@ const GameCard: React.FC<GameCardProps> = (props) => {
   const communityRating = game.rating;
   const displayPersonal = personalRating || (game as any).personalRating;
   const displayGroup = groupRating || (game as any).groupRating;
+  const displayFriends = friendsRating || (game as any).friendsRating;
   const activeGroupName = groupName || (game as any).groupName;
 
   const resolvedImage = game.coverImage || game.thumbnail;
@@ -166,7 +169,7 @@ const GameCard: React.FC<GameCardProps> = (props) => {
             </div>
 
             {/* Rating Die in corner */}
-            {(displayPersonal && displayPersonal !== '-' || (typeof communityRating === 'number' && communityRating > 0)) ? (
+            {(displayPersonal && displayPersonal !== '-' || displayGroup || displayFriends || (typeof communityRating === 'number' && communityRating > 0)) ? (
               <div className="flex flex-col items-end gap-2 bg-black/60 backdrop-blur-md px-2 py-2 rounded-xl shadow-xl border border-white/10 pointer-events-auto transition-transform hover:scale-105">
                 {displayPersonal && displayPersonal !== '-' ? (
                   <div className="flex flex-col items-center">
@@ -174,7 +177,17 @@ const GameCard: React.FC<GameCardProps> = (props) => {
                     <D20Die value={displayPersonal} theme="gold" size="sm" />
                   </div>
                 ) : null}
-                {(typeof communityRating === 'number' && communityRating > 0) ? (
+                {displayFriends ? (
+                  <div className="flex flex-col items-center">
+                    <span className="text-[8px] font-black text-white/40 uppercase tracking-widest mb-1">Friends</span>
+                    <D20Die value={displayFriends} theme="silver" size="sm" />
+                  </div>
+                ) : displayGroup ? (
+                  <div className="flex flex-col items-center">
+                    <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest mb-1">{activeGroupName ? activeGroupName.slice(0,3) : 'Grp'}</span>
+                    <D20Die value={displayGroup} theme="outline" size="sm" />
+                  </div>
+                ) : (typeof communityRating === 'number' && communityRating > 0) ? (
                   <div className="flex flex-col items-center">
                     <span className="text-[8px] font-black text-emerald-accent uppercase tracking-widest mb-1">Avg</span>
                     <D20Die value={communityRating} theme="emerald" size="sm" />

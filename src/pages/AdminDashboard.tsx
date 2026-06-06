@@ -52,7 +52,10 @@ const EditableRow = React.memo(function EditableRow({
 
         if (typeof val === "string") {
           const trimmed = val.trim();
-          if (
+          if (["genres", "categories", "mechanics", "designers", "artists", "publishers"].includes(col)) {
+            val = trimmed.split(',').map(item => item.trim()).filter(item => item !== "");
+            newDraftState[col] = val;
+          } else if (
             (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
             (trimmed.startsWith("[") && trimmed.endsWith("]"))
           ) {
@@ -109,17 +112,18 @@ const EditableRow = React.memo(function EditableRow({
     }
 
     let val = draftState[col];
+    const isBooleanCol = typeof val === "boolean" || col === "isExpansion" || col === "isDataComplete";
 
     // Convert undefined to empty string to keep inputs controlled
     if (val === undefined || val === null) {
-      val = "";
+      val = isBooleanCol ? false : "";
     }
 
-    if (typeof val === "boolean") {
+    if (isBooleanCol) {
       return (
         <input
           type="checkbox"
-          checked={val}
+          checked={Boolean(val)}
           onChange={(e) => handleChange(col, e.target.checked)}
           className="w-4 h-4 rounded bg-black/20 border-white/20 text-indigo-500 focus:ring-indigo-500 mx-auto block"
         />
@@ -244,9 +248,21 @@ export default function AdminDashboard() {
         });
       });
       allKeys.add("isDataComplete");
+      allKeys.add("isExpansion");
+      allKeys.add("baseGameId");
+
+      const excludeCols = new Set([
+        "trending", "series", "bannerStyles", "processedAt", "flagReason", 
+        "wikidataId", "website", "status", "url", "updatedAt", "numRatings"
+      ]);
+
+      const filteredKeys = Array.from(allKeys).filter(
+        (k) => k !== "id" && k !== "title" && !excludeCols.has(k)
+      );
       const columnsArray = [
         "id",
-        ...Array.from(allKeys).filter((k) => k !== "id"),
+        "title",
+        ...filteredKeys,
       ];
       setColumns(columnsArray);
 
@@ -259,6 +275,8 @@ export default function AdminDashboard() {
           if (val !== null && typeof val === "object") {
             if (val.toDate) {
               row[k] = val.toDate().toISOString();
+            } else if (Array.isArray(val) && ["genres", "categories", "mechanics", "designers", "artists", "publishers"].includes(k)) {
+              row[k] = val.join(', ');
             } else {
               row[k] = JSON.stringify(val, null, 2);
             }

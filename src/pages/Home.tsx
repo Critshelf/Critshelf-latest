@@ -81,7 +81,7 @@ interface Review {
 import { useRecentGames } from "../hooks/useRecentGames";
 
 export default function Home() {
-  const { profile, user, groupRatings } = useUser();
+  const { profile, user, groupRatings, friendsRatings } = useUser();
   const [rotationGames, setRotationGames] = useState<RotationGame[]>([]);
   const [rotationIndex, setRotationIndex] = useState(0);
   const { recentGames, loading: loadingRecent } = useRecentGames();
@@ -496,6 +496,7 @@ export default function Home() {
                             game={game}
                             personalRating={profile?.ratings?.[game.id]}
                             groupRating={groupRatings[game.id]?.rating}
+                            friendsRating={friendsRatings[game.id]}
                             groupName={groupRatings[game.id]?.groupName}
                             isRecentPlay={true}
                             playCount={game.playCount}
@@ -640,6 +641,7 @@ export default function Home() {
                     compact
                     personalRating={profile?.ratings?.[game.id]}
                     groupRating={groupRatings[game.id]?.rating}
+                    friendsRating={friendsRatings[game.id]}
                     groupName={groupRatings[game.id]?.groupName}
                   />
                 </div>

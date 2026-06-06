@@ -17,6 +17,7 @@ import UserAvatar from "./UserAvatar";
 import { ActivityType, ActivityMetadata } from "../lib/activityLogger";
 import { formatDistanceToNow } from "date-fns";
 import { Link, useNavigate } from "react-router-dom";
+import LiveGameCover from "./LiveGameCover";
 
 interface ActivityItemProps {
   activity: {
@@ -234,17 +235,13 @@ const ActivityItem: React.FC<ActivityItemProps> = ({
       </div>
 
       {!compact && (metadata.coverImage || metadata.gameCover) && (
-        <div className="shrink-0 w-12 h-16 rounded-lg overflow-hidden border border-white/5 shadow-2l group-hover:scale-105 transition-transform duration-300 relative">
-          <img
-            src={metadata.coverImage || metadata.gameCover || null}
-            alt={metadata.gameTitle}
-            className={cn(
-              "w-full h-full object-cover transition-transform duration-300",
-              (metadata.customImageApproved === false || metadata.isApproved === false)
-                ? "blur-md opacity-50 grayscale"
-                : "",
-            )}
-            referrerPolicy="no-referrer"
+        <Link to={`/game/${metadata.gameId}`} className="shrink-0 w-12 h-16 rounded-lg border border-white/5 shadow-2l group-hover:scale-105 transition-transform duration-300 relative block">
+          <LiveGameCover
+            gameId={metadata.gameId && metadata.gameId.startsWith('bgg_') ? metadata.gameId : undefined}
+            initialCover={metadata.coverImage || metadata.gameCover}
+            alt={metadata.gameTitle || ''}
+            containerClassName="w-full h-full rounded-lg"
+            isApprovalPending={metadata.customImageApproved === false || metadata.isApproved === false}
           />
           {(metadata.customImageApproved === false || metadata.isApproved === false) && (
             <div className="absolute inset-0 flex items-center justify-center p-1 text-center bg-gray-900/60 font-black">
@@ -253,7 +250,7 @@ const ActivityItem: React.FC<ActivityItemProps> = ({
               </span>
             </div>
           )}
-        </div>
+        </Link>
       )}
     </motion.div>
   );

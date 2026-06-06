@@ -38,7 +38,7 @@ const SHELVES = [
 ];
 
 export default function Collection() {
-  const { user, profile, groupRatings } = useUser();
+  const { user, profile, groupRatings, friendsRatings } = useUser();
   const [activeShelf, setActiveShelf] = useState('owned');
   const [items, setItems] = useState<CollectionItem[]>([]);
   const [totalGamesCount, setTotalGamesCount] = useState(0);
@@ -421,6 +421,7 @@ export default function Collection() {
                         game={game as Game} 
                         personalRating={profile?.ratings?.[item.gameId]}
                         groupRating={groupRatings[item.gameId]?.rating}
+                        friendsRating={friendsRatings[item.gameId]}
                         groupName={groupRatings[item.gameId]?.groupName}
                       />
                       

@@ -44,6 +44,7 @@ interface UserContextType {
   profile: UserProfile | null;
   userGroupIds: string[];
   groupRatings: Record<string, GroupRating>; // gameId -> { rating, groupName }
+  friendsRatings: Record<string, number>; // gameId -> rating average
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
   signUpWithEmail: (email: string, password: string, username: string) => Promise<void>;
@@ -61,6 +62,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [userGroupIds, setUserGroupIds] = useState<string[]>([]);
   const [groupRatings, setGroupRatings] = useState<Record<string, GroupRating>>({});
+  const [friendsRatings, setFriendsRatings] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
 
   const hasTriggeredAC = useRef(false);
@@ -301,6 +303,53 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  useEffect(() => {
+    const fetchFriendsRatings = async () => {
+      const following = profile?.following || [];
+      const userIds = [user?.uid, ...following].filter(Boolean) as string[];
+
+      if (userIds.length === 0) {
+        setFriendsRatings({});
+        return;
+      }
+      try {
+        const chunks = [];
+        for (let i = 0; i < userIds.length; i += 10) {
+          chunks.push(userIds.slice(i, i + 10));
+        }
+        const newRatings: Record<string, { total: number; count: number }> = {};
+        
+        const promises = chunks.map(chunk => 
+          getDocs(query(collection(db, 'reviews'), where('userId', 'in', chunk)))
+        );
+        
+        const snaps = await Promise.all(promises);
+        snaps.forEach(snap => {
+          snap.docs.forEach(doc => {
+            const rev = doc.data();
+            if (rev.gameId && typeof rev.score === 'number') {
+              if (!newRatings[rev.gameId]) {
+                newRatings[rev.gameId] = { total: 0, count: 0 };
+              }
+              newRatings[rev.gameId].total += rev.score;
+              newRatings[rev.gameId].count += 1;
+            }
+          });
+        });
+        
+        const averageRatings: Record<string, number> = {};
+        for (const [gameId, data] of Object.entries(newRatings)) {
+          averageRatings[gameId] = Math.round(data.total / data.count);
+        }
+        setFriendsRatings(averageRatings);
+      } catch (error) {
+        console.error("Error fetching friends ratings:", error);
+      }
+    };
+
+    fetchFriendsRatings();
+  }, [profile?.following?.length, user?.uid]); // simplified dependency to length for efficiency
+
   const refreshProfile = async () => {
     if (user) {
       await fetchProfile(user.uid, user);
@@ -312,6 +361,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     profile, 
     userGroupIds,
     groupRatings,
+    friendsRatings,
     loading, 
     signInWithGoogle, 
     signUpWithEmail,
@@ -324,7 +374,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     user, 
     profile, 
     userGroupIds,
-    groupRatings, 
+    groupRatings,
+    friendsRatings,
     loading, 
     signInWithGoogle, 
     signUpWithEmail, 

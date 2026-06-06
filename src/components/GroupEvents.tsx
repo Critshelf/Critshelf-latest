@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Calendar, MapPin, Users, Plus, Clock, Trash2, X, Shield, History } from 'lucide-react';
 import { db, OperationType, handleFirestoreError } from '../lib/firebase';
-import { collection, query, where, orderBy, doc, updateDoc, deleteDoc, getDoc, getDocs, limit } from 'firebase/firestore';
+import { collection, query, where, orderBy, doc, updateDoc, deleteDoc, getDoc, getDocs, limit, onSnapshot } from 'firebase/firestore';
 import { cn } from '../lib/utils';
 import CreateEventModal from './CreateEventModal';
 import EventDetailsModal from './EventDetailsModal';
@@ -36,23 +36,29 @@ const GroupEvents: React.FC<GroupEventsProps> = ({ groupId, groupOwnerId }) => {
       limit(50)
     );
 
-    const fetchEvents = async () => {
-      try {
-        const snapshot = await getDocs(q);
-        const eventList = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        } as GroupEvent));
-        setEvents(eventList);
-      } catch (error) {
-        console.error("Error fetching events:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const eventList = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as GroupEvent));
+      setEvents(eventList);
+      setLoading(false);
+    }, (error) => {
+      console.error("Error fetching events:", error);
+      setLoading(false);
+    });
 
-    fetchEvents();
+    return () => unsubscribe();
   }, [groupId, user]);
+
+  useEffect(() => {
+    if (selectedEvent) {
+      const updatedSelected = events.find(e => e.id === selectedEvent.id);
+      if (updatedSelected) {
+        setSelectedEvent(updatedSelected);
+      }
+    }
+  }, [events]);
 
   const handleRSVP = async (eventId: string, currentAttendees: any[], status: string) => {
     if (!user) return;
@@ -60,6 +66,18 @@ const GroupEvents: React.FC<GroupEventsProps> = ({ groupId, groupOwnerId }) => {
     // Check if status is already set to the same value
     const currentStatus = currentAttendees.find(a => a.userId === user.uid)?.status;
     if (currentStatus === status) return;
+
+    const confirmMessage = status === 'going' ? 'Confirm you are attending this event?' 
+                         : status === 'not_going' ? 'Confirm you are not attending this event?'
+                         : 'Confirm you are a maybe for this event?';
+                         
+    let shouldProceed = true;
+    try {
+      shouldProceed = window.confirm(confirmMessage);
+    } catch (e) {
+      // Ignore if block
+    }
+    if (!shouldProceed) return;
 
     const otherAttendees = currentAttendees.filter(a => a.userId !== user.uid);
     const updatedAttendees = [

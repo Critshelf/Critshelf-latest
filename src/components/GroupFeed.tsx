@@ -15,10 +15,13 @@ import {
   onSnapshot,
 } from "firebase/firestore";
 import { useUser } from "../contexts/UserContext";
-import { Loader2, MessageCircle } from "lucide-react";
+import { Loader2, MessageCircle, Calendar, Dices } from "lucide-react";
 import UserAvatar from "./UserAvatar";
+import { cn } from "../lib/utils";
+import LiveGameCover from "./LiveGameCover";
 import { Link, useNavigate } from "react-router-dom";
 import D20Die from "./D20Die";
+import EventDetailsModal from "./EventDetailsModal";
 
 interface Activity {
   id: string;
@@ -133,7 +136,9 @@ export default function GroupFeed({ groupId }: GroupFeedProps) {
     }
   };
 
-  const handleCardClick = (activity: Activity) => {
+  const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
+
+  const handleCardClick = async (activity: Activity) => {
     if (activity.type === "LOG_PLAY" || activity.type === "play_logged") {
       const route = activity.metadata?.playId
         ? `/play/${activity.metadata.playId}`
@@ -147,6 +152,19 @@ export default function GroupFeed({ groupId }: GroupFeedProps) {
       activity.type === "game_added"
     ) {
       navigate(`/game/${activity.targetId}`);
+    } else if (activity.type === "SESSION_SCHEDULED" || activity.type === "GAME_BROUGHT" || activity.type === "GAME_REQUESTED") {
+      if (activity.metadata?.eventId) {
+        try {
+          const eventSnap = await getDoc(doc(db, "groupEvents", activity.metadata.eventId));
+          if (eventSnap.exists()) {
+            setSelectedEvent({ id: eventSnap.id, ...eventSnap.data() });
+          } else {
+            console.error("Event not found");
+          }
+        } catch (error) {
+          console.error("Error fetching event:", error);
+        }
+      }
     }
   };
 
@@ -182,16 +200,31 @@ export default function GroupFeed({ groupId }: GroupFeedProps) {
           onClick={() => handleCardClick(item)}
           className="bg-white/5 border border-white/10 rounded-[2.5rem] p-6 flex gap-4 hover:bg-white/10 transition-colors cursor-pointer"
         >
-          <Link
-            to={`/profile/${item.actorId}`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <UserAvatar
-              user={{ uid: item.actorId, displayName: item.actorName }}
-              size="md"
-              className="rounded-full shadow-lg hover:ring-2 hover:ring-emerald-accent transition-all"
+          {item.type === "SESSION_SCHEDULED" ? (
+            <div className="w-12 h-12 bg-white/5 rounded-[1.25rem] flex items-center justify-center shrink-0 border border-white/10 text-emerald-accent shadow-lg shadow-black/20">
+              <Calendar className="w-5 h-5" />
+            </div>
+          ) : (item.type === "GAME_BROUGHT" || item.type === "GAME_REQUESTED") && (item.metadata?.gameCover || item.metadata?.coverImage) ? (
+            <LiveGameCover
+              gameId={item.targetId?.startsWith('bgg_') ? item.targetId : undefined}
+              initialCover={item.metadata?.gameCover || item.metadata?.coverImage}
+              alt={item.targetName}
+              containerClassName="w-12 h-12 rounded-[1.25rem] shadow-lg border border-white/10 shadow-black/20"
+              isApprovalPending={item.metadata?.customImageApproved === false || item.metadata?.isApproved === false}
             />
-          </Link>
+          ) : (
+            <Link
+              to={`/profile/${item.actorId}`}
+              onClick={(e) => e.stopPropagation()}
+              className="shrink-0"
+            >
+              <UserAvatar
+                user={{ uid: item.actorId, displayName: item.actorName }}
+                size="md"
+                className="rounded-full shadow-lg hover:ring-2 hover:ring-emerald-accent transition-all"
+              />
+            </Link>
+          )}
           <div className="flex-1 min-w-0 flex flex-col justify-center">
             <div className="text-[10px] uppercase font-black tracking-widest text-white/30 mb-1">
               {(item.createdAt || item.timestamp)
@@ -328,6 +361,27 @@ export default function GroupFeed({ groupId }: GroupFeedProps) {
               </>
             )}
 
+            {item.type === "GAME_BROUGHT" && (
+              <>
+                <p className="text-white text-lg">
+                  <strong className="text-emerald-accent">
+                    {item.actorName}
+                  </strong>{" "}
+                  is bringing{" "}
+                  <Link
+                    to={`/game/${item.targetId}`}
+                    className="font-bold underline decoration-white/20 hover:decoration-white transition-all"
+                  >
+                    {item.targetName}
+                  </Link>{" "}
+                  for{" "}
+                  <span className="font-bold">
+                    "{item.metadata?.eventTitle}"
+                  </span>
+                </p>
+              </>
+            )}
+
             {item.type === "GAME_REQUESTED" && (
               <>
                 <p className="text-white text-lg mb-2">
@@ -407,29 +461,32 @@ export default function GroupFeed({ groupId }: GroupFeedProps) {
               </>
             )}
 
-            {/* Fallback */}
-            {["play_logged", "review_added", "game_added"].includes(
-              item.type,
-            ) && (
+            {/* Catch-all for unhandled / legacy activity types */}
+            {!["LOG_PLAY", "POST_STATUS", "REVIEW_GAME", "RATE_GAME", "COLLECTION_ADD", "SESSION_SCHEDULED", "GAME_BROUGHT", "GAME_REQUESTED"].includes(item.type) && (
               <p className="text-white text-lg">
                 <strong className="text-emerald-accent">
                   {item.actorName || item.metadata?.userName || "Someone"}
                 </strong>{" "}
-                did something with an item!
+                {item.type === "POLL_RESULT" ? `created a poll: ${item.targetName}` :
+                 item.type === "group_created" ? `created a new group` :
+                 item.type === "new_member" ? `joined a group` :
+                 item.type === "play_logged" || item.type === "review_added" || item.type === "game_added" ? `interacted with ${item.targetName || 'an item'}` :
+                 `posted an update`}
               </p>
             )}
           </div>
 
-          {item.metadata?.gameCover && (
+          {(item.metadata?.gameCover || item.metadata?.coverImage) && (
             <Link
               to={`/game/${item.targetId}`}
               className="shrink-0 ml-4 hidden sm:block"
             >
-              <img
-                src={item.metadata.gameCover}
+              <LiveGameCover
+                gameId={item.targetId?.startsWith('bgg_') ? item.targetId : undefined}
+                initialCover={item.metadata?.gameCover || item.metadata?.coverImage}
                 alt={item.targetName}
-                className="w-16 h-16 rounded-xl object-cover border border-white/10"
-                referrerPolicy="no-referrer"
+                containerClassName="w-16 h-16 rounded-xl border border-white/10"
+                isApprovalPending={item.metadata?.customImageApproved === false || item.metadata?.isApproved === false}
               />
             </Link>
           )}
@@ -444,6 +501,14 @@ export default function GroupFeed({ groupId }: GroupFeedProps) {
           {loadingMore && <Loader2 className="w-4 h-4 animate-spin" />}
           Load More Activity
         </button>
+      )}
+
+      {selectedEvent && (
+        <EventDetailsModal
+          isOpen={!!selectedEvent}
+          onClose={() => setSelectedEvent(null)}
+          event={selectedEvent}
+        />
       )}
     </div>
   );

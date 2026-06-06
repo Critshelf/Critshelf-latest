@@ -30,7 +30,7 @@ import { searchWikidata } from "../services/wikidataService";
 import { BOARD_GAME_CATEGORIES } from "../constants";
 
 export default function Browse() {
-  const { profile, groupRatings } = useUser();
+  const { profile, groupRatings, friendsRatings } = useUser();
   const [searchTerm, setSearchTerm] = useState("");
   const [games, setGames] = useState<Game[]>([]);
   const [loading, setLoading] = useState(true);
@@ -424,6 +424,7 @@ export default function Browse() {
                           game={game}
                           personalRating={profile?.ratings?.[game.id]}
                           groupRating={groupRatings[game.id]?.rating}
+                          friendsRating={friendsRatings[game.id]}
                           groupName={groupRatings[game.id]?.groupName}
                           onClick={() => handleGameClick(game)}
                         />
