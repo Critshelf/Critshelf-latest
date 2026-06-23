@@ -52,7 +52,7 @@ export default function NotificationTray({
       (snapshot) => {
         const msgs = snapshot.docs.map((doc) => ({
           id: doc.id,
-          ...doc.data(),
+          ...doc.data({ serverTimestamps: 'estimate' }),
         })) as Notification[];
         setNotifications(msgs);
         setLoading(false);
@@ -246,7 +246,7 @@ export default function NotificationTray({
                         {notif.title}
                       </h5>
                       <span className="text-[8px] font-black text-white/10 uppercase tracking-widest whitespace-nowrap pt-1">
-                        {notif.createdAt
+                        {notif.createdAt?.toDate
                           ? formatDistanceToNow(notif.createdAt.toDate(), {
                               addSuffix: true,
                             })

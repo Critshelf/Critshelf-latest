@@ -11,6 +11,7 @@ import {
   Clock,
   Sparkles,
   MessageCircle,
+  Share,
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import UserAvatar from "./UserAvatar";
@@ -231,6 +232,27 @@ const ActivityItem: React.FC<ActivityItemProps> = ({
                 {groupName || metadata.groupName}
               </div>
             )}
+          {(type === "LOG_PLAY" || type === "play_logged") && metadata.playId && (
+            <button
+              onClick={async (e) => {
+                e.stopPropagation();
+                const shareData = {
+                  title: 'CritShelf Session',
+                  text: 'Check out this game session on CritShelf!',
+                  url: window.location.origin + '/sessions/' + metadata.playId
+                };
+                if (navigator.share) {
+                  try { await navigator.share(shareData); } catch (err) {}
+                } else {
+                  navigator.clipboard.writeText(shareData.url);
+                  alert("Link copied!");
+                }
+              }}
+              className="flex items-center gap-1.5 text-[10px] font-bold text-white/30 hover:text-emerald-accent uppercase tracking-widest border-l border-white/10 pl-3 transition-colors"
+            >
+              <Share className="w-3 h-3" /> Share
+            </button>
+          )}
         </div>
       </div>
 

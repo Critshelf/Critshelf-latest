@@ -20,7 +20,8 @@ async function startServer() {
   app.post("/api/webhooks/art-submission", async (req, res) => {
     const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
     const adminToken = process.env.ADMIN_SECRET_TOKEN;
-    const publicAppUrl = process.env.PUBLIC_APP_URL || `http://localhost:${PORT}`;
+    const host = req.get('X-Forwarded-Host') || req.get('host');
+    const publicAppUrl = process.env.PUBLIC_APP_URL || (host ? `https://${host}` : `http://localhost:${PORT}`);
 
     if (!webhookUrl) {
       console.error("DISCORD_WEBHOOK_URL is not set");
@@ -67,7 +68,8 @@ async function startServer() {
   app.post("/api/webhooks/new-game", async (req, res) => {
     const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
     const adminToken = process.env.ADMIN_SECRET_TOKEN;
-    const publicAppUrl = process.env.PUBLIC_APP_URL || `http://localhost:${PORT}`;
+    const host = req.get('X-Forwarded-Host') || req.get('host');
+    const publicAppUrl = process.env.PUBLIC_APP_URL || (host ? `https://${host}` : `http://localhost:${PORT}`);
 
     if (!webhookUrl) {
       console.error("DISCORD_WEBHOOK_URL is not set");
@@ -107,6 +109,60 @@ async function startServer() {
       res.json({ status: "success" });
     } catch (error) {
       console.error("Error sending New Game webhook:", error);
+      res.status(500).json({ error: "Failed to send notification" });
+    }
+  });
+
+  app.post("/api/webhooks/custom-game", async (req, res) => {
+    const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+    const adminToken = process.env.ADMIN_SECRET_TOKEN;
+    const host = req.get('X-Forwarded-Host') || req.get('host');
+    const publicAppUrl = process.env.PUBLIC_APP_URL || (host ? `https://${host}` : `http://localhost:${PORT}`);
+
+    if (!webhookUrl) {
+      console.error("DISCORD_WEBHOOK_URL is not set");
+      return res.status(500).json({ error: "Webhook configuration missing" });
+    }
+
+    try {
+      const { id, title, minPlayers, maxPlayers, playTime, coverImage, submittedBy, userId } = req.body;
+
+      const approveUrl = `${publicAppUrl}/admin/moderate-game?gameId=${id}&action=approve&adminToken=${adminToken}`;
+      const rejectUrl = `${publicAppUrl}/admin/moderate-game?gameId=${id}&action=reject&adminToken=${adminToken}`;
+
+      const embed = {
+        title: "🎲 New Manual Game Submission Pending Approval",
+        description: "A user has submitted a new game. Review and approve it in the admin panel.",
+        color: 0xf59e0b, // Gold/Amber color for pending
+        fields: [
+          { name: "Title", value: title || "Unknown", inline: true },
+          { name: "Players", value: `${minPlayers}-${maxPlayers}`, inline: true },
+          { name: "Playtime", value: `${playTime} mins`, inline: true },
+          { name: "Submitted By", value: String(submittedBy), inline: true },
+          { name: "User ID", value: String(userId), inline: true },
+          { name: "Firestore ID", value: `\`${id}\``, inline: false },
+          { name: "Image URL", value: coverImage ? (coverImage.startsWith('data:image') ? 'Base64 Image Uploaded' : coverImage) : "No image provided" },
+          { 
+            name: "Admin Actions", 
+            value: `[ ✅ APPROVE GAME ](${approveUrl}) ㅤ|ㅤ [ ❌ REJECT GAME ](${rejectUrl})`, 
+            inline: false 
+          }
+        ],
+        image: { url: (coverImage && !coverImage.startsWith('data:image')) ? coverImage : undefined },
+        timestamp: new Date().toISOString(),
+        footer: { text: "CritShelf Game Moderation" }
+      };
+
+      const response = await fetch(webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ embeds: [embed] }),
+      });
+
+      if (!response.ok) throw new Error(`Discord API responded with status ${response.status}`);
+      res.json({ status: "success" });
+    } catch (error) {
+      console.error("Error sending Custom Game webhook:", error);
       res.status(500).json({ error: "Failed to send notification" });
     }
   });

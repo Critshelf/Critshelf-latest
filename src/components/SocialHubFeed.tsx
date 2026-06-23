@@ -5,6 +5,8 @@ import {
   query,
   where,
   getDocs,
+  getDoc,
+  doc,
   orderBy,
   limit,
   startAfter,
@@ -12,7 +14,7 @@ import {
   onSnapshot
 } from "firebase/firestore";
 import { useUser } from "../contexts/UserContext";
-import { Loader2, Trophy, MessageCircle, Plus, Star, Calendar, Dices } from "lucide-react";
+import { Loader2, Trophy, MessageCircle, Plus, Star, Calendar, Dices, Share } from "lucide-react";
 import UserAvatar from "./UserAvatar";
 import { cn } from "../lib/utils";
 import LiveGameCover from "./LiveGameCover";
@@ -148,7 +150,6 @@ export default function SocialHubFeed() {
         // Look up the event and open the modal
         // But first need getDoc and doc imported
         try {
-          const { getDoc, doc } = await import("firebase/firestore");
           const eventSnap = await getDoc(doc(db, "groupEvents", activity.metadata.eventId));
           if (eventSnap.exists()) {
             setSelectedEvent({ id: eventSnap.id, ...eventSnap.data() });
@@ -218,8 +219,8 @@ export default function SocialHubFeed() {
           <div className="flex-1 min-w-0 flex flex-col justify-center">
             <div className="text-[10px] uppercase font-black tracking-widest text-white/30 mb-1">
               {(item.createdAt || item.timestamp)
-                ?.toDate()
-                .toLocaleDateString() || "Recently"}
+                ?.toDate?.()
+                ?.toLocaleDateString() || "Recently"}
             </div>
             {item.type === "LOG_PLAY" && (
               <>
@@ -249,6 +250,27 @@ export default function SocialHubFeed() {
                   <p className="text-sm text-white/50 mt-1">
                     Score: {item.metadata.score}/20
                   </p>
+                )}
+                {item.metadata?.playId && (
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      const shareData = {
+                        title: 'CritShelf Session',
+                        text: 'Check out this game session on CritShelf!',
+                        url: window.location.origin + '/sessions/' + item.metadata.playId
+                      };
+                      if (navigator.share) {
+                        try { await navigator.share(shareData); } catch (err) {}
+                      } else {
+                        navigator.clipboard.writeText(shareData.url);
+                        alert("Link copied!");
+                      }
+                    }}
+                    className="mt-3 flex items-center gap-1.5 text-xs text-white/50 hover:text-emerald-accent font-bold uppercase tracking-widest transition-colors w-fit"
+                  >
+                    <Share className="w-3 h-3" /> Share Session
+                  </button>
                 )}
               </>
             )}

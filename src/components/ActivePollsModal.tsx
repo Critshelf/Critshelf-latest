@@ -30,7 +30,7 @@ const ActivePollsModal: React.FC<ActivePollsModalProps> = ({ isOpen, onClose, gr
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const pollList = snapshot.docs.map(doc => ({
         id: doc.id,
-        ...doc.data()
+        ...doc.data({ serverTimestamps: 'estimate' })
       } as Poll));
       setPolls(pollList);
       setLoading(false);

@@ -59,7 +59,7 @@ export default function GroupChat({ groupId }: GroupChatProps) {
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChatMessage));
+      const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data({ serverTimestamps: 'estimate' }) } as ChatMessage));
       if (msgs.length === 0 && user) {
         seedMockChat(groupId);
       } else {

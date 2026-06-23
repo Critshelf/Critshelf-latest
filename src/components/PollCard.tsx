@@ -33,7 +33,7 @@ interface PollCardProps {
 
 const PollCard: React.FC<PollCardProps> = ({ poll, onScheduleEvent }) => {
   const { user } = useUser();
-  const isClosed = poll.closeDate ? poll.closeDate.toDate() < new Date() : false;
+  const isClosed = poll.closeDate?.toDate ? poll.closeDate.toDate() < new Date() : false;
 
   const handleVote = async (optionIndex: number, status: 'yes' | 'no' | 'maybe') => {
     if (!user || isClosed) return;

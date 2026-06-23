@@ -11,6 +11,7 @@ import {
 import { doc, getDoc, setDoc, query, collection, where, getDocs, limit, onSnapshot } from 'firebase/firestore';
 import { auth, db, OperationType, handleFirestoreError } from '../lib/firebase';
 import { NotificationPreferences, DEFAULT_NOTIFICATION_PREFERENCES, setupPushNotifications } from '../services/notificationService';
+import { calculateAndStoreAttackClass } from '../services/playLogService';
 
 export interface UserProfile {
   uid: string;
@@ -145,9 +146,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
             // Trigger AC init if it's completely missing
             if ((data.attackClass === undefined || data.attackClass === null) && !hasTriggeredAC.current) {
               hasTriggeredAC.current = true;
-              import('../services/playLogService').then(({ calculateAndStoreAttackClass }) => {
-                calculateAndStoreAttackClass(currentUser.uid).catch(console.error);
-              });
+              calculateAndStoreAttackClass(currentUser.uid).catch(console.error);
             }
 
             // Only update profile state if something actually changed (prevents re-render loops)

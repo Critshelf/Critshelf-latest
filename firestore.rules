@@ -362,12 +362,27 @@ service cloud.firestore {
       allow create: if isAuthenticated(); // Should be created during group creation
     }
 
+    // Claim Approvals
+    match /claim_approvals/{claimId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.claimedByUserId;
+      allow update: if isAuthenticated() && (request.auth.uid == resource.data.loggerId || isAdmin());
+      allow delete: if isAuthenticated() && (request.auth.uid == resource.data.loggerId || request.auth.uid == resource.data.claimedByUserId || isAdmin());
+    }
+
     // Plays
     match /plays/{playId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId;
       allow update: if isAuthenticated() && request.auth.uid == resource.data.userId;
       allow delete: if isAuthenticated() && (request.auth.uid == resource.data.userId || isAdmin());
+
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId;
+        allow update: if isAuthenticated() && request.auth.uid == resource.data.userId;
+        allow delete: if isAuthenticated() && (request.auth.uid == resource.data.userId || get(/databases/$(database)/documents/plays/$(playId)).data.userId == request.auth.uid || isAdmin());
+      }
     }
 
     // Group Polls

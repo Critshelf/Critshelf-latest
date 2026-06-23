@@ -39,7 +39,7 @@ const GroupEvents: React.FC<GroupEventsProps> = ({ groupId, groupOwnerId }) => {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const eventList = snapshot.docs.map(doc => ({
         id: doc.id,
-        ...doc.data()
+        ...doc.data({ serverTimestamps: 'estimate' })
       } as GroupEvent));
       setEvents(eventList);
       setLoading(false);

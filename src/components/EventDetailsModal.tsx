@@ -122,7 +122,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({ isOpen, onClose, 
 
   const formatDate = (date: any) => {
     if (!date) return '';
-    const d = date.toDate();
+    const d = date.toDate ? date.toDate() : new Date(date);
     return d.toLocaleDateString('en-US', {
       weekday: 'long',
       month: 'long',

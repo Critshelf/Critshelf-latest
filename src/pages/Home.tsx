@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useNavigate, Link } from "react-router-dom";
 import { db, OperationType, handleFirestoreError } from "../lib/firebase";
+import { logSocialActivity } from "../lib/socialActivityLogger";
 import {
   collection,
   query,
@@ -79,6 +80,7 @@ interface Review {
 }
 
 import { useRecentGames } from "../hooks/useRecentGames";
+import ClaimApprovals from "../components/ClaimApprovals";
 
 export default function Home() {
   const { profile, user, groupRatings, friendsRatings } = useUser();
@@ -145,7 +147,6 @@ export default function Home() {
         const myActSnap = await getDocs(myActivitiesQ);
         for (const docSnap of myActSnap.docs) {
           if (docSnap.data().actorName !== correctName) {
-             const { updateDoc } = await import("firebase/firestore");
              await updateDoc(docSnap.ref, { actorName: correctName });
           }
         }
@@ -161,7 +162,6 @@ export default function Home() {
             if (actSnap.empty) {
               console.log("Found missing activity for play:", playData.gameTitle);
               // Backfill it!
-              const { logSocialActivity } = await import("../lib/socialActivityLogger");
               await logSocialActivity({
                 type: "LOG_PLAY",
                 actorId: user.uid,
@@ -182,7 +182,6 @@ export default function Home() {
                const actData = actDoc.data();
                const currentAuds = actData.audienceIds || [];
                if (actData.actorId === user.uid && (!currentAuds.includes(user.uid) || currentAuds.length < audienceIds.length)) {
-                 const { updateDoc } = await import("firebase/firestore");
                  await updateDoc(actDoc.ref, { audienceIds });
                }
             }
@@ -422,6 +421,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-charcoal pt-4 pb-32 px-4 sm:px-6">
+      <ClaimApprovals />
       <div className="max-w-4xl mx-auto space-y-12">
         {/* Step 1: The "Heavy Rotation" Section */}
         <section>

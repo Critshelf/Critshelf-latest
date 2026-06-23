@@ -77,7 +77,7 @@ const BringGameModal: React.FC<BringGameModalProps> = ({ isOpen, onClose, eventI
         gamesBrought: arrayUnion({
           gameId: game.id,
           title: game.title,
-          boxArt: game.coverImage || game.thumbnail || null,
+          boxArt: game.coverImage || (game as any).thumbnail || null,
           broughtById: user.uid,
           broughtByName: user.displayName || 'Gamer'
         })
@@ -96,7 +96,7 @@ const BringGameModal: React.FC<BringGameModalProps> = ({ isOpen, onClose, eventI
           metadata: {
             eventId: eventId,
             eventTitle: eventData.title,
-            gameCover: game.coverImage || game.thumbnail || null
+            gameCover: game.coverImage || (game as any).thumbnail || null
           },
           createdAt: serverTimestamp()
         });

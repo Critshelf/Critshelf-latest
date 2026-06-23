@@ -52,6 +52,7 @@ function AppContent() {
             <Route path="/browse" element={<Browse />} />
             <Route path="/game/:id" element={<GamePage />} />
             <Route path="/play/:id" element={<PlayDetails />} />
+            <Route path="/sessions/:id" element={<PlayDetails />} />
             <Route path="/collection" element={<Collection />} />
             <Route path="/social" element={<SocialHub />} />
             <Route path="/auth" element={<Auth />} />
