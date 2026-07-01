@@ -10,8 +10,12 @@ export interface BGGSearchResult {
 
 export const searchBGG = async (query: string, exact: boolean = false): Promise<BGGSearchResult[]> => {
   try {
-    const url = `https://boardgamegeek.com/xmlapi2/search?query=${encodeURIComponent(query)}&type=boardgame${exact ? '&exact=1' : ''}`;
+    const targetUrl = `https://boardgamegeek.com/xmlapi2/search?query=${encodeURIComponent(query)}&type=boardgame${exact ? '&exact=1' : ''}`;
+    const url = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
     const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`BGG fetch failed: ${response.status}`);
+    }
     const text = await response.text();
     const parser = new DOMParser();
     const xml = parser.parseFromString(text, 'text/xml');
@@ -43,7 +47,8 @@ export const searchBGG = async (query: string, exact: boolean = false): Promise<
 };
 
 export const fetchAndParseBGGGame = async (bggId: string) => {
-  const url = `https://boardgamegeek.com/xmlapi2/thing?id=${bggId}&stats=1`;
+  const targetUrl = `https://boardgamegeek.com/xmlapi2/thing?id=${bggId}&stats=1`;
+  const url = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
   const response = await fetch(url);
   if (!response.ok) throw new Error("Failed to fetch BGG thing api");
   const text = await response.text();
@@ -161,8 +166,10 @@ export const fetchAndCacheBGGGame = async (bggIdString: string): Promise<any> =>
 export const fetchBGGExpansions = async (bggIdString: string): Promise<any[]> => {
   try {
     const bggId = bggIdString.replace('bgg_', '');
-    const url = `https://boardgamegeek.com/xmlapi2/thing?id=${bggId}`;
+    const targetUrl = `https://boardgamegeek.com/xmlapi2/thing?id=${bggId}`;
+    const url = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
     const response = await fetch(url);
+    if (!response.ok) throw new Error("Failed to fetch BGG expansions");
     const text = await response.text();
     const parser = new DOMParser();
     const xml = parser.parseFromString(text, 'text/xml');
