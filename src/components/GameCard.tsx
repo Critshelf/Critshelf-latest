@@ -25,6 +25,7 @@ export interface Game {
   customImageApproved?: boolean;
   rating?: number;
   bggId?: string;
+  isBGGItem?: boolean;
   publishingYear?: number | string;
   designers?: string[];
   artists?: string[];

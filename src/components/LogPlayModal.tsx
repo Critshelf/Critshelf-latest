@@ -44,6 +44,7 @@ import { submitPlayLog } from "../services/playLogService";
 import { useUser } from "../contexts/UserContext";
 import UserAvatar from "./UserAvatar";
 import { logSocialActivity } from "../lib/socialActivityLogger";
+import { searchBGG, fetchAndCacheBGGGame } from '../services/bggService';
 
 interface UserProfile {
   uid: string;
@@ -108,6 +109,7 @@ export default function LogPlayModal({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [jitLoadingGameId, setJitLoadingGameId] = useState<string | null>(null);
   const [selectedGame, setSelectedGame] = useState<any>(null);
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [location, setLocation] = useState("");
@@ -267,8 +269,8 @@ export default function LogPlayModal({
         const q = query(
           collection(db, "games"),
           orderBy("name_lowercase"),
-          startAt(searchQuery.toLowerCase()),
-          endAt(searchQuery.toLowerCase() + "\uf8ff"),
+          startAt(searchQuery.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")),
+          endAt(searchQuery.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") + "\uf8ff"),
           limit(5),
         );
 
@@ -283,7 +285,24 @@ export default function LogPlayModal({
               data.customImageApproved || data.isApproved || false,
           } as any;
         });
-        setSearchResults(results);
+        
+        let allResults = [...results];
+        
+        // BGG Fallback if local results are sparse (less than 3)
+        if (results.length < 3) {
+          const bggResults = await searchBGG(searchQuery);
+          // filter out duplicates by checking if local results already have this title
+          const seenTitles = new Set(results.map(r => (r.title || '').toLowerCase()));
+          const uniqueBGG = bggResults.filter(bgg => {
+            const titleLower = (bgg.title || '').toLowerCase();
+            if (seenTitles.has(titleLower)) return false;
+            seenTitles.add(titleLower);
+            return true;
+          });
+          allResults = [...allResults, ...uniqueBGG];
+        }
+        
+        setSearchResults(allResults);
       } catch (error) {
         console.error("Search error:", error);
       } finally {
@@ -615,19 +634,39 @@ export default function LogPlayModal({
                       ? searchResults.map((game) => (
                           <button
                             key={game.id}
-                            onClick={() => {
-                              setSelectedGame(game);
+                            onClick={async () => {
+                              if (game.id.startsWith('bgg_') || game.isBGGItem) {
+                                setJitLoadingGameId(game.id);
+                                try {
+                                  const savedGame = await fetchAndCacheBGGGame(game.id);
+                                  setSelectedGame(savedGame);
+                                } catch (e) {
+                                  console.error(e);
+                                  setSelectedGame(game);
+                                } finally {
+                                  setJitLoadingGameId(null);
+                                }
+                              } else {
+                                setSelectedGame(game);
+                              }
                               setSelectedExpansions([]);
                               setSearchQuery("");
                               setSearchResults([]);
                             }}
-                            className="w-full flex items-center gap-4 p-4 hover:bg-emerald-accent/10 transition-all text-left border-b border-white/5 last:border-0 group"
+                            disabled={jitLoadingGameId === game.id}
+                            className={cn("w-full flex items-center gap-4 p-4 hover:bg-emerald-accent/10 transition-all text-left border-b border-white/5 last:border-0 group", jitLoadingGameId === game.id && "opacity-50 cursor-wait")}
                           >
-                            <img
-                              src={game.coverImage || game.coverArt || null}
-                              className="w-10 h-10 rounded-lg object-cover border border-white/10"
-                              referrerPolicy="no-referrer"
-                            />
+                            {jitLoadingGameId === game.id ? (
+                              <div className="w-10 h-10 flex items-center justify-center">
+                                <Loader2 className="w-6 h-6 text-emerald-accent animate-spin" />
+                              </div>
+                            ) : (
+                              <img
+                                src={game.coverImage || game.coverArt || null}
+                                className="w-10 h-10 rounded-lg object-cover border border-white/10"
+                                referrerPolicy="no-referrer"
+                              />
+                            )}
                             <div className="flex-1 min-w-0">
                               <GameTitleWithDC
                                 game={game}

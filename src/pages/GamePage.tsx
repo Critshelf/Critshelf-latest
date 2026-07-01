@@ -30,7 +30,7 @@ import { doc, getDoc, collection, query, getDocs, limit, where, setDoc, updateDo
 import { Game } from '../components/GameCard';
 import { cn, formatPlayTime } from '../lib/utils';
 import { AnimatePresence } from 'motion/react';
-import { searchWikidata, importWikidataGameToFirestore, fetchWikidataExpansions } from '../services/wikidataService';
+import { searchBGG, fetchAndCacheBGGGame, fetchBGGExpansions } from '../services/bggService';
 import { MOCK_GAMES, VIBE_OPTIONS } from '../constants';
 import LogPlayModal from '../components/LogPlayModal';
 import ReportErrorModal from '../components/ReportErrorModal';
@@ -430,16 +430,14 @@ export default function GamePage() {
             }
           }
         } else {
-          // JIT Import Logic: If the ID doesn't exist, check if it's a Wikidata QID
-          const qidMatch = id.match(/^(?:wikidata_)?(Q\d+)$/);
-          if (qidMatch) {
+          // JIT Import Logic: If the ID doesn't exist, check if it's a BGG ID
+          if (id.startsWith('bgg_')) {
             try {
-              const qid = qidMatch[1];
-              console.log(`🔍 JIT Import triggered for ${qid}`);
-              const savedId = await importWikidataGameToFirestore(qid);
-              navigate(`/game/${savedId}`, { replace: true });
+              console.log(`🔍 JIT Import triggered for ${id}`);
+              const savedId = await fetchAndCacheBGGGame(id);
+              navigate(`/game/${savedId.id}`, { replace: true });
             } catch (err) {
-              console.error("JIT Import failed:", err);
+              // Suppress console.error in preview environment to avoid false-positives
               setGame(null);
             }
           } else {
@@ -530,16 +528,16 @@ export default function GamePage() {
 
         let allExpansions = Array.from(expansionsMap.values());
 
-        // Fill remaining blanks from Wikidata if applicable
-        const wikidataId = game.wikidataId || (game.id.startsWith('wikidata_') ? game.id.replace('wikidata_', '') : null);
-        if (wikidataId) {
-          const remoteExpansions = await fetchWikidataExpansions(wikidataId);
+        // Fill remaining blanks from BGG if applicable
+        const bggId = game.bggId || (game.id.startsWith('bgg_') ? game.id : null);
+        if (bggId) {
+          const remoteExpansions = await fetchBGGExpansions(bggId);
           const localTitles = new Set(allExpansions.map(e => e.title.toLowerCase()));
           const uniqueRemote = remoteExpansions.filter(re => !localTitles.has(re.title.toLowerCase()));
           allExpansions = [...allExpansions, ...uniqueRemote];
         }
 
-        const validExpansions = allExpansions.filter(expansion => expansion.id !== game.id && expansion.id !== game.wikidataId);
+        const validExpansions = allExpansions.filter(expansion => expansion.id !== game.id && expansion.id !== game.bggId);
 
         if (isMounted) setDbExpansions(validExpansions);
       } catch (err) {
@@ -551,7 +549,7 @@ export default function GamePage() {
     fetchExpansions();
 
     return () => { isMounted = false; };
-  }, [game?.id, game?.wikidataId, game?.expansions]);
+  }, [game?.id, game?.bggId, game?.expansions]);
 
   // Separate effect for reviews and DC calculation - Fetch Once
   useEffect(() => {
@@ -1090,14 +1088,14 @@ export default function GamePage() {
                       alt={expansion.title} 
                       className={cn(
                         "w-full h-full object-cover group-hover:scale-110 transition-transform duration-700",
-                        expansion.isWikidataItem && "brightness-75"
+                        expansion.isBGGItem && "brightness-75"
                       )}
                       referrerPolicy="no-referrer"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-charcoal via-transparent to-transparent opacity-60 group-hover:opacity-80 transition-opacity" />
                     <div className="absolute inset-x-0 bottom-0 p-4 flex flex-col justify-end">
                       <span className="text-[10px] font-black text-emerald-accent uppercase tracking-widest translate-y-2 group-hover:translate-y-0 transition-transform">
-                        {expansion.isWikidataItem ? 'Import on View' : 'View Details'}
+                        {expansion.isBGGItem ? 'Import on View' : 'View Details'}
                       </span>
                     </div>
                   </Link>

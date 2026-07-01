@@ -21,6 +21,7 @@ export interface Game {
   publishers?: string[];
   publishingYear?: number;
   bggId?: string;
+  isBGGItem?: boolean;
   wikidataId?: string;
   isApproved?: boolean;
   isExpansion?: boolean;

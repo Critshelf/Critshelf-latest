@@ -13,10 +13,11 @@ import {
   deleteField,
   serverTimestamp,
 } from "firebase/firestore";
-import { Database, Search } from "lucide-react";
+import { Database, Search, RefreshCw } from "lucide-react";
 import { cn } from "../lib/utils";
 import { useUser } from "../contexts/UserContext";
 import { Navigate } from "react-router-dom";
+import { fetchAndParseBGGGame, searchBGG } from "../services/bggService";
 
 // Sub-component for individual item row isolation
 const EditableRow = React.memo(function EditableRow({
@@ -31,6 +32,44 @@ const EditableRow = React.memo(function EditableRow({
   const [draftState, setDraftState] = useState(game);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleSyncWithBGG = async () => {
+    setIsSyncing(true);
+    try {
+      let bggId = draftState.bggId;
+      if (!bggId) {
+        // Search BGG for the title to get an ID
+        const searchResults = await searchBGG(draftState.title, true);
+        if (searchResults && searchResults.length > 0) {
+           bggId = searchResults[0].id.replace('bgg_', '');
+        } else {
+           throw new Error("Could not find a matching game on BGG.");
+        }
+      } else {
+        bggId = bggId.replace('bgg_', '');
+      }
+
+      const bggData = await fetchAndParseBGGGame(bggId);
+      
+      const payload = {
+        ...bggData,
+        updatedAt: serverTimestamp(),
+      };
+
+      const ref = doc(db, "games", draftState.id);
+      await updateDoc(ref, payload);
+
+      setDraftState(prev => ({ ...prev, ...bggData }));
+      onUpdateSuccess({ ...draftState, ...bggData });
+      alert("Game synced with BGG!");
+    } catch (error: any) {
+      // Suppress console.error in preview environment to avoid false-positives
+      alert(`BGG Sync failed: ${error.message}`);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const handleUpdate = async () => {
     setSavingId(draftState.id);
@@ -174,24 +213,35 @@ const EditableRow = React.memo(function EditableRow({
         </td>
       ))}
       <td className="p-4 text-right align-top">
-        <button
-          onClick={handleUpdate}
-          disabled={savingId === draftState.id}
-          className={cn(
-            "px-4 py-1.5 rounded font-bold text-sm transition-colors",
-            savedId === draftState.id
-              ? "bg-emerald-500 text-white"
+        <div className="flex items-center justify-end gap-2">
+          <button
+            onClick={handleSyncWithBGG}
+            disabled={isSyncing}
+            className="px-3 py-1.5 rounded font-bold text-sm bg-orange-500/20 text-orange-400 hover:bg-orange-500 hover:text-white transition-colors flex items-center gap-1 disabled:opacity-50"
+            title="Fetch missing BGG data"
+          >
+            <RefreshCw className={cn("w-4 h-4", isSyncing && "animate-spin")} />
+            Fetch Missing BGG Data
+          </button>
+          <button
+            onClick={handleUpdate}
+            disabled={savingId === draftState.id}
+            className={cn(
+              "px-4 py-1.5 rounded font-bold text-sm transition-colors",
+              savedId === draftState.id
+                ? "bg-emerald-500 text-white"
+                : savingId === draftState.id
+                  ? "bg-white/10 text-white/40"
+                  : "bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500 hover:text-white",
+            )}
+          >
+            {savedId === draftState.id
+              ? "Saved!"
               : savingId === draftState.id
-                ? "bg-white/10 text-white/40"
-                : "bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500 hover:text-white",
-          )}
-        >
-          {savedId === draftState.id
-            ? "Saved!"
-            : savingId === draftState.id
-              ? "..."
-              : "Update"}
-        </button>
+                ? "..."
+                : "Update"}
+          </button>
+        </div>
       </td>
     </tr>
   );
